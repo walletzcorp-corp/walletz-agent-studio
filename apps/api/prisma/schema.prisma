@@ -80,6 +80,53 @@ enum OutboxEventStatus {
   FALHOU
 }
 
+enum AppointmentType {
+  CONSULTA
+  RETORNO
+  SESSAO
+  PROCEDIMENTO
+  TELECONSULTA
+}
+
+enum AppointmentStatus {
+  AGENDADO
+  CONFIRMADO
+  AGUARDANDO
+  EM_ATENDIMENTO
+  FINALIZADO
+  CANCELADO
+  NAO_COMPARECEU
+  REAGENDADO
+}
+
+enum RecurrenceType {
+  SEMANAL
+  QUINZENAL
+  MENSAL
+}
+
+enum WaitListStatus {
+  AGUARDANDO
+  NOTIFICADO
+  AGENDADO
+  EXPIRADO
+  CANCELADO
+}
+
+enum QueueStatus {
+  ABERTA
+  PAUSADA
+  FECHADA
+}
+
+enum TicketStatus {
+  AGUARDANDO
+  CHAMADO
+  EM_ATENDIMENTO
+  FINALIZADO
+  DESISTIU
+}
+
 // -----------------------------------------------------------
 // TENANT
 // -----------------------------------------------------------
@@ -133,6 +180,9 @@ model Organization {
   services          Service[]
   auditEvents       AuditEvent[]
   statusHistory     OrganizationStatusHistory[]
+  patients          Patient[]
+  appointments      Appointment[]
+  waitListEntries   WaitListEntry[]
 
   @@map("organizations")
 }
@@ -192,6 +242,9 @@ model Unit {
   resources         Resource[]
   auditEvents       AuditEvent[]
   statusHistory     UnitStatusHistory[]
+  appointments      Appointment[]
+  queues            Queue[]
+  availabilityRules AvailabilityRule[]
 
   @@unique([organizationId, code])
   @@map("units")
@@ -370,9 +423,11 @@ model Professional {
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
-  specialties    ProfessionalSpecialty[]
-  credentials    ProfessionalCredential[]
-  unitLinks      ProfessionalUnitLink[]
+  specialties       ProfessionalSpecialty[]
+  credentials       ProfessionalCredential[]
+  unitLinks         ProfessionalUnitLink[]
+  appointments      Appointment[]
+  availabilityRules AvailabilityRule[]
 
   @@map("professionals")
 }
@@ -473,6 +528,8 @@ model Resource {
   createdAt    DateTime       @default(now()) @map("created_at")
   updatedAt    DateTime       @updatedAt @map("updated_at")
 
+  appointments Appointment[]
+
   @@unique([unitId, code])
   @@map("resources")
 }
@@ -506,6 +563,7 @@ model Service {
   updatedAt      DateTime      @updatedAt @map("updated_at")
 
   prices         ServicePrice[]
+  appointments   Appointment[]
 
   @@unique([organizationId, code, version])
   @@map("services")
@@ -579,4 +637,216 @@ model OutboxEvent {
   createdAt   DateTime          @default(now()) @map("created_at")
 
   @@map("outbox_events")
+}
+
+// -----------------------------------------------------------
+// MÓDULO 3 — AGENDA E JORNADA OPERACIONAL
+// -----------------------------------------------------------
+
+model Patient {
+  id             String       @id @default(uuid())
+  organizationId String       @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  name           String
+  cpf            String?
+  dataNasc       DateTime?    @map("data_nasc") @db.Date
+  sexo           String?      // M, F, O
+  telefone       String?
+  email          String?
+  notes          String?
+
+  rowVersion     Int          @default(0) @map("row_version")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  appointments   Appointment[]
+  waitListEntries WaitListEntry[]
+  queueTickets   QueueTicket[]
+
+  @@unique([organizationId, cpf])
+  @@map("patients")
+}
+
+// RF-AGE-005 — Grade de disponibilidade para agendamento online
+model AvailabilityRule {
+  id             String       @id @default(uuid())
+  unitId         String       @map("unit_id")
+  unit           Unit         @relation(fields: [unitId], references: [id])
+  professionalId String?      @map("professional_id")
+  professional   Professional? @relation(fields: [professionalId], references: [id])
+
+  // 0=Domingo … 6=Sábado
+  dayOfWeek      Int          @map("day_of_week")
+  startTime      String       @map("start_time") // "HH:MM"
+  endTime        String       @map("end_time")   // "HH:MM"
+  slotMin        Int          @default(30) @map("slot_min")
+
+  active         Boolean      @default(true)
+  validFrom      DateTime?    @map("valid_from") @db.Date
+  validUntil     DateTime?    @map("valid_until") @db.Date
+
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  @@map("availability_rules")
+}
+
+// RF-AGE-004 — Séries de agendamento (recorrência / pacote de sessões)
+model AppointmentSeries {
+  id             String          @id @default(uuid())
+  organizationId String          @map("organization_id")
+
+  recurrenceType RecurrenceType? @map("recurrence_type")
+  totalSessions  Int?            @map("total_sessions")
+  notes          String?
+
+  createdAt      DateTime        @default(now()) @map("created_at")
+
+  appointments   Appointment[]
+
+  @@map("appointment_series")
+}
+
+// RF-AGE-001/002/003/006/007/009 — Agendamento principal
+model Appointment {
+  id             String            @id @default(uuid())
+  organizationId String            @map("organization_id")
+  organization   Organization      @relation(fields: [organizationId], references: [id])
+  unitId         String            @map("unit_id")
+  unit           Unit              @relation(fields: [unitId], references: [id])
+  professionalId String?           @map("professional_id")
+  professional   Professional?     @relation(fields: [professionalId], references: [id])
+  serviceId      String?           @map("service_id")
+  service        Service?          @relation(fields: [serviceId], references: [id])
+  resourceId     String?           @map("resource_id")
+  resource       Resource?         @relation(fields: [resourceId], references: [id])
+  patientId      String            @map("patient_id")
+  patient        Patient           @relation(fields: [patientId], references: [id])
+  seriesId       String?           @map("series_id")
+  series         AppointmentSeries? @relation(fields: [seriesId], references: [id])
+
+  type           AppointmentType   @default(CONSULTA)
+  status         AppointmentStatus @default(AGENDADO)
+
+  startsAt       DateTime          @map("starts_at")
+  endsAt         DateTime          @map("ends_at")
+
+  // Jornada operacional (RF-AGE-009)
+  checkInAt      DateTime?         @map("check_in_at")
+  waitingStartAt DateTime?         @map("waiting_start_at")
+  startedAt      DateTime?         @map("started_at")
+  finishedAt     DateTime?         @map("finished_at")
+  checkOutAt     DateTime?         @map("check_out_at")
+
+  // Indicadores (RF-AGE-012)
+  waitingMinutes Int?              @map("waiting_minutes")
+  delayMinutes   Int?              @map("delay_minutes")
+
+  notes          String?
+  cancelReason   String?           @map("cancel_reason")
+
+  // RF-AGE-005
+  isOnlineBooking Boolean          @default(false) @map("is_online_booking")
+
+  rowVersion     Int               @default(0) @map("row_version")
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+
+  history        AppointmentHistory[]
+  waitListEntries WaitListEntry[]  @relation("PromotedAppointment")
+
+  @@index([unitId, startsAt])
+  @@index([professionalId, startsAt])
+  @@index([resourceId, startsAt])
+  @@index([patientId])
+  @@map("appointments")
+}
+
+// Histórico de mudanças de status do agendamento
+model AppointmentHistory {
+  id            String            @id @default(uuid())
+  appointmentId String            @map("appointment_id")
+  appointment   Appointment       @relation(fields: [appointmentId], references: [id])
+
+  fromStatus    AppointmentStatus? @map("from_status")
+  toStatus      AppointmentStatus  @map("to_status")
+  changedBy     String             @map("changed_by")
+  reason        String?
+  changedAt     DateTime           @default(now()) @map("changed_at")
+
+  @@map("appointment_history")
+}
+
+// RF-AGE-008 — Lista de espera
+model WaitListEntry {
+  id             String         @id @default(uuid())
+  organizationId String         @map("organization_id")
+  organization   Organization   @relation(fields: [organizationId], references: [id])
+  unitId         String?        @map("unit_id")
+  professionalId String?        @map("professional_id")
+  serviceId      String?        @map("service_id")
+  patientId      String         @map("patient_id")
+  patient        Patient        @relation(fields: [patientId], references: [id])
+
+  // Agendamento gerado ao promover da lista de espera
+  scheduledAppointmentId String? @map("scheduled_appointment_id")
+  scheduledAppointment   Appointment? @relation("PromotedAppointment", fields: [scheduledAppointmentId], references: [id])
+
+  status         WaitListStatus @default(AGUARDANDO)
+  priority       Int            @default(0)
+  notes          String?
+  notifiedAt     DateTime?      @map("notified_at")
+
+  requestedAt    DateTime       @default(now()) @map("requested_at")
+  createdAt      DateTime       @default(now()) @map("created_at")
+
+  @@map("wait_list_entries")
+}
+
+// RF-AGE-015 — Fila física presencial
+model Queue {
+  id             String      @id @default(uuid())
+  unitId         String      @map("unit_id")
+  unit           Unit        @relation(fields: [unitId], references: [id])
+  organizationId String      @map("organization_id")
+
+  date           DateTime    @db.Date
+  status         QueueStatus @default(ABERTA)
+  lastTicketNumber Int       @default(0) @map("last_ticket_number")
+
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
+
+  tickets        QueueTicket[]
+
+  @@unique([unitId, date])
+  @@map("queues")
+}
+
+// Senha / ticket da fila física
+model QueueTicket {
+  id             String       @id @default(uuid())
+  queueId        String       @map("queue_id")
+  queue          Queue        @relation(fields: [queueId], references: [id])
+  patientId      String?      @map("patient_id")
+  patient        Patient?     @relation(fields: [patientId], references: [id])
+  serviceId      String?      @map("service_id")
+  professionalId String?      @map("professional_id")
+
+  // Número formatado, ex: "A001", "P002"
+  ticketNumber   String       @map("ticket_number")
+  // 0 = normal; 1 = idoso; 2 = gestante; 3 = deficiente; configurable
+  priority       Int          @default(0)
+  priorityLabel  String?      @map("priority_label")
+
+  status         TicketStatus @default(AGUARDANDO)
+
+  calledAt       DateTime?    @map("called_at")
+  startedAt      DateTime?    @map("started_at")
+  finishedAt     DateTime?    @map("finished_at")
+
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  @@unique([queueId, ticketNumber])
+  @@map("queue_tickets")
 }

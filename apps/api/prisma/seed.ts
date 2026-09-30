@@ -268,6 +268,138 @@ async function main() {
   }
   console.log(`${services.length} serviços sintéticos criados`);
 
+  // ---- Vínculos profissional ↔ unidade ----
+  const today = new Date();
+  const linkExists1 = await prisma.professionalUnitLink.findUnique({
+    where: { professionalId_unitId: { professionalId: profId1, unitId } },
+  });
+  if (!linkExists1) {
+    await prisma.professionalUnitLink.create({
+      data: { id: randomUUID(), professionalId: profId1, unitId, role: 'Médico Clínico', startDate: today, status: 'VIGENTE' },
+    });
+  }
+  const linkExists2 = await prisma.professionalUnitLink.findUnique({
+    where: { professionalId_unitId: { professionalId: profId2, unitId } },
+  });
+  if (!linkExists2) {
+    await prisma.professionalUnitLink.create({
+      data: { id: randomUUID(), professionalId: profId2, unitId, role: 'Médica Dermatologista', startDate: today, status: 'VIGENTE' },
+    });
+  }
+
+  // ---- Pacientes Sintéticos (Módulo 3) ----
+  const patients = [
+    { id: 'ffffffff-0000-0000-0000-000000000001', name: 'Ana Lima (DEV)', cpf: '11111111111', telefone: '(34) 99000-0001', dataNasc: '1985-03-15', sexo: 'F' },
+    { id: 'ffffffff-0000-0000-0000-000000000002', name: 'Carlos Mendes (DEV)', cpf: '22222222222', telefone: '(34) 99000-0002', dataNasc: '1972-07-22', sexo: 'M' },
+    { id: 'ffffffff-0000-0000-0000-000000000003', name: 'Beatriz Rocha (DEV)', cpf: '33333333333', telefone: '(34) 99000-0003', dataNasc: '1990-11-05', sexo: 'F' },
+  ];
+
+  for (const p of patients) {
+    await prisma.patient.upsert({
+      where: { organizationId_cpf: { organizationId: orgId, cpf: p.cpf } },
+      update: {},
+      create: {
+        id: p.id,
+        organizationId: orgId,
+        name: p.name,
+        cpf: p.cpf,
+        dataNasc: new Date(p.dataNasc),
+        sexo: p.sexo,
+        telefone: p.telefone,
+      },
+    });
+  }
+  console.log(`${patients.length} pacientes sintéticos criados`);
+
+  // ---- Regras de Disponibilidade Sintéticas (Módulo 3) ----
+  const existingRules = await prisma.availabilityRule.count({ where: { unitId } });
+  if (existingRules === 0) {
+    // Dr. João: segunda a sexta, 08:00–12:00, slots de 30min
+    for (const day of [1, 2, 3, 4, 5]) {
+      await prisma.availabilityRule.create({
+        data: {
+          id: randomUUID(),
+          unitId,
+          professionalId: profId1,
+          dayOfWeek: day,
+          startTime: '08:00',
+          endTime: '12:00',
+          slotMin: 30,
+          active: true,
+        },
+      });
+    }
+    // Dra. Maria: terça e quinta, 13:00–17:00, slots de 30min
+    for (const day of [2, 4]) {
+      await prisma.availabilityRule.create({
+        data: {
+          id: randomUUID(),
+          unitId,
+          professionalId: profId2,
+          dayOfWeek: day,
+          startTime: '13:00',
+          endTime: '17:00',
+          slotMin: 30,
+          active: true,
+        },
+      });
+    }
+    console.log('Regras de disponibilidade sintéticas criadas');
+  }
+
+  // ---- Agendamentos Sintéticos (Módulo 3) ----
+  const tomorrowBase = new Date();
+  tomorrowBase.setDate(tomorrowBase.getDate() + 1);
+  const apptDate = tomorrowBase.toISOString().split('T')[0];
+
+  const apptExists = await prisma.appointment.count({ where: { organizationId: orgId } });
+  if (apptExists === 0) {
+    const svcClin = await prisma.service.findFirst({ where: { organizationId: orgId, code: 'CONS-CLIN' } });
+    const resourceCons01 = await prisma.resource.findUnique({ where: { unitId_code: { unitId, code: 'CONS-01' } } });
+
+    if (svcClin && resourceCons01) {
+      const appt1 = await prisma.appointment.create({
+        data: {
+          id: randomUUID(),
+          organizationId: orgId,
+          unitId,
+          professionalId: profId1,
+          serviceId: svcClin.id,
+          resourceId: resourceCons01.id,
+          patientId: patients[0].id,
+          type: 'CONSULTA',
+          status: 'AGENDADO',
+          startsAt: new Date(`${apptDate}T08:00:00`),
+          endsAt: new Date(`${apptDate}T08:30:00`),
+        },
+      });
+      await prisma.appointmentHistory.create({
+        data: { id: randomUUID(), appointmentId: appt1.id, toStatus: 'AGENDADO', changedBy: devUserId },
+      });
+
+      const appt2 = await prisma.appointment.create({
+        data: {
+          id: randomUUID(),
+          organizationId: orgId,
+          unitId,
+          professionalId: profId1,
+          serviceId: svcClin.id,
+          resourceId: resourceCons01.id,
+          patientId: patients[1].id,
+          type: 'CONSULTA',
+          status: 'CONFIRMADO',
+          startsAt: new Date(`${apptDate}T08:30:00`),
+          endsAt: new Date(`${apptDate}T09:00:00`),
+        },
+      });
+      await prisma.appointmentHistory.create({
+        data: { id: randomUUID(), appointmentId: appt2.id, toStatus: 'CONFIRMADO', changedBy: devUserId },
+      });
+
+      console.log('2 agendamentos sintéticos criados');
+    }
+  }
+
   console.log('Seed concluído com sucesso!');
   console.log('');
   console.log('Usuário de desenvolvimento:');

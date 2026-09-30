@@ -13,6 +13,9 @@ import {
   ClipboardList,
   LogOut,
   Map,
+  CalendarDays,
+  UserCircle2,
+  Ticket,
 } from 'lucide-react';
 
 const navItems = [
@@ -23,6 +26,9 @@ const navItems = [
   { href: '/professionals',  label: 'Profissionais',   icon: UserCheck },
   { href: '/resources',      label: 'Salas / Recursos', icon: Package },
   { href: '/services',       label: 'Serviços',        icon: Stethoscope },
+  { href: '/patients',       label: 'Pacientes',       icon: UserCircle2 },
+  { href: '/schedule',       label: 'Agenda',          icon: CalendarDays },
+  { href: '/queue',          label: 'Fila',            icon: Ticket },
   { href: '/audit',          label: 'Auditoria',       icon: ClipboardList },
   { href: '/status',         label: 'Status do Produto', icon: Map },
 ];

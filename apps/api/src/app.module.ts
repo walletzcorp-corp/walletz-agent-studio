@@ -11,6 +11,8 @@ import { ResourcesModule } from './modules/resources/resources.module';
 import { ServicesCatalogModule } from './modules/services-catalog/services-catalog.module';
 import { SpecialtiesModule } from './modules/specialties/specialties.module';
 import { AuditModule } from './modules/audit/audit.module';
+import { PatientsModule } from './modules/patients/patients.module';
+import { SchedulingModule } from './modules/scheduling/scheduling.module';
 
 @Module({
   imports: [
@@ -34,6 +36,8 @@ import { AuditModule } from './modules/audit/audit.module';
     ServicesCatalogModule,
     SpecialtiesModule,
     AuditModule,
+    PatientsModule,
+    SchedulingModule,
   ],
 })
 export class AppModule {}
