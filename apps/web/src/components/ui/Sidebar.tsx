@@ -12,6 +12,7 @@ import {
   Package,
   ClipboardList,
   LogOut,
+  Map,
 } from 'lucide-react';
 
 const navItems = [
@@ -23,6 +24,7 @@ const navItems = [
   { href: '/resources',      label: 'Salas / Recursos', icon: Package },
   { href: '/services',       label: 'Serviços',        icon: Stethoscope },
   { href: '/audit',          label: 'Auditoria',       icon: ClipboardList },
+  { href: '/status',         label: 'Status do Produto', icon: Map },
 ];
 
 export function Sidebar() {

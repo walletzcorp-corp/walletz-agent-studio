@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { randomUUID } from 'crypto';
+import { AuthenticatedUser } from '../../common/decorators/current-user.decorator';
 
 interface CreateProfessionalDto {
   organizationId: string;
@@ -25,7 +26,10 @@ interface LinkProfessionalToUnitDto {
 export class ProfessionalsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(dto: CreateProfessionalDto, actorId: string) {
+  async create(dto: CreateProfessionalDto, actorId: string, user: AuthenticatedUser) {
+    if (!user.isWalletzAdmin && !user.organizationIds.includes(dto.organizationId)) {
+      throw new ForbiddenException('Sem acesso a esta organização');
+    }
     const org = await this.prisma.organization.findUnique({
       where: { id: dto.organizationId },
       select: { id: true, tenantId: true },
@@ -69,11 +73,15 @@ export class ProfessionalsService {
     });
   }
 
-  async findAll(params: { organizationId?: string; page?: number; limit?: number }) {
+  async findAll(params: { organizationId?: string; page?: number; limit?: number }, user: AuthenticatedUser) {
     const { organizationId, page = 1, limit = 20 } = params;
     const skip = (page - 1) * limit;
     const where: any = {};
-    if (organizationId) where.organizationId = organizationId;
+    if (!user.isWalletzAdmin) {
+      where.organizationId = { in: user.organizationIds };
+    } else if (organizationId) {
+      where.organizationId = organizationId;
+    }
 
     const [items, total] = await Promise.all([
       this.prisma.professional.findMany({
@@ -89,7 +97,7 @@ export class ProfessionalsService {
     return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, user: AuthenticatedUser) {
     const prof = await this.prisma.professional.findUnique({
       where: { id },
       include: {
@@ -99,6 +107,9 @@ export class ProfessionalsService {
       },
     });
     if (!prof) throw new NotFoundException('Profissional não encontrado');
+    if (!user.isWalletzAdmin && !user.organizationIds.includes(prof.organizationId)) {
+      throw new ForbiddenException('Sem acesso a este profissional');
+    }
     return prof;
   }
 

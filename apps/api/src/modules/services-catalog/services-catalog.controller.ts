@@ -15,30 +15,31 @@ export class ServicesCatalogController {
   @Post()
   @ApiOperation({ summary: 'Criar serviço/procedimento' })
   create(@Body() dto: any, @CurrentUser() user: AuthenticatedUser) {
-    return this.service.create(dto, user.userId!);
+    return this.service.create(dto, user.userId!, user);
   }
 
   @Get()
   @ApiOperation({ summary: 'Listar serviços' })
   findAll(
+    @CurrentUser() user: AuthenticatedUser,
     @Query('organizationId') organizationId?: string,
     @Query('status') status?: ServiceStatus,
     @Query('type') type?: string,
     @Query('page') page = 1,
     @Query('limit') limit = 20,
   ) {
-    return this.service.findAll({ organizationId, status, type, page: Number(page), limit: Number(limit) });
+    return this.service.findAll({ organizationId, status, type, page: Number(page), limit: Number(limit) }, user);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Detalhe do serviço' })
-  findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.service.findOne(id);
+  findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.service.findOne(id, user);
   }
 
   @Patch(':id/publish')
   @ApiOperation({ summary: 'Publicar serviço' })
   publish(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
-    return this.service.publish(id, user.userId!);
+    return this.service.publish(id, user.userId!, user);
   }
 }

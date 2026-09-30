@@ -2,6 +2,9 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException, NotFoundException, ConflictException } from '@nestjs/common';
 import { UnitsService } from './units.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { AuthenticatedUser } from '../../common/decorators/current-user.decorator';
+
+const adminUser: AuthenticatedUser = { sub: 'a', email: 'a@t.com', userId: 'actor-1', isWalletzAdmin: true, organizationIds: ['org-1'], tenantIds: [] };
 
 const mockPrisma: Record<string, any> = {
   organization: { findUnique: jest.fn() },
@@ -44,7 +47,7 @@ describe('UnitsService', () => {
       });
 
       await expect(
-        service.changeStatus('unit-1', { status: 'ATIVA' }, 'actor-1'),
+        service.changeStatus('unit-1', { status: 'ATIVA' }, 'actor-1', adminUser),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -67,7 +70,7 @@ describe('UnitsService', () => {
       mockPrisma.outboxEvent.create.mockResolvedValue({});
       mockPrisma.auditEvent.create.mockResolvedValue({});
 
-      const result = await service.changeStatus('unit-1', { status: 'ATIVA' }, 'actor-1');
+      const result = await service.changeStatus('unit-1', { status: 'ATIVA' }, 'actor-1', adminUser);
       expect(mockPrisma.unit.update).toHaveBeenCalledTimes(1);
     });
 
@@ -82,7 +85,7 @@ describe('UnitsService', () => {
       });
 
       await expect(
-        service.changeStatus('unit-1', { status: 'BLOQUEADA' }, 'actor-1'),
+        service.changeStatus('unit-1', { status: 'BLOQUEADA' }, 'actor-1', adminUser),
       ).rejects.toThrow(BadRequestException);
     });
   });
@@ -91,13 +94,14 @@ describe('UnitsService', () => {
     it('deve recusar update com rowVersion desatualizado', async () => {
       mockPrisma.unit.findUnique.mockResolvedValue({
         id: 'unit-1',
+        organizationId: 'org-1',
         status: 'ATIVA',
         rowVersion: 10,
         organization: { tenantId: 'tenant-1' },
       });
 
       await expect(
-        service.update('unit-1', { name: 'Novo Nome', rowVersion: 5 }, 'actor-1'),
+        service.update('unit-1', { name: 'Novo Nome', rowVersion: 5 }, 'actor-1', adminUser),
       ).rejects.toThrow(ConflictException);
     });
   });

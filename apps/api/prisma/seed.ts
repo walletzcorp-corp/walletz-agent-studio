@@ -111,6 +111,62 @@ async function main() {
     });
   }
 
+  // ---- Segunda Org Sintética (para testes de isolamento de tenant) ----
+  const tenantBId = 'aaaaaaaa-0000-0000-0000-000000000002';
+  const orgBId    = 'bbbbbbbb-0000-0000-0000-000000000002';
+
+  await prisma.tenant.upsert({
+    where: { id: tenantBId },
+    update: {},
+    create: { id: tenantBId, slug: 'clinica-b-dev' },
+  });
+
+  await prisma.organization.upsert({
+    where: { cnpj: '00000000000002' },
+    update: {},
+    create: {
+      id: orgBId,
+      tenantId: tenantBId,
+      razaoSocial: 'Clínica B Desenvolvimento LTDA',
+      nomeFantasia: 'Clínica B DEV',
+      cnpj: '00000000000002',
+      email: 'dev@clinica-b.local',
+      telefone: '(34) 3000-0002',
+      status: 'ATIVA',
+    },
+  });
+
+  // Usuário restrito somente à Org B (para testes de isolamento)
+  const userBId = 'dddddddd-0000-0000-0000-000000000002';
+  await prisma.user.upsert({
+    where: { email: 'user-orgb@clinica-b.local' },
+    update: {},
+    create: {
+      id: userBId,
+      keycloakId: 'dev-user-orgb',
+      email: 'user-orgb@clinica-b.local',
+      name: 'Usuário Org B (DEV)',
+      status: 'ATIVO',
+    },
+  });
+
+  await prisma.userTenant.upsert({
+    where: { userId_tenantId: { userId: userBId, tenantId: tenantBId } },
+    update: {},
+    create: { id: randomUUID(), userId: userBId, tenantId: tenantBId },
+  });
+
+  const orgAdminProfile = await prisma.profile.findUnique({ where: { name: 'ORG_ADMIN' } });
+  if (orgAdminProfile) {
+    await prisma.userOrganization.upsert({
+      where: { userId_organizationId: { userId: userBId, organizationId: orgBId } },
+      update: {},
+      create: { id: randomUUID(), userId: userBId, organizationId: orgBId, profileId: orgAdminProfile.id, status: 'ATIVO' },
+    });
+  }
+
+  console.log('Segunda org sintética criada para testes de isolamento (Clínica B DEV)');
+
   // ---- Especialidades Sintéticas ----
   const specialties = [
     { code: 'CLIN', name: 'Clínica Geral' },

@@ -1,11 +1,16 @@
 import { createParamDecorator, ExecutionContext } from '@nestjs/common';
 
 export interface AuthenticatedUser {
-  sub: string;          // Keycloak user ID
+  sub: string;
   email: string;
   name?: string;
-  tenantId?: string;    // Set after tenant resolution
-  userId?: string;      // Walletz Med internal user ID
+  userId?: string;
+  /** true when user has WALLETZ_ADMIN profile in any organization */
+  isWalletzAdmin: boolean;
+  /** IDs of organizations this user is an active member of */
+  organizationIds: string[];
+  /** Tenant IDs derived from organizational memberships */
+  tenantIds: string[];
 }
 
 export const CurrentUser = createParamDecorator(

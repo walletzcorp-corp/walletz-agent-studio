@@ -31,7 +31,7 @@ export class OrganizationsController {
   @Post()
   @ApiOperation({ summary: 'Criar organização' })
   create(@Body() dto: CreateOrganizationDto, @CurrentUser() user: AuthenticatedUser) {
-    return this.service.create(dto, user.userId!);
+    return this.service.create(dto, user.userId!, user);
   }
 
   @Get()
@@ -41,18 +41,19 @@ export class OrganizationsController {
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   findAll(
+    @CurrentUser() user: AuthenticatedUser,
     @Query('status') status?: OrganizationStatus,
     @Query('search') search?: string,
     @Query('page') page = 1,
     @Query('limit') limit = 20,
   ) {
-    return this.service.findAll({ status, search, page: Number(page), limit: Number(limit) });
+    return this.service.findAll({ status, search, page: Number(page), limit: Number(limit) }, user);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Detalhe da organização' })
-  findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.service.findOne(id);
+  findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.service.findOne(id, user);
   }
 
   @Put(':id')
@@ -62,7 +63,7 @@ export class OrganizationsController {
     @Body() dto: UpdateOrganizationDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.update(id, dto, user.userId!);
+    return this.service.update(id, dto, user.userId!, user);
   }
 
   @Patch(':id/status')
@@ -73,6 +74,6 @@ export class OrganizationsController {
     @Body() dto: ChangeOrganizationStatusDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.changeStatus(id, dto, user.userId!);
+    return this.service.changeStatus(id, dto, user.userId!, user);
   }
 }

@@ -11,6 +11,7 @@ import { UpdateOrganizationDto } from './dto/update-organization.dto';
 import { ChangeOrganizationStatusDto } from './dto/change-status.dto';
 import { OrganizationStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
+import { AuthenticatedUser } from '../../common/decorators/current-user.decorator';
 
 function normalizeCnpj(cnpj: string): string {
   return cnpj.replace(/\D/g, '');
@@ -47,7 +48,10 @@ const ALLOWED_TRANSITIONS: Record<OrganizationStatus, OrganizationStatus[]> = {
 export class OrganizationsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(dto: CreateOrganizationDto, actorId: string) {
+  async create(dto: CreateOrganizationDto, actorId: string, user: AuthenticatedUser) {
+    if (!user.isWalletzAdmin) {
+      throw new ForbiddenException('Apenas administradores Walletz podem criar organizações');
+    }
     const cnpjRaw = normalizeCnpj(dto.cnpj);
 
     if (!isValidCnpj(cnpjRaw)) {
@@ -129,16 +133,19 @@ export class OrganizationsService {
   }
 
   async findAll(params: {
-    tenantId?: string;
     status?: OrganizationStatus;
     search?: string;
     page?: number;
     limit?: number;
-  }) {
+  }, user: AuthenticatedUser) {
     const { status, search, page = 1, limit = 20 } = params;
     const skip = (page - 1) * limit;
 
     const where: any = {};
+    // Non-admin users see only their own organizations; tenant derived from JWT, not the request
+    if (!user.isWalletzAdmin) {
+      where.id = { in: user.organizationIds };
+    }
     if (status) where.status = status;
     if (search) {
       where.OR = [
@@ -177,7 +184,10 @@ export class OrganizationsService {
     };
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, user: AuthenticatedUser) {
+    if (!user.isWalletzAdmin && !user.organizationIds.includes(id)) {
+      throw new ForbiddenException('Sem acesso a esta organização');
+    }
     const org = await this.prisma.organization.findUnique({
       where: { id },
       include: {
@@ -191,7 +201,10 @@ export class OrganizationsService {
     return org;
   }
 
-  async update(id: string, dto: UpdateOrganizationDto, actorId: string) {
+  async update(id: string, dto: UpdateOrganizationDto, actorId: string, user: AuthenticatedUser) {
+    if (!user.isWalletzAdmin && !user.organizationIds.includes(id)) {
+      throw new ForbiddenException('Sem acesso a esta organização');
+    }
     const org = await this.prisma.organization.findUnique({ where: { id } });
     if (!org) throw new NotFoundException('Organização não encontrada');
     if (org.status === 'ENCERRADA') {
@@ -230,7 +243,10 @@ export class OrganizationsService {
     return updated;
   }
 
-  async changeStatus(id: string, dto: ChangeOrganizationStatusDto, actorId: string) {
+  async changeStatus(id: string, dto: ChangeOrganizationStatusDto, actorId: string, user: AuthenticatedUser) {
+    if (!user.isWalletzAdmin && !user.organizationIds.includes(id)) {
+      throw new ForbiddenException('Sem acesso a esta organização');
+    }
     const org = await this.prisma.organization.findUnique({ where: { id } });
     if (!org) throw new NotFoundException('Organização não encontrada');
 

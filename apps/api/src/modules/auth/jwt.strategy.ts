@@ -51,13 +51,27 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
           status: 'ATIVO',
         },
       });
-      return { sub: keycloakId, email: newUser.email, name: newUser.name, userId: newUser.id };
+      // New user has no memberships yet — they can't access any data until added to an org
+      return { sub: keycloakId, email: newUser.email, name: newUser.name, userId: newUser.id, isWalletzAdmin: false, organizationIds: [], tenantIds: [] };
     }
 
     if (user.status === 'BLOQUEADO' || user.status === 'ENCERRADO') {
       throw new UnauthorizedException('Usuário bloqueado ou encerrado');
     }
 
-    return { sub: keycloakId, email: user.email, name: user.name, userId: user.id };
+    // Resolve tenant context from active organizational memberships
+    const memberships = await this.prisma.userOrganization.findMany({
+      where: { userId: user.id, status: 'ATIVO' },
+      include: {
+        organization: { select: { tenantId: true } },
+        profile: { select: { name: true } },
+      },
+    });
+
+    const isWalletzAdmin = memberships.some((m) => m.profile.name === 'WALLETZ_ADMIN');
+    const organizationIds = memberships.map((m) => m.organizationId);
+    const tenantIds = [...new Set(memberships.map((m) => m.organization.tenantId))];
+
+    return { sub: keycloakId, email: user.email, name: user.name, userId: user.id, isWalletzAdmin, organizationIds, tenantIds };
   }
 }

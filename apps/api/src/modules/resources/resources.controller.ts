@@ -15,25 +15,26 @@ export class ResourcesController {
   @Post()
   @ApiOperation({ summary: 'Cadastrar recurso (sala, equipamento, etc.)' })
   create(@Body() dto: any, @CurrentUser() user: AuthenticatedUser) {
-    return this.service.create(dto, user.userId!);
+    return this.service.create(dto, user.userId!, user);
   }
 
   @Get()
   @ApiOperation({ summary: 'Listar recursos' })
   findAll(
+    @CurrentUser() user: AuthenticatedUser,
     @Query('unitId') unitId?: string,
     @Query('type') type?: string,
     @Query('status') status?: ResourceStatus,
     @Query('page') page = 1,
     @Query('limit') limit = 20,
   ) {
-    return this.service.findAll({ unitId, type, status, page: Number(page), limit: Number(limit) });
+    return this.service.findAll({ unitId, type, status, page: Number(page), limit: Number(limit) }, user);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Detalhe do recurso' })
-  findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.service.findOne(id);
+  findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.service.findOne(id, user);
   }
 
   @Patch(':id/status')
@@ -43,6 +44,6 @@ export class ResourcesController {
     @Body() dto: { status: ResourceStatus; reason?: string },
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.changeStatus(id, dto.status, dto.reason, user.userId!);
+    return this.service.changeStatus(id, dto.status, dto.reason, user.userId!, user);
   }
 }

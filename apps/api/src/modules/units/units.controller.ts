@@ -51,25 +51,26 @@ export class UnitsController {
   @Post()
   @ApiOperation({ summary: 'Criar unidade' })
   create(@Body() dto: CreateUnitDto, @CurrentUser() user: AuthenticatedUser) {
-    return this.service.create(dto, user.userId!);
+    return this.service.create(dto, user.userId!, user);
   }
 
   @Get()
   @ApiOperation({ summary: 'Listar unidades' })
   findAll(
+    @CurrentUser() user: AuthenticatedUser,
     @Query('organizationId') organizationId?: string,
     @Query('status') status?: UnitStatus,
     @Query('search') search?: string,
     @Query('page') page = 1,
     @Query('limit') limit = 20,
   ) {
-    return this.service.findAll({ organizationId, status, search, page: Number(page), limit: Number(limit) });
+    return this.service.findAll({ organizationId, status, search, page: Number(page), limit: Number(limit) }, user);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Detalhe da unidade' })
-  findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.service.findOne(id);
+  findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.service.findOne(id, user);
   }
 
   @Put(':id')
@@ -79,7 +80,7 @@ export class UnitsController {
     @Body() dto: UpdateUnitDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.update(id, dto, user.userId!);
+    return this.service.update(id, dto, user.userId!, user);
   }
 
   @Patch(':id/status')
@@ -90,6 +91,6 @@ export class UnitsController {
     @Body() dto: ChangeUnitStatusDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.changeStatus(id, dto, user.userId!);
+    return this.service.changeStatus(id, dto, user.userId!, user);
   }
 }

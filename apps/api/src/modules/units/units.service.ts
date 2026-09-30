@@ -9,6 +9,7 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import { UnitStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { CreateUnitDto } from './dto/create-unit.dto';
+import { AuthenticatedUser } from '../../common/decorators/current-user.decorator';
 
 interface UpdateUnitDto {
   name?: string;
@@ -49,7 +50,10 @@ const ALLOWED_TRANSITIONS: Record<UnitStatus, UnitStatus[]> = {
 export class UnitsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(dto: CreateUnitDto, actorId: string) {
+  async create(dto: CreateUnitDto, actorId: string, user: AuthenticatedUser) {
+    if (!user.isWalletzAdmin && !user.organizationIds.includes(dto.organizationId)) {
+      throw new ForbiddenException('Sem acesso a esta organização');
+    }
     const org = await this.prisma.organization.findUnique({
       where: { id: dto.organizationId },
       select: { id: true, tenantId: true, status: true },
@@ -124,11 +128,16 @@ export class UnitsService {
     search?: string;
     page?: number;
     limit?: number;
-  }) {
+  }, user: AuthenticatedUser) {
     const { organizationId, status, search, page = 1, limit = 20 } = params;
     const skip = (page - 1) * limit;
     const where: any = {};
-    if (organizationId) where.organizationId = organizationId;
+    if (!user.isWalletzAdmin) {
+      // Scope to user's organizations regardless of what the frontend sends
+      where.organizationId = { in: user.organizationIds };
+    } else if (organizationId) {
+      where.organizationId = organizationId;
+    }
     if (status) where.status = status;
     if (search) {
       where.OR = [
@@ -146,7 +155,7 @@ export class UnitsService {
     return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, user: AuthenticatedUser) {
     const unit = await this.prisma.unit.findUnique({
       where: { id },
       include: {
@@ -156,15 +165,21 @@ export class UnitsService {
       },
     });
     if (!unit) throw new NotFoundException('Unidade não encontrada');
+    if (!user.isWalletzAdmin && !user.organizationIds.includes(unit.organizationId)) {
+      throw new ForbiddenException('Sem acesso a esta unidade');
+    }
     return unit;
   }
 
-  async update(id: string, dto: UpdateUnitDto, actorId: string) {
+  async update(id: string, dto: UpdateUnitDto, actorId: string, user: AuthenticatedUser) {
     const unit = await this.prisma.unit.findUnique({
       where: { id },
       include: { organization: { select: { tenantId: true } } },
     });
     if (!unit) throw new NotFoundException('Unidade não encontrada');
+    if (!user.isWalletzAdmin && !user.organizationIds.includes(unit.organizationId)) {
+      throw new ForbiddenException('Sem acesso a esta unidade');
+    }
     if (unit.status === 'INATIVA') {
       throw new ForbiddenException('Unidade inativa não pode ser editada');
     }
@@ -202,12 +217,15 @@ export class UnitsService {
     });
   }
 
-  async changeStatus(id: string, dto: ChangeUnitStatusDto, actorId: string) {
+  async changeStatus(id: string, dto: ChangeUnitStatusDto, actorId: string, user: AuthenticatedUser) {
     const unit = await this.prisma.unit.findUnique({
       where: { id },
       include: { organization: { select: { tenantId: true } } },
     });
     if (!unit) throw new NotFoundException('Unidade não encontrada');
+    if (!user.isWalletzAdmin && !user.organizationIds.includes(unit.organizationId)) {
+      throw new ForbiddenException('Sem acesso a esta unidade');
+    }
 
     const allowed = ALLOWED_TRANSITIONS[unit.status] ?? [];
     if (!allowed.includes(dto.status)) {

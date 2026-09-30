@@ -14,19 +14,24 @@ export class ProfessionalsController {
   @Post()
   @ApiOperation({ summary: 'Cadastrar profissional' })
   create(@Body() dto: any, @CurrentUser() user: AuthenticatedUser) {
-    return this.service.create(dto, user.userId!);
+    return this.service.create(dto, user.userId!, user);
   }
 
   @Get()
   @ApiOperation({ summary: 'Listar profissionais' })
-  findAll(@Query('organizationId') organizationId?: string, @Query('page') page = 1, @Query('limit') limit = 20) {
-    return this.service.findAll({ organizationId, page: Number(page), limit: Number(limit) });
+  findAll(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('organizationId') organizationId?: string,
+    @Query('page') page = 1,
+    @Query('limit') limit = 20,
+  ) {
+    return this.service.findAll({ organizationId, page: Number(page), limit: Number(limit) }, user);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Detalhe do profissional' })
-  findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.service.findOne(id);
+  findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.service.findOne(id, user);
   }
 
   @Post('link-to-unit')

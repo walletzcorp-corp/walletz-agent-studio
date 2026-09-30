@@ -1,8 +1,9 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { ServiceStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { Decimal } from '@prisma/client/runtime/library';
+import { AuthenticatedUser } from '../../common/decorators/current-user.decorator';
 
 interface CreateServiceDto {
   organizationId: string;
@@ -23,7 +24,10 @@ interface CreateServiceDto {
 export class ServicesCatalogService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(dto: CreateServiceDto, actorId: string) {
+  async create(dto: CreateServiceDto, actorId: string, user: AuthenticatedUser) {
+    if (!user.isWalletzAdmin && !user.organizationIds.includes(dto.organizationId)) {
+      throw new ForbiddenException('Sem acesso a esta organização');
+    }
     const org = await this.prisma.organization.findUnique({
       where: { id: dto.organizationId },
       select: { id: true, tenantId: true },
@@ -78,12 +82,15 @@ export class ServicesCatalogService {
     });
   }
 
-  async publish(id: string, actorId: string) {
+  async publish(id: string, actorId: string, user: AuthenticatedUser) {
     const service = await this.prisma.service.findUnique({
       where: { id },
       include: { organization: { select: { tenantId: true } } },
     });
     if (!service) throw new NotFoundException('Serviço não encontrado');
+    if (!user.isWalletzAdmin && !user.organizationIds.includes(service.organizationId)) {
+      throw new ForbiddenException('Sem acesso a este serviço');
+    }
     if (service.status === 'PUBLICADO') return service;
 
     return this.prisma.$transaction(async (tx) => {
@@ -106,11 +113,15 @@ export class ServicesCatalogService {
     });
   }
 
-  async findAll(params: { organizationId?: string; status?: ServiceStatus; type?: string; page?: number; limit?: number }) {
+  async findAll(params: { organizationId?: string; status?: ServiceStatus; type?: string; page?: number; limit?: number }, user: AuthenticatedUser) {
     const { organizationId, status, type, page = 1, limit = 20 } = params;
     const skip = (page - 1) * limit;
     const where: any = {};
-    if (organizationId) where.organizationId = organizationId;
+    if (!user.isWalletzAdmin) {
+      where.organizationId = { in: user.organizationIds };
+    } else if (organizationId) {
+      where.organizationId = organizationId;
+    }
     if (status) where.status = status;
     if (type) where.type = type;
 
@@ -122,9 +133,12 @@ export class ServicesCatalogService {
     return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, user: AuthenticatedUser) {
     const s = await this.prisma.service.findUnique({ where: { id }, include: { prices: true, specialty: true } });
     if (!s) throw new NotFoundException('Serviço não encontrado');
+    if (!user.isWalletzAdmin && !user.organizationIds.includes(s.organizationId)) {
+      throw new ForbiddenException('Sem acesso a este serviço');
+    }
     return s;
   }
 }

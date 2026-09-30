@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { ResourceStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
+import { AuthenticatedUser } from '../../common/decorators/current-user.decorator';
 
 interface CreateResourceDto {
   unitId: string;
@@ -19,12 +20,15 @@ interface CreateResourceDto {
 export class ResourcesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(dto: CreateResourceDto, actorId: string) {
+  async create(dto: CreateResourceDto, actorId: string, user: AuthenticatedUser) {
     const unit = await this.prisma.unit.findUnique({
       where: { id: dto.unitId },
       include: { organization: { select: { tenantId: true } } },
     });
     if (!unit) throw new NotFoundException('Unidade não encontrada');
+    if (!user.isWalletzAdmin && !user.organizationIds.includes(unit.organizationId)) {
+      throw new ForbiddenException('Sem acesso a esta unidade');
+    }
     if (unit.status !== 'ATIVA') throw new BadRequestException('Unidade não está ativa');
 
     return this.prisma.$transaction(async (tx) => {
@@ -73,10 +77,14 @@ export class ResourcesService {
     });
   }
 
-  async findAll(params: { unitId?: string; type?: string; status?: ResourceStatus; page?: number; limit?: number }) {
+  async findAll(params: { unitId?: string; type?: string; status?: ResourceStatus; page?: number; limit?: number }, user: AuthenticatedUser) {
     const { unitId, type, status, page = 1, limit = 20 } = params;
     const skip = (page - 1) * limit;
     const where: any = {};
+    if (!user.isWalletzAdmin) {
+      // Resources are scoped via their parent unit's organization
+      where.unit = { organizationId: { in: user.organizationIds } };
+    }
     if (unitId) where.unitId = unitId;
     if (type) where.type = type;
     if (status) where.status = status;
@@ -89,18 +97,27 @@ export class ResourcesService {
     return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
-  async findOne(id: string) {
-    const r = await this.prisma.resource.findUnique({ where: { id }, include: { unit: { select: { id: true, name: true } } } });
+  async findOne(id: string, user: AuthenticatedUser) {
+    const r = await this.prisma.resource.findUnique({
+      where: { id },
+      include: { unit: { select: { id: true, name: true, organizationId: true } } },
+    });
     if (!r) throw new NotFoundException('Recurso não encontrado');
+    if (!user.isWalletzAdmin && !user.organizationIds.includes(r.unit.organizationId)) {
+      throw new ForbiddenException('Sem acesso a este recurso');
+    }
     return r;
   }
 
-  async changeStatus(id: string, status: ResourceStatus, reason: string | undefined, actorId: string) {
+  async changeStatus(id: string, status: ResourceStatus, reason: string | undefined, actorId: string, user: AuthenticatedUser) {
     const r = await this.prisma.resource.findUnique({
       where: { id },
-      include: { unit: { include: { organization: { select: { tenantId: true } } } } },
+      include: { unit: { include: { organization: { select: { tenantId: true, id: true } } } } },
     });
     if (!r) throw new NotFoundException('Recurso não encontrado');
+    if (!user.isWalletzAdmin && !user.organizationIds.includes(r.unit.organizationId)) {
+      throw new ForbiddenException('Sem acesso a este recurso');
+    }
 
     if ((status === 'BLOQUEADO' || status === 'INATIVO') && !reason) {
       throw new BadRequestException('Motivo obrigatório');
