@@ -1,0 +1,582 @@
+// =============================================================
+// Walletz Med — Prisma Schema
+// Módulo 1: Organização, Unidades e Acesso
+// =============================================================
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = []
+}
+
+datasource db {
+  provider          = "postgresql"
+  url               = env("DATABASE_URL")
+  shadowDatabaseUrl = env("DATABASE_URL_SHADOW")
+}
+
+// -----------------------------------------------------------
+// ENUMERAÇÕES
+// -----------------------------------------------------------
+
+enum OrganizationStatus {
+  RASCUNHO
+  EM_VALIDACAO
+  ATIVA
+  SUSPENSA
+  ENCERRADA
+}
+
+enum UnitStatus {
+  RASCUNHO
+  ATIVA
+  BLOQUEADA
+  INATIVA
+}
+
+enum UserStatus {
+  CONVIDADO
+  ATIVO
+  BLOQUEADO
+  ENCERRADO
+}
+
+enum InviteStatus {
+  PENDENTE
+  ACEITO
+  EXPIRADO
+  CANCELADO
+}
+
+enum MembershipStatus {
+  ATIVO
+  BLOQUEADO
+  ENCERRADO
+}
+
+enum ProfessionalLinkStatus {
+  PENDENTE
+  VIGENTE
+  EXPIRADO
+  SUSPENSO
+  ENCERRADO
+}
+
+enum ResourceStatus {
+  RASCUNHO
+  ATIVO
+  BLOQUEADO
+  INATIVO
+}
+
+enum ServiceStatus {
+  RASCUNHO
+  PUBLICADO
+  DESCONTINUADO
+}
+
+enum OutboxEventStatus {
+  PENDENTE
+  PROCESSADO
+  FALHOU
+}
+
+// -----------------------------------------------------------
+// TENANT
+// -----------------------------------------------------------
+
+model Tenant {
+  id          String   @id @default(uuid())
+  slug        String   @unique
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  organization  Organization?
+  users         UserTenant[]
+  auditEvents   AuditEvent[]
+  outboxEvents  OutboxEvent[]
+
+  @@map("tenants")
+}
+
+// -----------------------------------------------------------
+// ORGANIZAÇÃO
+// -----------------------------------------------------------
+
+model Organization {
+  id                String             @id @default(uuid())
+  tenantId          String             @unique @map("tenant_id")
+  tenant            Tenant             @relation(fields: [tenantId], references: [id])
+
+  razaoSocial       String             @map("razao_social")
+  nomeFantasia      String             @map("nome_fantasia")
+  cnpj              String             @unique
+  email             String?
+  telefone          String?
+  site              String?
+
+  // Configurações regionais
+  timezone          String             @default("America/Sao_Paulo")
+  locale            String             @default("pt-BR")
+  currency          String             @default("BRL")
+
+  status            OrganizationStatus @default(RASCUNHO)
+  statusReason      String?            @map("status_reason")
+
+  rowVersion        Int                @default(0) @map("row_version")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+
+  units             Unit[]
+  users             UserOrganization[]
+  professionals     Professional[]
+  specialties       Specialty[]
+  services          Service[]
+  auditEvents       AuditEvent[]
+  statusHistory     OrganizationStatusHistory[]
+
+  @@map("organizations")
+}
+
+model OrganizationStatusHistory {
+  id             String             @id @default(uuid())
+  organizationId String             @map("organization_id")
+  organization   Organization       @relation(fields: [organizationId], references: [id])
+
+  fromStatus     OrganizationStatus @map("from_status")
+  toStatus       OrganizationStatus @map("to_status")
+  reason         String?
+  changedBy      String             @map("changed_by")
+  changedAt      DateTime           @default(now()) @map("changed_at")
+
+  @@map("organization_status_history")
+}
+
+// -----------------------------------------------------------
+// UNIDADE
+// -----------------------------------------------------------
+
+model Unit {
+  id             String     @id @default(uuid())
+  organizationId String     @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  code           String
+  name           String
+  email          String?
+  telefone       String?
+
+  // Endereço
+  logradouro     String?
+  numero         String?
+  complemento    String?
+  bairro         String?
+  cidade         String
+  uf             String     @db.Char(2)
+  cep            String?
+
+  timezone       String     @default("America/Sao_Paulo")
+  responsavelId  String?    @map("responsavel_id")
+
+  status         UnitStatus @default(RASCUNHO)
+  statusReason   String?    @map("status_reason")
+
+  // Checklist de ativação
+  checklistCompleted Boolean @default(false) @map("checklist_completed")
+
+  rowVersion     Int        @default(0) @map("row_version")
+  createdAt      DateTime   @default(now()) @map("created_at")
+  updatedAt      DateTime   @updatedAt @map("updated_at")
+
+  users             UserUnit[]
+  professionals     ProfessionalUnitLink[]
+  resources         Resource[]
+  auditEvents       AuditEvent[]
+  statusHistory     UnitStatusHistory[]
+
+  @@unique([organizationId, code])
+  @@map("units")
+}
+
+model UnitStatusHistory {
+  id         String     @id @default(uuid())
+  unitId     String     @map("unit_id")
+  unit       Unit       @relation(fields: [unitId], references: [id])
+
+  fromStatus UnitStatus @map("from_status")
+  toStatus   UnitStatus @map("to_status")
+  reason     String?
+  changedBy  String     @map("changed_by")
+  changedAt  DateTime   @default(now()) @map("changed_at")
+
+  @@map("unit_status_history")
+}
+
+// -----------------------------------------------------------
+// USUÁRIO
+// -----------------------------------------------------------
+
+model User {
+  id              String     @id @default(uuid())
+  keycloakId      String?    @unique @map("keycloak_id")
+  email           String     @unique
+  name            String
+  status          UserStatus @default(CONVIDADO)
+
+  rowVersion      Int        @default(0) @map("row_version")
+  createdAt       DateTime   @default(now()) @map("created_at")
+  updatedAt       DateTime   @updatedAt @map("updated_at")
+
+  tenants         UserTenant[]
+  organizations   UserOrganization[]
+  units           UserUnit[]
+  invitesSent     Invite[]   @relation("InviteSender")
+  invitesReceived Invite[]   @relation("InviteReceived")
+
+  @@map("users")
+}
+
+model UserTenant {
+  id       String @id @default(uuid())
+  userId   String @map("user_id")
+  user     User   @relation(fields: [userId], references: [id])
+  tenantId String @map("tenant_id")
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([userId, tenantId])
+  @@map("user_tenants")
+}
+
+model UserOrganization {
+  id             String           @id @default(uuid())
+  userId         String           @map("user_id")
+  user           User             @relation(fields: [userId], references: [id])
+  organizationId String           @map("organization_id")
+  organization   Organization     @relation(fields: [organizationId], references: [id])
+  profileId      String           @map("profile_id")
+  profile        Profile          @relation(fields: [profileId], references: [id])
+  status         MembershipStatus @default(ATIVO)
+  linkedAt       DateTime         @default(now()) @map("linked_at")
+  revokedAt      DateTime?        @map("revoked_at")
+  revokedReason  String?          @map("revoked_reason")
+
+  @@unique([userId, organizationId])
+  @@map("user_organizations")
+}
+
+model UserUnit {
+  id        String           @id @default(uuid())
+  userId    String           @map("user_id")
+  user      User             @relation(fields: [userId], references: [id])
+  unitId    String           @map("unit_id")
+  unit      Unit             @relation(fields: [unitId], references: [id])
+  profileId String           @map("profile_id")
+  profile   Profile          @relation(fields: [profileId], references: [id])
+  status    MembershipStatus @default(ATIVO)
+  linkedAt  DateTime         @default(now()) @map("linked_at")
+  revokedAt DateTime?        @map("revoked_at")
+
+  @@unique([userId, unitId])
+  @@map("user_units")
+}
+
+// -----------------------------------------------------------
+// CONVITES
+// -----------------------------------------------------------
+
+model Invite {
+  id             String       @id @default(uuid())
+  email          String
+  organizationId String       @map("organization_id")
+  profileId      String       @map("profile_id")
+  profile        Profile      @relation(fields: [profileId], references: [id])
+  senderId       String       @map("sender_id")
+  sender         User         @relation("InviteSender", fields: [senderId], references: [id])
+  receiverId     String?      @map("receiver_id")
+  receiver       User?        @relation("InviteReceived", fields: [receiverId], references: [id])
+
+  token          String       @unique
+  status         InviteStatus @default(PENDENTE)
+  expiresAt      DateTime     @map("expires_at")
+  acceptedAt     DateTime?    @map("accepted_at")
+
+  idempotencyKey String?      @unique @map("idempotency_key")
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  @@map("invites")
+}
+
+// -----------------------------------------------------------
+// PERFIS E PERMISSÕES
+// -----------------------------------------------------------
+
+model Profile {
+  id          String  @id @default(uuid())
+  name        String  @unique
+  displayName String  @map("display_name")
+  description String?
+  isSystem    Boolean @default(false) @map("is_system")
+
+  permissions         ProfilePermission[]
+  userOrganizations   UserOrganization[]
+  userUnits           UserUnit[]
+  invites             Invite[]
+
+  @@map("profiles")
+}
+
+model Permission {
+  id          String @id @default(uuid())
+  resource    String
+  action      String
+  description String?
+
+  profiles    ProfilePermission[]
+
+  @@unique([resource, action])
+  @@map("permissions")
+}
+
+model ProfilePermission {
+  profileId    String     @map("profile_id")
+  profile      Profile    @relation(fields: [profileId], references: [id])
+  permissionId String     @map("permission_id")
+  permission   Permission @relation(fields: [permissionId], references: [id])
+
+  @@id([profileId, permissionId])
+  @@map("profile_permissions")
+}
+
+// -----------------------------------------------------------
+// PROFISSIONAIS
+// -----------------------------------------------------------
+
+model Professional {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  userId         String?  @map("user_id")
+
+  name           String
+  cpf            String?  @unique
+  email          String?
+  telefone       String?
+
+  // Conselho profissional
+  councilType    String?  @map("council_type")
+  councilNumber  String?  @map("council_number")
+  councilUf      String?  @map("council_uf") @db.Char(2)
+
+  rowVersion     Int      @default(0) @map("row_version")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  specialties    ProfessionalSpecialty[]
+  credentials    ProfessionalCredential[]
+  unitLinks      ProfessionalUnitLink[]
+
+  @@map("professionals")
+}
+
+model ProfessionalCredential {
+  id              String    @id @default(uuid())
+  professionalId  String    @map("professional_id")
+  professional    Professional @relation(fields: [professionalId], references: [id])
+
+  type            String
+  number          String
+  issuedBy        String?   @map("issued_by")
+  issuedAt        DateTime? @map("issued_at")
+  expiresAt       DateTime? @map("expires_at")
+  documentUrl     String?   @map("document_url")
+
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  @@map("professional_credentials")
+}
+
+model ProfessionalUnitLink {
+  id              String                 @id @default(uuid())
+  professionalId  String                 @map("professional_id")
+  professional    Professional           @relation(fields: [professionalId], references: [id])
+  unitId          String                 @map("unit_id")
+  unit            Unit                   @relation(fields: [unitId], references: [id])
+
+  role            String?
+  startDate       DateTime               @map("start_date")
+  endDate         DateTime?              @map("end_date")
+  status          ProfessionalLinkStatus @default(PENDENTE)
+  statusReason    String?                @map("status_reason")
+
+  rowVersion      Int                    @default(0) @map("row_version")
+  createdAt       DateTime               @default(now()) @map("created_at")
+  updatedAt       DateTime               @updatedAt @map("updated_at")
+
+  @@unique([professionalId, unitId])
+  @@map("professional_unit_links")
+}
+
+// -----------------------------------------------------------
+// ESPECIALIDADES
+// -----------------------------------------------------------
+
+model Specialty {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  code           String
+  name           String
+  description    String?
+  active         Boolean  @default(true)
+
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  professionals  ProfessionalSpecialty[]
+  services       Service[]
+
+  @@unique([organizationId, code])
+  @@map("specialties")
+}
+
+model ProfessionalSpecialty {
+  professionalId String       @map("professional_id")
+  professional   Professional @relation(fields: [professionalId], references: [id])
+  specialtyId    String       @map("specialty_id")
+  specialty      Specialty    @relation(fields: [specialtyId], references: [id])
+
+  @@id([professionalId, specialtyId])
+  @@map("professional_specialties")
+}
+
+// -----------------------------------------------------------
+// RECURSOS (Salas, Equipamentos)
+// -----------------------------------------------------------
+
+model Resource {
+  id           String         @id @default(uuid())
+  unitId       String         @map("unit_id")
+  unit         Unit           @relation(fields: [unitId], references: [id])
+
+  code         String
+  name         String
+  type         String         // consultorio, sala_procedimento, poltrona, maca, equipamento
+  description  String?
+  capacity     Int?           @default(1)
+  floor        String?
+  location     String?
+  restrictions String?
+
+  status       ResourceStatus @default(RASCUNHO)
+  statusReason String?        @map("status_reason")
+
+  rowVersion   Int            @default(0) @map("row_version")
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+
+  @@unique([unitId, code])
+  @@map("resources")
+}
+
+// -----------------------------------------------------------
+// SERVIÇOS / PROCEDIMENTOS
+// -----------------------------------------------------------
+
+model Service {
+  id             String        @id @default(uuid())
+  organizationId String        @map("organization_id")
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  specialtyId    String?       @map("specialty_id")
+  specialty      Specialty?    @relation(fields: [specialtyId], references: [id])
+
+  code           String
+  name           String
+  description    String?
+  type           String        // consulta, procedimento, exame
+  durationMin    Int           @map("duration_min")
+
+  // Requisitos
+  requiresProfessional Boolean @default(true) @map("requires_professional")
+  requiresRoom         Boolean @default(true) @map("requires_room")
+
+  status         ServiceStatus @default(RASCUNHO)
+  version        Int           @default(1)
+
+  rowVersion     Int           @default(0) @map("row_version")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  prices         ServicePrice[]
+
+  @@unique([organizationId, code, version])
+  @@map("services")
+}
+
+model ServicePrice {
+  id          String   @id @default(uuid())
+  serviceId   String   @map("service_id")
+  service     Service  @relation(fields: [serviceId], references: [id])
+
+  currency    String   @default("BRL")
+  amount      Decimal  @db.Decimal(12, 2)
+  validFrom   DateTime @map("valid_from")
+  validUntil  DateTime? @map("valid_until")
+
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("service_prices")
+}
+
+// -----------------------------------------------------------
+// AUDITORIA
+// -----------------------------------------------------------
+
+model AuditEvent {
+  id             String    @id @default(uuid())
+  tenantId       String?   @map("tenant_id")
+  tenant         Tenant?   @relation(fields: [tenantId], references: [id])
+  organizationId String?   @map("organization_id")
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  unitId         String?   @map("unit_id")
+  unit           Unit?     @relation(fields: [unitId], references: [id])
+
+  actorId        String?   @map("actor_id")
+  actorEmail     String?   @map("actor_email")
+  action         String
+  resource       String
+  resourceId     String?   @map("resource_id")
+  result         String    // SUCCESS, FAILURE, DENIED
+  reason         String?
+  correlationId  String?   @map("correlation_id")
+
+  // Snapshot dos valores (sem senhas, tokens, dados clínicos)
+  previousValues Json?     @map("previous_values")
+  newValues      Json?     @map("new_values")
+
+  occurredAt     DateTime  @default(now()) @map("occurred_at")
+
+  // Append-only: sem updatedAt, sem delete cascade da app
+  @@map("audit_events")
+}
+
+// -----------------------------------------------------------
+// OUTBOX EVENTS (Transactional Outbox para integração futura)
+// -----------------------------------------------------------
+
+model OutboxEvent {
+  id          String            @id @default(uuid())
+  tenantId    String?           @map("tenant_id")
+  tenant      Tenant?           @relation(fields: [tenantId], references: [id])
+
+  eventType   String            @map("event_type")
+  aggregateId String            @map("aggregate_id")
+  payload     Json
+
+  status      OutboxEventStatus @default(PENDENTE)
+  attempts    Int               @default(0)
+  lastError   String?           @map("last_error")
+  processedAt DateTime?         @map("processed_at")
+
+  createdAt   DateTime          @default(now()) @map("created_at")
+
+  @@map("outbox_events")
+}
