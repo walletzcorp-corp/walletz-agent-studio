@@ -40,5 +40,8 @@ apps/api/prisma/test.db
 # Docker volumes (local only)
 .docker-volumes/
 
+# Local PostgreSQL cluster data
+.pgdata/
+
 # OS
 Thumbs.db
