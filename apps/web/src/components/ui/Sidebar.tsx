@@ -52,7 +52,11 @@ export function Sidebar() {
       {/* Footer */}
       <div className="px-3 py-4 border-t border-brand-graphite-mid">
         <button
-          onClick={() => signOut({ callbackUrl: '/login' })}
+          onClick={() => {
+            document.cookie = 'walletz_dev_token=; path=/; max-age=0';
+            try { sessionStorage.removeItem('walletz_dev_token'); sessionStorage.removeItem('walletz_dev_user'); } catch {}
+            signOut({ callbackUrl: '/login' });
+          }}
           className="sidebar-link w-full text-left"
         >
           <LogOut size={16} />

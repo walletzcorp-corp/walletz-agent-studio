@@ -111,12 +111,106 @@ async function main() {
     });
   }
 
-  // ---- Especialidade Sintética ----
-  await prisma.specialty.upsert({
-    where: { organizationId_code: { organizationId: orgId, code: 'CLIN' } },
+  // ---- Especialidades Sintéticas ----
+  const specialties = [
+    { code: 'CLIN', name: 'Clínica Geral' },
+    { code: 'CARD', name: 'Cardiologia' },
+    { code: 'DERM', name: 'Dermatologia' },
+    { code: 'ORTO', name: 'Ortopedia' },
+  ];
+
+  const specialtyIds: Record<string, string> = {};
+  for (const s of specialties) {
+    const sp = await prisma.specialty.upsert({
+      where: { organizationId_code: { organizationId: orgId, code: s.code } },
+      update: {},
+      create: { id: randomUUID(), organizationId: orgId, code: s.code, name: s.name, active: true },
+    });
+    specialtyIds[s.code] = sp.id;
+  }
+  console.log(`${specialties.length} especialidades criadas`);
+
+  // ---- Profissionais Sintéticos ----
+  const profId1 = 'eeeeeeee-0000-0000-0000-000000000001';
+  const profId2 = 'eeeeeeee-0000-0000-0000-000000000002';
+
+  await prisma.professional.upsert({
+    where: { id: profId1 },
     update: {},
-    create: { id: randomUUID(), organizationId: orgId, code: 'CLIN', name: 'Clínica Geral', active: true },
+    create: {
+      id: profId1,
+      organizationId: orgId,
+      name: 'Dr. João da Silva (DEV)',
+      email: 'joao.dev@clinica-exemplo.local',
+      councilType: 'CRM',
+      councilNumber: '12345',
+      councilUf: 'MG',
+      specialties: { create: [{ specialtyId: specialtyIds['CLIN'] }, { specialtyId: specialtyIds['CARD'] }] },
+    },
   });
+
+  await prisma.professional.upsert({
+    where: { id: profId2 },
+    update: {},
+    create: {
+      id: profId2,
+      organizationId: orgId,
+      name: 'Dra. Maria Souza (DEV)',
+      email: 'maria.dev@clinica-exemplo.local',
+      councilType: 'CRM',
+      councilNumber: '67890',
+      councilUf: 'MG',
+      specialties: { create: [{ specialtyId: specialtyIds['DERM'] }] },
+    },
+  });
+  console.log('2 profissionais sintéticos criados');
+
+  // ---- Recursos Sintéticos (a unidade já está ATIVA) ----
+  const resources = [
+    { code: 'CONS-01', name: 'Consultório 01', type: 'consultorio', floor: '1', location: 'Ala A' },
+    { code: 'CONS-02', name: 'Consultório 02', type: 'consultorio', floor: '1', location: 'Ala A' },
+    { code: 'SALA-PROC', name: 'Sala de Procedimentos', type: 'sala_procedimento', floor: '2' },
+  ];
+
+  for (const r of resources) {
+    const existing = await prisma.resource.findUnique({ where: { unitId_code: { unitId, code: r.code } } });
+    if (!existing) {
+      await prisma.resource.create({
+        data: { id: randomUUID(), unitId, ...r, status: 'ATIVO', capacity: 1 },
+      });
+    }
+  }
+  console.log(`${resources.length} recursos sintéticos criados`);
+
+  // ---- Serviços Sintéticos ----
+  const services = [
+    { code: 'CONS-CLIN', name: 'Consulta Clínica Geral', type: 'consulta', durationMin: 30, specialtyCode: 'CLIN', price: 150 },
+    { code: 'CONS-CARD', name: 'Consulta Cardiológica', type: 'consulta', durationMin: 45, specialtyCode: 'CARD', price: 250 },
+    { code: 'CONS-DERM', name: 'Consulta Dermatológica', type: 'consulta', durationMin: 30, specialtyCode: 'DERM', price: 200 },
+  ];
+
+  for (const s of services) {
+    const existing = await prisma.service.findFirst({ where: { organizationId: orgId, code: s.code, version: 1 } });
+    if (!existing) {
+      const svc = await prisma.service.create({
+        data: {
+          id: randomUUID(),
+          organizationId: orgId,
+          specialtyId: specialtyIds[s.specialtyCode],
+          code: s.code,
+          name: s.name,
+          type: s.type,
+          durationMin: s.durationMin,
+          status: 'PUBLICADO',
+          version: 1,
+        },
+      });
+      await prisma.servicePrice.create({
+        data: { id: randomUUID(), serviceId: svc.id, currency: 'BRL', amount: s.price, validFrom: new Date() },
+      });
+    }
+  }
+  console.log(`${services.length} serviços sintéticos criados`);
 
   console.log('Seed concluído com sucesso!');
   console.log('');

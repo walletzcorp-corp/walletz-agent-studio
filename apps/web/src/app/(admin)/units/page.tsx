@@ -1,13 +1,11 @@
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { getToken } from '@/lib/server-token';
 import { api } from '@/lib/api';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import Link from 'next/link';
 import { Plus } from 'lucide-react';
 
 export default async function UnitsPage({ searchParams }: { searchParams: { page?: string; organizationId?: string; status?: string } }) {
-  const session = await getServerSession(authOptions);
-  const token = (session as any)?.accessToken as string | undefined;
+  const token = await getToken();
 
   const page = searchParams.page ?? '1';
   let data: any = { items: [], total: 0, totalPages: 1 };

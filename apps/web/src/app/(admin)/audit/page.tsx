@@ -1,10 +1,8 @@
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { getToken } from '@/lib/server-token';
 import { api } from '@/lib/api';
 
 export default async function AuditPage({ searchParams }: { searchParams: { page?: string; action?: string; result?: string } }) {
-  const session = await getServerSession(authOptions);
-  const token = (session as any)?.accessToken as string | undefined;
+  const token = await getToken();
   let data: any = { items: [], total: 0 };
   let error = '';
   try {

@@ -1,27 +1,23 @@
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { Building2, MapPin, Users, UserCheck } from 'lucide-react';
+import { Building2, MapPin, Users, UserCheck, Stethoscope, Package } from 'lucide-react';
 
 export default async function DashboardPage() {
-  const session = await getServerSession(authOptions);
-
   const cards = [
-    { label: 'Organizações', icon: Building2, color: 'text-brand-emerald', href: '/organizations' },
-    { label: 'Unidades',     icon: MapPin,    color: 'text-blue-500',      href: '/units' },
-    { label: 'Usuários',     icon: Users,     color: 'text-purple-500',    href: '/users' },
-    { label: 'Profissionais',icon: UserCheck, color: 'text-orange-500',    href: '/professionals' },
+    { label: 'Organizações',    icon: Building2,   color: 'text-brand-emerald', href: '/organizations' },
+    { label: 'Unidades',        icon: MapPin,       color: 'text-blue-500',      href: '/units' },
+    { label: 'Usuários',        icon: Users,        color: 'text-purple-500',    href: '/users' },
+    { label: 'Profissionais',   icon: UserCheck,    color: 'text-orange-500',    href: '/professionals' },
+    { label: 'Salas/Recursos',  icon: Package,      color: 'text-teal-500',      href: '/resources' },
+    { label: 'Serviços',        icon: Stethoscope,  color: 'text-pink-500',      href: '/services' },
   ];
 
   return (
     <div>
       <div className="mb-8">
         <h1>Painel Administrativo</h1>
-        <p className="text-slate-500 mt-1">
-          Bem-vindo, {(session?.user as any)?.name ?? 'Usuário'}
-        </p>
+        <p className="text-slate-500 mt-1">Walletz Med — Sistema Operacional para Clínicas</p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
         {cards.map(({ label, icon: Icon, color, href }) => (
           <a key={href} href={href} className="card hover:shadow-md transition-shadow group">
             <Icon size={28} className={`${color} mb-3`} />

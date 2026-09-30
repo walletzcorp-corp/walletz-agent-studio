@@ -1,5 +1,4 @@
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { getToken } from '@/lib/server-token';
 import { api } from '@/lib/api';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import Link from 'next/link';
@@ -7,8 +6,7 @@ import { ArrowLeft } from 'lucide-react';
 import { notFound } from 'next/navigation';
 
 export default async function OrganizationDetailPage({ params }: { params: { id: string } }) {
-  const session = await getServerSession(authOptions);
-  const token = (session as any)?.accessToken as string | undefined;
+  const token = await getToken();
 
   let org: any = null;
   try {

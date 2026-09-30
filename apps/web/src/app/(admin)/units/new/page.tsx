@@ -1,13 +1,12 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useSession } from 'next-auth/react';
+import { useToken } from '@/hooks/useToken';
 import { api } from '@/lib/api';
 
 export default function NewUnitPage() {
   const router = useRouter();
-  const { data: session } = useSession();
-  const token = (session as any)?.accessToken as string | undefined;
+  const token = useToken();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [form, setForm] = useState({

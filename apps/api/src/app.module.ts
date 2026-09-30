@@ -9,6 +9,7 @@ import { UsersModule } from './modules/users/users.module';
 import { ProfessionalsModule } from './modules/professionals/professionals.module';
 import { ResourcesModule } from './modules/resources/resources.module';
 import { ServicesCatalogModule } from './modules/services-catalog/services-catalog.module';
+import { SpecialtiesModule } from './modules/specialties/specialties.module';
 import { AuditModule } from './modules/audit/audit.module';
 
 @Module({
@@ -31,6 +32,7 @@ import { AuditModule } from './modules/audit/audit.module';
     ProfessionalsModule,
     ResourcesModule,
     ServicesCatalogModule,
+    SpecialtiesModule,
     AuditModule,
   ],
 })
