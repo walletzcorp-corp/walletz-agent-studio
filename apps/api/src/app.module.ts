@@ -13,6 +13,7 @@ import { SpecialtiesModule } from './modules/specialties/specialties.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { PatientsModule } from './modules/patients/patients.module';
 import { SchedulingModule } from './modules/scheduling/scheduling.module';
+import { PepModule } from './modules/pep/pep.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { SchedulingModule } from './modules/scheduling/scheduling.module';
     AuditModule,
     PatientsModule,
     SchedulingModule,
+    PepModule,
   ],
 })
 export class AppModule {}

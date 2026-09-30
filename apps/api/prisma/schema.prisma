@@ -128,6 +128,52 @@ enum TicketStatus {
 }
 
 // -----------------------------------------------------------
+// MÓDULO 4 — ENUMERAÇÕES DO PRONTUÁRIO
+// -----------------------------------------------------------
+
+enum EntryStatus {
+  RASCUNHO
+  AGUARDANDO_ASSINATURA
+  ASSINADO
+  CANCELADO
+}
+
+enum SignatureStatus {
+  PENDENTE
+  DEMO
+  CONFIRMADO
+}
+
+enum AllergyStatus {
+  ATIVO
+  REMISSAO
+  NEGADO
+}
+
+enum MedicationStatus {
+  EM_USO
+  SUSPENSO
+  ENCERRADO
+}
+
+enum DiagnosisType {
+  PRINCIPAL
+  SECUNDARIO
+  COMPLICACAO
+  DESCARTADO
+}
+
+enum PepAuditAction {
+  LEITURA
+  IMPRESSAO
+  EXPORTACAO
+  INCLUSAO
+  EDICAO_RASCUNHO
+  ASSINATURA
+  ADENDO
+}
+
+// -----------------------------------------------------------
 // TENANT
 // -----------------------------------------------------------
 
@@ -183,6 +229,8 @@ model Organization {
   patients          Patient[]
   appointments      Appointment[]
   waitListEntries   WaitListEntry[]
+  medicalRecords    MedicalRecord[]
+  pepTemplates      PepTemplate[]
 
   @@map("organizations")
 }
@@ -428,6 +476,7 @@ model Professional {
   unitLinks         ProfessionalUnitLink[]
   appointments      Appointment[]
   availabilityRules AvailabilityRule[]
+  careRelationships CareRelationship[]
 
   @@map("professionals")
 }
@@ -488,6 +537,7 @@ model Specialty {
 
   professionals  ProfessionalSpecialty[]
   services       Service[]
+  pepTemplates   PepTemplate[]
 
   @@unique([organizationId, code])
   @@map("specialties")
@@ -660,9 +710,11 @@ model Patient {
   createdAt      DateTime     @default(now()) @map("created_at")
   updatedAt      DateTime     @updatedAt @map("updated_at")
 
-  appointments   Appointment[]
+  appointments    Appointment[]
   waitListEntries WaitListEntry[]
-  queueTickets   QueueTicket[]
+  queueTickets    QueueTicket[]
+  medicalRecord   MedicalRecord?
+  careRelationships CareRelationship[]
 
   @@unique([organizationId, cpf])
   @@map("patients")
@@ -752,8 +804,9 @@ model Appointment {
   createdAt      DateTime          @default(now()) @map("created_at")
   updatedAt      DateTime          @updatedAt @map("updated_at")
 
-  history        AppointmentHistory[]
+  history         AppointmentHistory[]
   waitListEntries WaitListEntry[]  @relation("PromotedAppointment")
+  clinicalEntries ClinicalEntry[]
 
   @@index([unitId, startsAt])
   @@index([professionalId, startsAt])
@@ -849,4 +902,308 @@ model QueueTicket {
 
   @@unique([queueId, ticketNumber])
   @@map("queue_tickets")
+}
+
+// -----------------------------------------------------------
+// MÓDULO 4 — PRONTUÁRIO ELETRÔNICO DO PACIENTE (PEP)
+// -----------------------------------------------------------
+
+// RF-PEP-001: Prontuário longitudinal — um por paciente por organização
+model MedicalRecord {
+  id             String       @id @default(uuid())
+  organizationId String       @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  patientId      String       @unique @map("patient_id")
+  patient        Patient      @relation(fields: [patientId], references: [id])
+
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  entries           ClinicalEntry[]
+  allergies         AllergyRecord[]
+  medications       MedicationRecord[]
+  diagnoses         DiagnosisRecord[]
+  medicalHistory    MedicalHistoryRecord[]
+  auditLogs         PepAuditLog[]
+
+  @@map("medical_records")
+}
+
+// RF-PEP-003: Entrada clínica (SOAP + campos configuráveis)
+model ClinicalEntry {
+  id             String        @id @default(uuid())
+  recordId       String        @map("record_id")
+  record         MedicalRecord @relation(fields: [recordId], references: [id])
+  organizationId String        @map("organization_id")
+  unitId         String        @map("unit_id")
+  professionalId String        @map("professional_id")
+  appointmentId  String?       @map("appointment_id")
+  appointment    Appointment?  @relation(fields: [appointmentId], references: [id])
+  templateId     String?       @map("template_id")
+
+  // RF-PEP-003: SOAP
+  subjective     String?       // S — queixa principal, história da doença
+  objective      String?       // O — exame físico, achados objetivos
+  assessment     String?       // A — avaliação clínica
+  plan           String?       // P — plano terapêutico
+
+  // Campos adicionais configuráveis (RF-PEP-003)
+  extraFields    Json?         @map("extra_fields")
+
+  // RF-PEP-022: rastreio de conteúdo reutilizado
+  copiedFromId   String?       @map("copied_from_id")
+  copiedFrom     ClinicalEntry? @relation("CopiedEntry", fields: [copiedFromId], references: [id])
+  copies         ClinicalEntry[] @relation("CopiedEntry")
+
+  status         EntryStatus   @default(RASCUNHO)
+
+  rowVersion     Int           @default(0) @map("row_version")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  vitalSigns     VitalSigns?
+  attachments    ClinicalAttachment[]
+  signature      ClinicalEntrySignature?
+  addenda        ClinicalEntryAddendum[]
+  auditLogs      PepAuditLog[]
+
+  @@index([recordId, createdAt])
+  @@index([professionalId])
+  @@map("clinical_entries")
+}
+
+// RF-PEP-010/011: Adendo — correção rastreável, não apaga o original
+model ClinicalEntryAddendum {
+  id          String        @id @default(uuid())
+  entryId     String        @map("entry_id")
+  entry       ClinicalEntry @relation(fields: [entryId], references: [id])
+
+  content     String
+  reason      String
+  authorSub   String        @map("author_sub")
+  authorName  String        @map("author_name")
+
+  createdAt   DateTime      @default(now()) @map("created_at")
+
+  @@map("clinical_entry_addenda")
+}
+
+// RF-PEP-004: Sinais vitais por entrada
+model VitalSigns {
+  id              String        @id @default(uuid())
+  entryId         String        @unique @map("entry_id")
+  entry           ClinicalEntry @relation(fields: [entryId], references: [id])
+
+  temperatureC    Decimal?      @map("temperature_c") @db.Decimal(4, 1)
+  systolicBp      Int?          @map("systolic_bp")
+  diastolicBp     Int?          @map("diastolic_bp")
+  heartRate       Int?          @map("heart_rate")
+  respiratoryRate Int?          @map("respiratory_rate")
+  oxygenSatPct    Decimal?      @map("oxygen_sat_pct") @db.Decimal(4, 1)
+  weightKg        Decimal?      @map("weight_kg") @db.Decimal(5, 2)
+  heightCm        Decimal?      @map("height_cm") @db.Decimal(5, 1)
+  bmi             Decimal?      @map("bmi") @db.Decimal(4, 1)
+  painScale       Int?          @map("pain_scale")
+
+  // Campos extras para escalas/questionários específicos por especialidade
+  extra           Json?
+
+  recordedAt      DateTime      @default(now()) @map("recorded_at")
+
+  @@map("vital_signs")
+}
+
+// RF-PEP-005: Alergias (longitudinal)
+model AllergyRecord {
+  id          String        @id @default(uuid())
+  recordId    String        @map("record_id")
+  record      MedicalRecord @relation(fields: [recordId], references: [id])
+
+  substance   String
+  reaction    String?
+  severity    String?       // leve, moderada, grave
+  status      AllergyStatus @default(ATIVO)
+  onsetDate   DateTime?     @map("onset_date") @db.Date
+  notes       String?
+
+  reportedBy  String        @map("reported_by")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  @@map("allergy_records")
+}
+
+// RF-PEP-005: Medicamentos em uso (longitudinal)
+model MedicationRecord {
+  id           String           @id @default(uuid())
+  recordId     String           @map("record_id")
+  record       MedicalRecord    @relation(fields: [recordId], references: [id])
+
+  name         String
+  dosage       String?
+  frequency    String?
+  route        String?
+  startDate    DateTime?        @map("start_date") @db.Date
+  endDate      DateTime?        @map("end_date") @db.Date
+  status       MedicationStatus @default(EM_USO)
+  indication   String?
+  notes        String?
+
+  prescribedBy String           @map("prescribed_by")
+  createdAt    DateTime         @default(now()) @map("created_at")
+  updatedAt    DateTime         @updatedAt @map("updated_at")
+
+  @@map("medication_records")
+}
+
+// RF-PEP-005/006: Diagnósticos / CID-10 (longitudinal)
+model DiagnosisRecord {
+  id           String        @id @default(uuid())
+  recordId     String        @map("record_id")
+  record       MedicalRecord @relation(fields: [recordId], references: [id])
+
+  cidCode      String?       @map("cid_code")
+  description  String
+  type         DiagnosisType @default(PRINCIPAL)
+  notes        String?
+
+  diagnosedBy  String        @map("diagnosed_by")
+  diagnosedAt  DateTime      @default(now()) @map("diagnosed_at")
+  resolvedAt   DateTime?     @map("resolved_at")
+
+  @@map("diagnosis_records")
+}
+
+// RF-PEP-005: Antecedentes pessoais e familiares (longitudinal)
+model MedicalHistoryRecord {
+  id          String        @id @default(uuid())
+  recordId    String        @map("record_id")
+  record      MedicalRecord @relation(fields: [recordId], references: [id])
+
+  // pessoal, familiar, cirurgico, social, ginecologico, etc.
+  category    String
+  description String
+  date        DateTime?     @db.Date
+  notes       String?
+
+  reportedBy  String        @map("reported_by")
+  createdAt   DateTime      @default(now()) @map("created_at")
+
+  @@map("medical_history_records")
+}
+
+// RF-PEP-007: Anexos de exames, imagens, laudos e documentos
+model ClinicalAttachment {
+  id             String        @id @default(uuid())
+  entryId        String        @map("entry_id")
+  entry          ClinicalEntry @relation(fields: [entryId], references: [id])
+  organizationId String        @map("organization_id")
+
+  fileName       String        @map("file_name")
+  mimeType       String        @map("mime_type")
+  sizeBytes      Int?          @map("size_bytes")
+  // relative path under uploads/pep/ directory
+  storageKey     String        @map("storage_key")
+  description    String?
+
+  uploadedBy     String        @map("uploaded_by")
+  createdAt      DateTime      @default(now()) @map("created_at")
+
+  @@map("clinical_attachments")
+}
+
+// RF-PEP-009: Assinatura por adaptador (DEMO ou provedor real)
+model ClinicalEntrySignature {
+  id             String          @id @default(uuid())
+  entryId        String          @unique @map("entry_id")
+  entry          ClinicalEntry   @relation(fields: [entryId], references: [id])
+
+  signerSub      String          @map("signer_sub")
+  signerName     String          @map("signer_name")
+  signerCouncil  String?         @map("signer_council")
+
+  status         SignatureStatus  @default(PENDENTE)
+  signedAt       DateTime?       @map("signed_at")
+
+  // Adapter metadata
+  providerName   String?         @map("provider_name")
+  providerRef    String?         @map("provider_ref")
+
+  createdAt      DateTime        @default(now()) @map("created_at")
+
+  @@map("clinical_entry_signatures")
+}
+
+// RF-PEP-002: Modelos de anamnese/evolução por especialidade
+model PepTemplate {
+  id             String       @id @default(uuid())
+  organizationId String       @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  specialtyId    String?      @map("specialty_id")
+  specialty      Specialty?   @relation(fields: [specialtyId], references: [id])
+
+  name           String
+  // JSON describing the template fields and SOAP configuration
+  fields         Json
+  active         Boolean      @default(true)
+
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  @@map("pep_templates")
+}
+
+// RF-PEP-006: Tabela CID-10 com suporte a versionamento
+model CidCode {
+  id          String   @id @default(uuid())
+  code        String
+  description String
+  category    String?
+  version     String   @default("10")
+  active      Boolean  @default(true)
+
+  @@unique([code, version])
+  @@index([code])
+  @@index([description])
+  @@map("cid_codes")
+}
+
+// RF-PEP-012: Log de auditoria específico do prontuário
+model PepAuditLog {
+  id           String         @id @default(uuid())
+  recordId     String?        @map("record_id")
+  record       MedicalRecord? @relation(fields: [recordId], references: [id])
+  entryId      String?        @map("entry_id")
+  entry        ClinicalEntry? @relation(fields: [entryId], references: [id])
+
+  actorSub     String         @map("actor_sub")
+  actorName    String         @map("actor_name")
+  action       PepAuditAction
+  resourceType String         @map("resource_type")
+  resourceId   String         @map("resource_id")
+
+  occurredAt   DateTime       @default(now()) @map("occurred_at")
+
+  @@index([recordId])
+  @@index([entryId])
+  @@map("pep_audit_logs")
+}
+
+// RF-PEP-013: Relação assistencial (profissional–paciente)
+model CareRelationship {
+  id             String       @id @default(uuid())
+  organizationId String       @map("organization_id")
+  patientId      String       @map("patient_id")
+  patient        Patient      @relation(fields: [patientId], references: [id])
+  professionalId String       @map("professional_id")
+  professional   Professional @relation(fields: [professionalId], references: [id])
+  unitId         String?      @map("unit_id")
+
+  startDate      DateTime     @default(now()) @map("start_date")
+  endDate        DateTime?    @map("end_date")
+
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  @@unique([patientId, professionalId, organizationId])
+  @@map("care_relationships")
 }

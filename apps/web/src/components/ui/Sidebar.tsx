@@ -16,6 +16,7 @@ import {
   CalendarDays,
   UserCircle2,
   Ticket,
+  FileText,
 } from 'lucide-react';
 
 const navItems = [
@@ -29,6 +30,7 @@ const navItems = [
   { href: '/patients',       label: 'Pacientes',       icon: UserCircle2 },
   { href: '/schedule',       label: 'Agenda',          icon: CalendarDays },
   { href: '/queue',          label: 'Fila',            icon: Ticket },
+  { href: '/records',        label: 'Prontuários',     icon: FileText },
   { href: '/audit',          label: 'Auditoria',       icon: ClipboardList },
   { href: '/status',         label: 'Status do Produto', icon: Map },
 ];

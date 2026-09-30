@@ -400,6 +400,175 @@ async function main() {
     }
   }
 
+  // ---- CID-10 Sample Codes (RF-PEP-006) ----
+  const cidCodes = [
+    { code: 'A00', description: 'Cólera', category: 'A00-A09' },
+    { code: 'A01', description: 'Febres tifóide e paratifóide', category: 'A00-A09' },
+    { code: 'B34.9', description: 'Infecção viral de localização não especificada', category: 'B25-B34' },
+    { code: 'E11', description: 'Diabetes mellitus não-insulino-dependente', category: 'E10-E14' },
+    { code: 'E14', description: 'Diabetes mellitus não especificado', category: 'E10-E14' },
+    { code: 'F32', description: 'Episódios depressivos', category: 'F30-F39' },
+    { code: 'F41.1', description: 'Ansiedade generalizada', category: 'F40-F48' },
+    { code: 'G43', description: 'Enxaqueca', category: 'G40-G47' },
+    { code: 'H10', description: 'Conjuntivite', category: 'H10-H13' },
+    { code: 'I10', description: 'Hipertensão essencial (primária)', category: 'I10-I15' },
+    { code: 'I25.1', description: 'Doença aterosclerótica do coração', category: 'I20-I25' },
+    { code: 'J00', description: 'Nasofaringite aguda (resfriado comum)', category: 'J00-J06' },
+    { code: 'J06.9', description: 'Infecção aguda das vias aéreas superiores NE', category: 'J00-J06' },
+    { code: 'J18.9', description: 'Pneumonia não especificada', category: 'J12-J18' },
+    { code: 'J45', description: 'Asma', category: 'J40-J47' },
+    { code: 'K21.0', description: 'Doença do refluxo gastroesofágico com esofagite', category: 'K20-K31' },
+    { code: 'K29.7', description: 'Gastrite não especificada', category: 'K29-K31' },
+    { code: 'K35', description: 'Apendicite aguda', category: 'K35-K38' },
+    { code: 'L20', description: 'Dermatite atópica', category: 'L20-L30' },
+    { code: 'L50', description: 'Urticária', category: 'L50-L54' },
+    { code: 'M54.5', description: 'Dor lombar baixa', category: 'M50-M54' },
+    { code: 'M79.3', description: 'Paniculite', category: 'M70-M79' },
+    { code: 'N39.0', description: 'Infecção do trato urinário de localização não especificada', category: 'N30-N39' },
+    { code: 'O80', description: 'Parto único espontâneo', category: 'O80-O84' },
+    { code: 'R05', description: 'Tosse', category: 'R00-R09' },
+    { code: 'R10.4', description: 'Outras dores abdominais e as não especificadas', category: 'R10-R19' },
+    { code: 'R50', description: 'Febre de outras origens e de origem desconhecida', category: 'R50-R69' },
+    { code: 'R51', description: 'Cefaléia', category: 'R50-R69' },
+    { code: 'S00-T98', description: 'Lesões, envenenamentos e algumas outras consequências de causas externas', category: 'S00-T98' },
+    { code: 'Z00.0', description: 'Exame médico geral', category: 'Z00-Z13' },
+    { code: 'Z13', description: 'Exame de rastreamento para outras doenças e transtornos', category: 'Z00-Z13' },
+  ];
+
+  for (const cid of cidCodes) {
+    await prisma.cidCode.upsert({
+      where: { code_version: { code: cid.code, version: '10' } },
+      update: {},
+      create: { id: randomUUID(), code: cid.code, description: cid.description, category: cid.category, version: '10', active: true },
+    });
+  }
+  console.log(`${cidCodes.length} códigos CID-10 criados`);
+
+  // ---- Prontuário Sintético — Ana Lima (Módulo 4) ----
+  const anaPatientId = 'ffffffff-0000-0000-0000-000000000001';
+  const existingRecord = await prisma.medicalRecord.findUnique({ where: { patientId: anaPatientId } });
+  if (!existingRecord) {
+    const record = await prisma.medicalRecord.create({
+      data: { id: randomUUID(), organizationId: orgId, patientId: anaPatientId },
+    });
+
+    // Alergias
+    await prisma.allergyRecord.create({
+      data: {
+        id: randomUUID(),
+        recordId: record.id,
+        substance: 'Dipirona',
+        reaction: 'Urticária generalizada',
+        severity: 'moderada',
+        status: 'ATIVO',
+        reportedBy: devUserId,
+      },
+    });
+
+    // Medicamentos
+    await prisma.medicationRecord.create({
+      data: {
+        id: randomUUID(),
+        recordId: record.id,
+        name: 'Losartana 50mg',
+        dosage: '50mg',
+        frequency: '1x ao dia',
+        route: 'oral',
+        status: 'EM_USO',
+        indication: 'Hipertensão arterial',
+        prescribedBy: devUserId,
+        startDate: new Date('2024-01-15'),
+      },
+    });
+
+    // Diagnósticos
+    await prisma.diagnosisRecord.create({
+      data: {
+        id: randomUUID(),
+        recordId: record.id,
+        cidCode: 'I10',
+        description: 'Hipertensão essencial (primária)',
+        type: 'PRINCIPAL',
+        diagnosedBy: devUserId,
+      },
+    });
+
+    // Antecedentes
+    await prisma.medicalHistoryRecord.create({
+      data: {
+        id: randomUUID(),
+        recordId: record.id,
+        category: 'pessoal',
+        description: 'Apendicectomia em 2010',
+        reportedBy: devUserId,
+      },
+    });
+
+    // Entrada clínica SOAP rascunho
+    const entry = await prisma.clinicalEntry.create({
+      data: {
+        id: randomUUID(),
+        recordId: record.id,
+        organizationId: orgId,
+        unitId,
+        professionalId: devUserId,
+        subjective: 'Paciente refere dor de cabeça persistente há 3 dias, de intensidade moderada, sem febre.',
+        objective: 'PA: 140/90 mmHg. FC: 78 bpm. Sem rigidez de nuca. Neurológico preservado.',
+        assessment: 'Cefaléia possivelmente relacionada a HAS não controlada.',
+        plan: 'Ajuste de anti-hipertensivo. Retorno em 15 dias. Solicitar exames laboratoriais.',
+        status: 'RASCUNHO',
+      },
+    });
+
+    await prisma.vitalSigns.create({
+      data: {
+        id: randomUUID(),
+        entryId: entry.id,
+        temperatureC: 36.5,
+        systolicBp: 140,
+        diastolicBp: 90,
+        heartRate: 78,
+        oxygenSatPct: 98,
+        weightKg: 65,
+        heightCm: 162,
+        bmi: 24.8,
+        painScale: 4,
+      },
+    });
+
+    await prisma.pepAuditLog.create({
+      data: {
+        id: randomUUID(),
+        recordId: record.id,
+        entryId: entry.id,
+        actorSub: devUserId,
+        actorName: 'Dev Admin (DEV)',
+        action: 'INCLUSAO',
+        resourceType: 'entry',
+        resourceId: entry.id,
+      },
+    });
+
+    console.log('Prontuário sintético de Ana Lima criado');
+  }
+
+  // ---- Relação Assistencial (RF-PEP-013) ----
+  const careExists = await prisma.careRelationship.findFirst({
+    where: { patientId: anaPatientId, professionalId: profId1, organizationId: orgId },
+  });
+  if (!careExists) {
+    await prisma.careRelationship.create({
+      data: {
+        id: randomUUID(),
+        organizationId: orgId,
+        patientId: anaPatientId,
+        professionalId: profId1,
+        unitId,
+      },
+    });
+    console.log('Relação assistencial criada para Ana Lima → Dr. João');
+  }
+
   console.log('Seed concluído com sucesso!');
   console.log('');
   console.log('Usuário de desenvolvimento:');
