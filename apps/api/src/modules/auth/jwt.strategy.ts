@@ -11,30 +11,38 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
   ) {
-    super({
-      secretOrKeyProvider: passportJwtSecret({
-        cache: true,
-        rateLimit: true,
-        jwksRequestsPerMinute: 5,
-        jwksUri: `${config.get('KEYCLOAK_URL')}/realms/${config.get('KEYCLOAK_REALM')}/protocol/openid-connect/certs`,
-      }),
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-      audience: config.get('JWT_AUDIENCE', 'account'),
-      issuer: config.get('JWT_ISSUER'),
-      algorithms: ['RS256'],
-    });
+    const isDev = config.get('NODE_ENV') === 'development';
+
+    super(
+      isDev
+        ? {
+            // Dev mode: aceita HS256 local (sem Keycloak)
+            secretOrKey: config.get('DEV_JWT_SECRET', 'walletz-dev-secret-local-only'),
+            algorithms: ['HS256'],
+            jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+          }
+        : {
+            // Produção: RS256 via Keycloak JWKS
+            secretOrKeyProvider: passportJwtSecret({
+              cache: true,
+              rateLimit: true,
+              jwksRequestsPerMinute: 5,
+              jwksUri: `${config.get('KEYCLOAK_URL')}/realms/${config.get('KEYCLOAK_REALM')}/protocol/openid-connect/certs`,
+            }),
+            jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+            audience: config.get('JWT_AUDIENCE', 'account'),
+            issuer: config.get('JWT_ISSUER'),
+            algorithms: ['RS256'],
+          },
+    );
   }
 
   async validate(payload: any) {
     const keycloakId: string = payload.sub;
 
-    // Busca usuário interno pelo keycloakId
-    const user = await this.prisma.user.findUnique({
-      where: { keycloakId },
-    });
+    const user = await this.prisma.user.findUnique({ where: { keycloakId } });
 
     if (!user) {
-      // Auto-provision: cria usuário na primeira autenticação
       const newUser = await this.prisma.user.create({
         data: {
           keycloakId,
@@ -43,23 +51,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
           status: 'ATIVO',
         },
       });
-      return {
-        sub: keycloakId,
-        email: newUser.email,
-        name: newUser.name,
-        userId: newUser.id,
-      };
+      return { sub: keycloakId, email: newUser.email, name: newUser.name, userId: newUser.id };
     }
 
     if (user.status === 'BLOQUEADO' || user.status === 'ENCERRADO') {
       throw new UnauthorizedException('Usuário bloqueado ou encerrado');
     }
 
-    return {
-      sub: keycloakId,
-      email: user.email,
-      name: user.name,
-      userId: user.id,
-    };
+    return { sub: keycloakId, email: user.email, name: user.name, userId: user.id };
   }
 }

@@ -1,5 +1,4 @@
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { getToken } from '@/lib/server-token';
 import { api } from '@/lib/api';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import Link from 'next/link';
@@ -21,8 +20,7 @@ export default async function OrganizationsPage({
 }: {
   searchParams: { page?: string; search?: string; status?: string };
 }) {
-  const session = await getServerSession(authOptions);
-  const token = (session as any)?.accessToken as string | undefined;
+  const token = await getToken();
 
   const page = searchParams.page ?? '1';
   const search = searchParams.search ?? '';
@@ -57,7 +55,6 @@ export default async function OrganizationsPage({
         </Link>
       </div>
 
-      {/* Filtros */}
       <form method="GET" className="flex gap-3 mb-6">
         <input
           name="search"
@@ -125,7 +122,6 @@ export default async function OrganizationsPage({
         </table>
       </div>
 
-      {/* Paginação */}
       {data.totalPages > 1 && (
         <div className="flex justify-end gap-2 mt-4">
           {Array.from({ length: data.totalPages }, (_, i) => i + 1).map((p) => (
