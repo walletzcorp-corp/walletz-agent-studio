@@ -7,7 +7,7 @@ import {
   Package, ClipboardList, LogOut, Map, CalendarDays, UserCircle2,
   Ticket, FileText, Boxes, DollarSign, ShieldCheck, MessageSquare,
   BrainCircuit, Plug, DoorOpen, Pill, Zap, HeartHandshake,
-  FlaskConical, Workflow, PackageOpen,
+  FlaskConical, Workflow, PackageOpen, Video,
 } from 'lucide-react';
 
 const navItems = [
@@ -33,6 +33,7 @@ const navItems = [
   { href: '/qualidade',     label: 'Qualidade',         icon: ShieldCheck },
   { href: '/ativos',        label: 'Ativos',            icon: Zap },
   { href: '/equipe',        label: 'Equipe',            icon: Users },
+  { href: '/telemedicina',  label: 'Telemedicina',      icon: Video },
   { href: '/engajamento',   label: 'Engajamento',       icon: HeartHandshake },
   { href: '/diagnostico',   label: 'Diagnóstico',       icon: FlaskConical },
   { href: '/studio',        label: 'Studio No-code',    icon: Workflow },

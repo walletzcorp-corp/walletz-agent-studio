@@ -29,6 +29,7 @@ import { EngModule } from './modules/eng/eng.module';
 import { DiaModule } from './modules/dia/dia.module';
 import { NcdModule } from './modules/ncd/ncd.module';
 import { MigModule } from './modules/mig/mig.module';
+import { TelModule } from './modules/tel/tel.module';
 
 @Module({
   imports: [
@@ -70,6 +71,7 @@ import { MigModule } from './modules/mig/mig.module';
     DiaModule,
     NcdModule,
     MigModule,
+    TelModule,
   ],
 })
 export class AppModule {}

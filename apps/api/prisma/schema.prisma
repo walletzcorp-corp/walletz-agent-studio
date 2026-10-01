@@ -305,6 +305,7 @@ model Organization {
   medicalRecords    MedicalRecord[]
   pepTemplates      PepTemplate[]
   preAdmissionForms PreAdmissionForm[]
+  telRooms          TelRoom[]
 
   @@map("organizations")
 }
@@ -924,6 +925,7 @@ model Appointment {
   clinicalEntries ClinicalEntry[]
   notifications   AppointmentNotification[]
   tokens          AppointmentToken[]
+  telRoom         TelRoom?
 
   @@index([unitId, startsAt])
   @@index([professionalId, startsAt])
@@ -4051,3 +4053,175 @@ model MigOnboardingConfig {
   @@map("mig_onboarding_configs")
 }
 
+
+// ─── M22 TEL — Sala Virtual de Atendimento ────────────────────────────────────
+
+enum TelRoomStatus {
+  AGENDADA
+  AGUARDANDO
+  EM_ANDAMENTO
+  ENCERRADA
+  CANCELADA
+}
+
+enum TelParticipantRole {
+  PROFISSIONAL
+  PACIENTE
+  CONVIDADO
+}
+
+enum TelParticipantStatus {
+  AGUARDANDO
+  ADMITIDO
+  CONECTADO
+  DESCONECTADO
+  SAIU
+}
+
+enum TelEventType {
+  SALA_CRIADA
+  PARTICIPANTE_ENTROU
+  PARTICIPANTE_ADMITIDO
+  PARTICIPANTE_SAIU
+  CHAMADA_INICIADA
+  CHAMADA_ENCERRADA
+  RECONEXAO
+  DOCUMENTO_COMPARTILHADO
+  DOCUMENTO_CONFIRMADO
+  EVOLUCAO_SALVA
+  SALA_CANCELADA
+  LINK_REVOGADO
+}
+
+enum TelDocumentStatus {
+  COMPARTILHADO
+  CONFIRMADO
+  REJEITADO
+}
+
+// RV-TELE-001: sala vinculada a agendamento e organização
+model TelRoom {
+  id             String          @id @default(uuid())
+  organizationId String          @map("organization_id")
+  organization   Organization    @relation(fields: [organizationId], references: [id])
+  appointmentId  String          @unique @map("appointment_id")
+  appointment    Appointment     @relation(fields: [appointmentId], references: [id])
+
+  status         TelRoomStatus   @default(AGENDADA)
+
+  // RV-TELE-007: gravação apenas com consentimento explícito
+  recordingEnabled  Boolean      @default(false) @map("recording_enabled")
+  recordingConsentAt DateTime?   @map("recording_consent_at")
+  recordingConsentBy String?     @map("recording_consent_by")
+
+  scheduledAt    DateTime        @map("scheduled_at")
+  startedAt      DateTime?       @map("started_at")
+  endedAt        DateTime?       @map("ended_at")
+
+  cancelReason   String?         @map("cancel_reason")
+  cancelledBy    String?         @map("cancelled_by")
+  cancelledAt    DateTime?       @map("cancelled_at")
+
+  // Dados de evolução — só associados após confirmação do profissional (RV-TELE-006)
+  clinicalEntryId String?        @map("clinical_entry_id")
+
+  createdBy      String          @map("created_by")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+
+  participants   TelParticipant[]
+  events         TelEvent[]
+  accessLinks    TelAccessLink[]
+  documents      TelDocument[]
+
+  @@index([organizationId, status])
+  @@index([appointmentId])
+  @@map("tel_rooms")
+}
+
+// RV-TELE-002/003/004: participantes autorizados e histórico de presença
+model TelParticipant {
+  id             String               @id @default(uuid())
+  roomId         String               @map("room_id")
+  room           TelRoom              @relation(fields: [roomId], references: [id])
+
+  role           TelParticipantRole
+  status         TelParticipantStatus @default(AGUARDANDO)
+
+  userId         String?              @map("user_id")
+  patientId      String?              @map("patient_id")
+  displayName    String               @map("display_name")
+
+  admittedAt     DateTime?            @map("admitted_at")
+  admittedBy     String?              @map("admitted_by")
+  joinedAt       DateTime?            @map("joined_at")
+  leftAt         DateTime?            @map("left_at")
+  reconnections  Int                  @default(0)
+
+  createdAt      DateTime             @default(now()) @map("created_at")
+
+  @@unique([roomId, userId])
+  @@unique([roomId, patientId])
+  @@map("tel_participants")
+}
+
+// RV-TELE-004: trilha de auditoria de todos os eventos da sala
+model TelEvent {
+  id             String        @id @default(uuid())
+  roomId         String        @map("room_id")
+  room           TelRoom       @relation(fields: [roomId], references: [id])
+
+  eventType      TelEventType  @map("event_type")
+  actorId        String        @map("actor_id")
+  actorRole      TelParticipantRole @map("actor_role")
+  metadata       Json          @default("{}")
+
+  occurredAt     DateTime      @default(now()) @map("occurred_at")
+
+  @@index([roomId, occurredAt])
+  @@map("tel_events")
+}
+
+// RV-TELE-008: links individuais, temporários e revogáveis
+model TelAccessLink {
+  id             String     @id @default(uuid())
+  roomId         String     @map("room_id")
+  room           TelRoom    @relation(fields: [roomId], references: [id])
+
+  token          String     @unique
+  role           TelParticipantRole
+  patientId      String?    @map("patient_id")
+  userId         String?    @map("user_id")
+
+  expiresAt      DateTime   @map("expires_at")
+  usedAt         DateTime?  @map("used_at")
+  revokedAt      DateTime?  @map("revoked_at")
+  revokedBy      String?    @map("revoked_by")
+
+  createdAt      DateTime   @default(now()) @map("created_at")
+
+  @@index([token])
+  @@index([roomId])
+  @@map("tel_access_links")
+}
+
+// RV-TELE-010: documentos compartilhados só associados ao prontuário após confirmação
+model TelDocument {
+  id             String            @id @default(uuid())
+  roomId         String            @map("room_id")
+  room           TelRoom           @relation(fields: [roomId], references: [id])
+
+  filename       String
+  mimeType       String            @map("mime_type")
+  sizeBytes      Int               @map("size_bytes")
+  storagePath    String            @map("storage_path")
+  status         TelDocumentStatus @default(COMPARTILHADO)
+
+  sharedBy       String            @map("shared_by")
+  sharedAt       DateTime          @default(now()) @map("shared_at")
+  confirmedBy    String?           @map("confirmed_by")
+  confirmedAt    DateTime?         @map("confirmed_at")
+
+  @@index([roomId])
+  @@map("tel_documents")
+}
