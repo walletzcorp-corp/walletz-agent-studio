@@ -569,6 +569,201 @@ async function main() {
     console.log('Relação assistencial criada para Ana Lima → Dr. João');
   }
 
+  // ---- Módulo 5 — Dados sintéticos de pacientes e consentimentos ----
+  const carlosId = 'ffffffff-0000-0000-0000-000000000002';
+  const beatrizId = 'ffffffff-0000-0000-0000-000000000003';
+
+  // Atualiza Ana Lima com campos de Módulo 5
+  await prisma.patient.update({
+    where: { id: anaPatientId },
+    data: {
+      nomeSocial: undefined,
+      cns: '111222333444000',
+      estadoCivil: 'Solteira',
+      nacionalidade: 'Brasileira',
+      naturalidade: 'Uberlândia - MG',
+      logradouro: 'Rua das Flores',
+      numero: '100',
+      bairro: 'Centro',
+      cidade: 'Uberlândia',
+      uf: 'MG',
+      cep: '38400000',
+      preferencias: { acessibilidade: [], comunicacao: 'email', acolhimento: '' } as any,
+    },
+  });
+
+  // Atualiza Carlos Mendes
+  await prisma.patient.update({
+    where: { id: carlosId },
+    data: {
+      cns: '222333444555000',
+      estadoCivil: 'Casado',
+      logradouro: 'Av. Brasil',
+      numero: '500',
+      bairro: 'Santa Mônica',
+      cidade: 'Uberlândia',
+      uf: 'MG',
+      cep: '38408000',
+    },
+  });
+
+  // Contatos de Ana Lima
+  const contactExists = await prisma.patientContact.findFirst({ where: { patientId: anaPatientId } });
+  if (!contactExists) {
+    await prisma.patientContact.create({
+      data: {
+        id: randomUUID(),
+        patientId: anaPatientId,
+        organizationId: orgId,
+        name: 'João Lima (DEV)',
+        relationship: 'Cônjuge',
+        telefone: '34990000099',
+        isPrimary: true,
+        isEmergency: true,
+      },
+    });
+  }
+
+  // Convênio de Ana Lima
+  const insuranceExists = await prisma.patientInsurance.findFirst({ where: { patientId: anaPatientId } });
+  if (!insuranceExists) {
+    await prisma.patientInsurance.create({
+      data: {
+        id: randomUUID(),
+        patientId: anaPatientId,
+        organizationId: orgId,
+        operator: 'Unimed Uberlândia',
+        planName: 'Plano Master',
+        cardNumber: 'UN123456789',
+        validUntil: new Date('2027-12-31'),
+        planType: 'Coletivo empresarial',
+        active: true,
+      },
+    });
+  }
+
+  // Alerta clínico de Ana Lima
+  const alertExists = await prisma.patientAlert.findFirst({ where: { patientId: anaPatientId } });
+  if (!alertExists) {
+    await prisma.patientAlert.create({
+      data: {
+        id: randomUUID(),
+        patientId: anaPatientId,
+        organizationId: orgId,
+        type: 'ALERGICO',
+        severity: 'ALTA',
+        message: 'Alergia grave a Dipirona — verificar antes de prescrever',
+        active: true,
+        createdBy: devUserId,
+      },
+    });
+  }
+
+  // Consentimento LGPD de Ana Lima
+  const consentExists = await prisma.patientConsent.findFirst({ where: { patientId: anaPatientId } });
+  if (!consentExists) {
+    await prisma.patientConsent.createMany({
+      data: [
+        {
+          id: randomUUID(),
+          patientId: anaPatientId,
+          organizationId: orgId,
+          type: 'LGPD_TRATAMENTO',
+          status: 'VIGENTE',
+          channel: 'PRESENCIAL',
+          version: '1.0',
+          signedBy: devUserId,
+          signedByName: 'Dev Admin (DEV)',
+        },
+        {
+          id: randomUUID(),
+          patientId: anaPatientId,
+          organizationId: orgId,
+          type: 'TERMO_TRATAMENTO',
+          status: 'VIGENTE',
+          channel: 'PRESENCIAL',
+          version: '2.0',
+          signedBy: devUserId,
+          signedByName: 'Dev Admin (DEV)',
+        },
+        {
+          id: randomUUID(),
+          patientId: anaPatientId,
+          organizationId: orgId,
+          type: 'MARKETING',
+          status: 'REVOGADO',
+          channel: 'EMAIL',
+          version: '1.0',
+          signedBy: devUserId,
+          signedByName: 'Dev Admin (DEV)',
+          revokedAt: new Date(),
+          revokedBy: devUserId,
+          revokedByName: 'Ana Lima (DEV)',
+          revocationReason: 'Não deseja receber comunicações de marketing',
+        },
+      ],
+    });
+    console.log('Consentimentos sintéticos de Ana Lima criados');
+  }
+
+  // Vínculo: Carlos é o Pai de Beatriz (menor)
+  const linkExists = await prisma.patientLink.findFirst({
+    where: { guardianId: carlosId, dependentId: beatrizId, organizationId: orgId },
+  });
+  if (!linkExists) {
+    await prisma.patientLink.create({
+      data: {
+        id: randomUUID(),
+        organizationId: orgId,
+        guardianId: carlosId,
+        dependentId: beatrizId,
+        linkType: 'PAI',
+        notes: 'Vínculo de responsável legal (DEV)',
+        createdBy: devUserId,
+      },
+    });
+    console.log('Vínculo pai/dependente sintético criado');
+  }
+
+  // Formulário de pré-admissão
+  const formExists = await prisma.preAdmissionForm.findFirst({ where: { organizationId: orgId } });
+  if (!formExists) {
+    await prisma.preAdmissionForm.create({
+      data: {
+        id: randomUUID(),
+        organizationId: orgId,
+        name: 'Formulário de Pré-Admissão Padrão',
+        version: '1.0',
+        fields: [
+          { id: 'q1', label: 'Possui plano de saúde?', type: 'boolean', required: true },
+          { id: 'q2', label: 'Alergias conhecidas', type: 'textarea', required: false },
+          { id: 'q3', label: 'Medicamentos em uso', type: 'textarea', required: false },
+          { id: 'q4', label: 'Histórico de cirurgias', type: 'textarea', required: false },
+        ] as any,
+        active: true,
+        createdBy: devUserId,
+      },
+    });
+    console.log('Formulário de pré-admissão sintético criado');
+  }
+
+  // Audit log de exportação
+  const auditExists = await prisma.patientAuditLog.findFirst({ where: { patientId: anaPatientId } });
+  if (!auditExists) {
+    await prisma.patientAuditLog.create({
+      data: {
+        id: randomUUID(),
+        patientId: anaPatientId,
+        organizationId: orgId,
+        actorSub: devUserId,
+        actorName: 'Dev Admin (DEV)',
+        action: 'VIEW',
+        resourceType: 'patient',
+        resourceId: anaPatientId,
+      },
+    });
+  }
+
   console.log('Seed concluído com sucesso!');
   console.log('');
   console.log('Usuário de desenvolvimento:');

@@ -28,7 +28,9 @@ export default async function PatientsPage({
     const qs = new URLSearchParams({ page, limit: '20' });
     if (searchParams.search) qs.set('search', searchParams.search);
     if (searchParams.organizationId) qs.set('organizationId', searchParams.organizationId);
-    data = await api.get(`/patients?${qs}`, token);
+    const raw: any = await api.get(`/patients?${qs}`, token);
+    // API returns {data, total, page, limit, totalPages}
+    data = raw;
   } catch (e: any) {
     error = e.message;
   }

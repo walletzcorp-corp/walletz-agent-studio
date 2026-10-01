@@ -173,6 +173,79 @@ enum PepAuditAction {
   ADENDO
 }
 
+// MÓDULO 5 — PACIENTES E CONSENTIMENTOS
+enum ConsentType {
+  TERMO_TRATAMENTO
+  LGPD_TRATAMENTO
+  USO_IMAGEM
+  ANESTESIA
+  CIRURGIA
+  PESQUISA
+  MARKETING
+  TELEMEDICINA
+  COMPARTILHAMENTO
+  OUTRO
+}
+
+enum ConsentStatus {
+  VIGENTE
+  REVOGADO
+  EXPIRADO
+  PENDENTE
+}
+
+enum ConsentChannel {
+  PRESENCIAL
+  DIGITAL
+  PORTAL_PACIENTE
+  APP
+  WHATSAPP
+  EMAIL
+}
+
+enum AlertType {
+  ALERGICO
+  MEDICAMENTO
+  CONTRAINDICACAO
+  RISCO_QUEDA
+  ISOLAMENTO
+  ADMINISTRATIVO
+  SEGURANCA
+  OUTRO
+}
+
+enum AlertSeverity {
+  BAIXA
+  MEDIA
+  ALTA
+  CRITICA
+}
+
+enum PatientDocumentType {
+  RG
+  CPF_DOC
+  PASSAPORTE
+  CNH
+  TITULO_ELEITOR
+  CARTAO_SUS
+  CERTIDAO_NASCIMENTO
+  LAUDO_MEDICO
+  EXAME
+  OUTRO
+}
+
+enum PatientLinkType {
+  RESPONSAVEL_LEGAL
+  PAI
+  MAE
+  CONJUGE
+  FILHO
+  TUTOR
+  CUIDADOR
+  ACOMPANHANTE
+  OUTRO
+}
+
 // -----------------------------------------------------------
 // TENANT
 // -----------------------------------------------------------
@@ -231,6 +304,7 @@ model Organization {
   waitListEntries   WaitListEntry[]
   medicalRecords    MedicalRecord[]
   pepTemplates      PepTemplate[]
+  preAdmissionForms PreAdmissionForm[]
 
   @@map("organizations")
 }
@@ -698,14 +772,41 @@ model Patient {
   organizationId String       @map("organization_id")
   organization   Organization @relation(fields: [organizationId], references: [id])
 
+  // RF-PAC-001: dados básicos
   name           String
+  nomeSocial     String?      @map("nome_social")
   cpf            String?
+  cns            String?      // Cartão Nacional de Saúde
+  rg             String?
+  rgOrgaoEmissor String?      @map("rg_orgao_emissor")
   dataNasc       DateTime?    @map("data_nasc") @db.Date
-  sexo           String?      // M, F, O
+  sexo           String?      // M, F, O, NI
+  estadoCivil    String?      @map("estado_civil")
+  nacionalidade  String?
+  naturalidade   String?
+  etnia          String?
+  escolaridade   String?
+  profissao      String?
   telefone       String?
   email          String?
   notes          String?
 
+  // RF-PAC-001: endereço
+  logradouro     String?
+  numero         String?
+  complemento    String?
+  bairro         String?
+  cidade         String?
+  uf             String?      @db.Char(2)
+  cep            String?
+
+  // RF-PAC-011: bloqueio de marketing (nunca bloqueia comunicação assistencial)
+  marketingBlocked Boolean    @default(false) @map("marketing_blocked")
+
+  // RF-PAC-015: preferências
+  preferencias   Json?        // acessibilidade, comunicação, acolhimento
+
+  deactivatedAt  DateTime?    @map("deactivated_at")
   rowVersion     Int          @default(0) @map("row_version")
   createdAt      DateTime     @default(now()) @map("created_at")
   updatedAt      DateTime     @updatedAt @map("updated_at")
@@ -716,7 +817,21 @@ model Patient {
   medicalRecord   MedicalRecord?
   careRelationships CareRelationship[]
 
+  // Módulo 5
+  contacts        PatientContact[]
+  alerts          PatientAlert[]
+  documents       PatientDocument[]
+  consents        PatientConsent[]
+  insurances      PatientInsurance[]
+  // links as child (this patient is the dependent)
+  guardianLinks   PatientLink[]      @relation("PatientLinks_dependent")
+  // links as parent (this patient is the guardian/responsible)
+  dependentLinks  PatientLink[]      @relation("PatientLinks_guardian")
+  formResponses   PreAdmissionFormResponse[]
+  auditLogs       PatientAuditLog[]
+
   @@unique([organizationId, cpf])
+  @@unique([organizationId, cns])
   @@map("patients")
 }
 
@@ -1206,4 +1321,217 @@ model CareRelationship {
 
   @@unique([patientId, professionalId, organizationId])
   @@map("care_relationships")
+}
+
+// -----------------------------------------------------------
+// MÓDULO 5 — PACIENTES E CONSENTIMENTOS
+// -----------------------------------------------------------
+
+// RF-PAC-002: Contatos de emergência e responsáveis
+model PatientContact {
+  id             String       @id @default(uuid())
+  patientId      String       @map("patient_id")
+  patient        Patient      @relation(fields: [patientId], references: [id])
+  organizationId String       @map("organization_id")
+
+  name           String
+  relationship   String       // parentesco livre ou PatientLinkType value
+  telefone       String?
+  email          String?
+  cpf            String?
+  isPrimary      Boolean      @default(false) @map("is_primary")
+  isEmergency    Boolean      @default(false) @map("is_emergency")
+  notes          String?
+
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  @@index([patientId])
+  @@map("patient_contacts")
+}
+
+// RF-PAC-003: Planos de saúde e convênios
+model PatientInsurance {
+  id             String       @id @default(uuid())
+  patientId      String       @map("patient_id")
+  patient        Patient      @relation(fields: [patientId], references: [id])
+  organizationId String       @map("organization_id")
+
+  operator       String       // nome da operadora
+  planName       String       @map("plan_name")
+  cardNumber     String?      @map("card_number")
+  validUntil     DateTime?    @db.Date @map("valid_until")
+  planType       String?      @map("plan_type")  // INDIVIDUAL, FAMILIAR, EMPRESARIAL
+  notes          String?
+  active         Boolean      @default(true)
+
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  @@index([patientId])
+  @@map("patient_insurances")
+}
+
+// RF-PAC-006: Alertas clínicos no cabeçalho (só visíveis em contexto assistencial)
+model PatientAlert {
+  id             String        @id @default(uuid())
+  patientId      String        @map("patient_id")
+  patient        Patient       @relation(fields: [patientId], references: [id])
+  organizationId String        @map("organization_id")
+
+  type           AlertType
+  severity       AlertSeverity @default(MEDIA)
+  message        String
+  active         Boolean       @default(true)
+  resolvedAt     DateTime?     @map("resolved_at")
+  resolvedBy     String?       @map("resolved_by")
+  createdBy      String        @map("created_by")
+
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  @@index([patientId, active])
+  @@map("patient_alerts")
+}
+
+// RF-PAC-007: Documentos anexados ao cadastro do paciente
+model PatientDocument {
+  id             String              @id @default(uuid())
+  patientId      String              @map("patient_id")
+  patient        Patient             @relation(fields: [patientId], references: [id])
+  organizationId String              @map("organization_id")
+
+  type           PatientDocumentType
+  fileName       String              @map("file_name")
+  mimeType       String              @map("mime_type")
+  sizeBytes      Int?                @map("size_bytes")
+  storageKey     String              @map("storage_key")  // uploads/patients/{orgId}/{patientId}/...
+  description    String?
+  issuedAt       DateTime?           @db.Date @map("issued_at")
+  expiresAt      DateTime?           @db.Date @map("expires_at")
+
+  uploadedBy     String              @map("uploaded_by")
+  createdAt      DateTime            @default(now()) @map("created_at")
+
+  @@index([patientId])
+  @@map("patient_documents")
+}
+
+// RF-PAC-008: Consentimentos por finalidade, versão, canal e validade
+model PatientConsent {
+  id             String          @id @default(uuid())
+  patientId      String          @map("patient_id")
+  patient        Patient         @relation(fields: [patientId], references: [id])
+  organizationId String          @map("organization_id")
+
+  type           ConsentType
+  status         ConsentStatus   @default(VIGENTE)
+  channel        ConsentChannel
+  version        String          // versão do termo apresentado
+  documentUrl    String?         @map("document_url")
+
+  // Dados do consentimento
+  signedAt       DateTime        @default(now()) @map("signed_at")
+  signedBy       String          @map("signed_by")      // sub do autenticado ou "PACIENTE"
+  signedByName   String          @map("signed_by_name")
+  validUntil     DateTime?       @db.Date @map("valid_until")
+  ipAddress      String?         @map("ip_address")     // canal digital
+  notes          String?
+
+  // Revogação (mantém histórico — NÃO apaga)
+  revokedAt      DateTime?       @map("revoked_at")
+  revokedBy      String?         @map("revoked_by")
+  revokedByName  String?         @map("revoked_by_name")
+  revocationReason String?       @map("revocation_reason")
+
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+
+  @@index([patientId, type, status])
+  @@map("patient_consents")
+}
+
+// RF-PAC-013: Vínculos entre pacientes (dependente ↔ responsável/guardião)
+model PatientLink {
+  id              String          @id @default(uuid())
+  organizationId  String          @map("organization_id")
+
+  // quem guarda / é responsável
+  guardianId      String          @map("guardian_id")
+  guardian        Patient         @relation("PatientLinks_guardian", fields: [guardianId], references: [id])
+  // quem é dependente
+  dependentId     String          @map("dependent_id")
+  dependent       Patient         @relation("PatientLinks_dependent", fields: [dependentId], references: [id])
+
+  linkType        PatientLinkType @map("link_type")
+  validUntil      DateTime?       @db.Date @map("valid_until")
+  notes           String?
+  active          Boolean         @default(true)
+
+  createdBy       String          @map("created_by")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+
+  @@unique([guardianId, dependentId, organizationId])
+  @@index([dependentId])
+  @@map("patient_links")
+}
+
+// RF-PAC-014: Formulários pré-atendimento com versionamento
+model PreAdmissionForm {
+  id             String       @id @default(uuid())
+  organizationId String       @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  name           String
+  version        String       @default("1.0")
+  fields         Json         // array of {name, label, type, required, options?}
+  active         Boolean      @default(true)
+
+  createdBy      String       @map("created_by")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  responses      PreAdmissionFormResponse[]
+
+  @@index([organizationId, active])
+  @@map("pre_admission_forms")
+}
+
+model PreAdmissionFormResponse {
+  id             String           @id @default(uuid())
+  formId         String           @map("form_id")
+  form           PreAdmissionForm @relation(fields: [formId], references: [id])
+  patientId      String           @map("patient_id")
+  patient        Patient          @relation(fields: [patientId], references: [id])
+  organizationId String           @map("organization_id")
+
+  answers        Json             // {fieldName: value}
+  formVersion    String           @map("form_version") // snapshot da versão
+  submittedAt    DateTime         @default(now()) @map("submitted_at")
+  submittedBy    String           @map("submitted_by") // sub do autenticado
+  notes          String?
+
+  @@index([patientId, formId])
+  @@map("pre_admission_form_responses")
+}
+
+// RF-PAC-010: Auditoria de exportação e ações sensíveis de paciente
+model PatientAuditLog {
+  id             String      @id @default(uuid())
+  patientId      String      @map("patient_id")
+  patient        Patient     @relation(fields: [patientId], references: [id])
+  organizationId String      @map("organization_id")
+
+  actorSub       String      @map("actor_sub")
+  actorName      String      @map("actor_name")
+  action         String      // VIEW, EXPORT, CONSENT_SIGN, CONSENT_REVOKE, ALERT_CREATE, DOC_UPLOAD, DOC_VIEW, LINK_CREATE
+  resourceType   String      @map("resource_type")
+  resourceId     String?     @map("resource_id")
+  metadata       Json?       // finalidade, escopo, etc.
+
+  occurredAt     DateTime    @default(now()) @map("occurred_at")
+
+  @@index([patientId])
+  @@map("patient_audit_logs")
 }
