@@ -1560,6 +1560,333 @@ model AppointmentToken {
   @@map("appointment_tokens")
 }
 
+// ============================================================
+// MÓDULO 7 — EST: Estoque, Compras e Rastreabilidade
+// ============================================================
+
+enum StockItemType {
+  CONSUMIVEL
+  MEDICAMENTO
+  EQUIPAMENTO
+  MATERIAL
+}
+
+enum StockMovementType {
+  ENTRADA
+  SAIDA
+  AJUSTE_POSITIVO
+  AJUSTE_NEGATIVO
+  PERDA
+  DESCARTE
+  DEVOLUCAO
+  TRANSFERENCIA_SAIDA
+  TRANSFERENCIA_ENTRADA
+  RESERVA
+  LIBERACAO_RESERVA
+  CONSUMO
+}
+
+enum StockTransferStatus {
+  PENDENTE
+  ENVIADO
+  RECEBIDO
+  DIVERGENCIA
+  CANCELADO
+}
+
+model StockCategory {
+  id             String      @id @default(uuid())
+  organizationId String      @map("organization_id")
+  name           String
+  description    String?
+  active         Boolean     @default(true)
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
+  items          StockItem[]
+
+  @@index([organizationId])
+  @@map("stock_categories")
+}
+
+model StockItem {
+  id                String         @id @default(uuid())
+  organizationId    String         @map("organization_id")
+  categoryId        String?        @map("category_id")
+  category          StockCategory? @relation(fields: [categoryId], references: [id])
+  code              String?
+  name              String
+  description       String?
+  unitOfMeasure     String         @map("unit_of_measure")
+  presentation      String?
+  type              StockItemType  @default(CONSUMIVEL)
+  requiresLot       Boolean        @default(false) @map("requires_lot")
+  requiresColdChain Boolean        @default(false) @map("requires_cold_chain")
+  minStock          Decimal?       @map("min_stock") @db.Decimal(15, 4)
+  maxStock          Decimal?       @map("max_stock") @db.Decimal(15, 4)
+  active            Boolean        @default(true)
+  createdAt         DateTime       @default(now()) @map("created_at")
+  updatedAt         DateTime       @updatedAt @map("updated_at")
+
+  lots         StockLot[]
+  balances     StockBalance[]
+  movements    StockMovement[]
+  reservations StockReservation[]
+  transferLines StockTransferLine[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@map("stock_items")
+}
+
+model StockLot {
+  id               String    @id @default(uuid())
+  itemId           String    @map("item_id")
+  item             StockItem @relation(fields: [itemId], references: [id])
+  organizationId   String    @map("organization_id")
+  lotNumber        String    @map("lot_number")
+  supplierName     String?   @map("supplier_name")
+  manufacturerDate DateTime? @map("manufacturer_date") @db.Date
+  expiryDate       DateTime? @map("expiry_date") @db.Date
+  unitCost         Decimal?  @map("unit_cost") @db.Decimal(15, 4)
+  active           Boolean   @default(true)
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  movements     StockMovement[]
+  transferLines StockTransferLine[]
+
+  @@unique([itemId, lotNumber])
+  @@index([organizationId])
+  @@map("stock_lots")
+}
+
+model StockBalance {
+  id             String    @id @default(uuid())
+  itemId         String    @map("item_id")
+  item           StockItem @relation(fields: [itemId], references: [id])
+  organizationId String    @map("organization_id")
+  unitId         String    @map("unit_id")
+  quantity       Decimal   @default(0) @db.Decimal(15, 4)
+  reservedQty    Decimal   @default(0) @map("reserved_qty") @db.Decimal(15, 4)
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  @@unique([itemId, organizationId, unitId])
+  @@index([organizationId, unitId])
+  @@map("stock_balances")
+}
+
+model StockMovement {
+  id             String            @id @default(uuid())
+  itemId         String            @map("item_id")
+  item           StockItem         @relation(fields: [itemId], references: [id])
+  lotId          String?           @map("lot_id")
+  lot            StockLot?         @relation(fields: [lotId], references: [id])
+  organizationId String            @map("organization_id")
+  unitId         String            @map("unit_id")
+  type           StockMovementType
+  quantity       Decimal           @db.Decimal(15, 4)
+  unitCost       Decimal?          @map("unit_cost") @db.Decimal(15, 4)
+  totalCost      Decimal?          @map("total_cost") @db.Decimal(15, 4)
+  reason         String?
+  referenceType  String?           @map("reference_type")
+  referenceId    String?           @map("reference_id")
+  idempotencyKey String?           @unique @map("idempotency_key")
+  performedBy    String            @map("performed_by")
+  performedAt    DateTime          @default(now()) @map("performed_at")
+
+  @@index([itemId, organizationId, unitId])
+  @@index([organizationId, performedAt])
+  @@map("stock_movements")
+}
+
+model StockReservation {
+  id             String    @id @default(uuid())
+  itemId         String    @map("item_id")
+  item           StockItem @relation(fields: [itemId], references: [id])
+  organizationId String    @map("organization_id")
+  unitId         String    @map("unit_id")
+  quantity       Decimal   @db.Decimal(15, 4)
+  referenceType  String    @map("reference_type")
+  referenceId    String    @map("reference_id")
+  status         String    @default("ATIVA")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  consumedAt     DateTime? @map("consumed_at")
+  releasedAt     DateTime? @map("released_at")
+
+  @@index([organizationId, unitId])
+  @@index([referenceType, referenceId])
+  @@map("stock_reservations")
+}
+
+model StockTransfer {
+  id             String              @id @default(uuid())
+  organizationId String              @map("organization_id")
+  fromUnitId     String              @map("from_unit_id")
+  toUnitId       String              @map("to_unit_id")
+  status         StockTransferStatus @default(PENDENTE)
+  notes          String?
+  requestedBy    String              @map("requested_by")
+  requestedAt    DateTime            @default(now()) @map("requested_at")
+  receivedBy     String?             @map("received_by")
+  receivedAt     DateTime?           @map("received_at")
+  cancelledBy    String?             @map("cancelled_by")
+  cancelledAt    DateTime?           @map("cancelled_at")
+  cancelReason   String?             @map("cancel_reason")
+
+  lines StockTransferLine[]
+
+  @@index([organizationId])
+  @@map("stock_transfers")
+}
+
+model StockTransferLine {
+  id           String        @id @default(uuid())
+  transferId   String        @map("transfer_id")
+  transfer     StockTransfer @relation(fields: [transferId], references: [id])
+  itemId       String        @map("item_id")
+  item         StockItem     @relation(fields: [itemId], references: [id])
+  lotId        String?       @map("lot_id")
+  lot          StockLot?     @relation(fields: [lotId], references: [id])
+  requestedQty Decimal       @map("requested_qty") @db.Decimal(15, 4)
+  sentQty      Decimal?      @map("sent_qty") @db.Decimal(15, 4)
+  receivedQty  Decimal?      @map("received_qty") @db.Decimal(15, 4)
+
+  @@index([transferId])
+  @@map("stock_transfer_lines")
+}
+
+// ============================================================
+// MÓDULO 8 — FIN: Financeiro, Fiscal e Repasses
+// ============================================================
+
+enum TransactionType {
+  RECEITA
+  DESPESA
+}
+
+enum TransactionStatus {
+  PENDENTE
+  PARCIALMENTE_PAGO
+  PAGO
+  CANCELADO
+  VENCIDO
+}
+
+enum PaymentMethod {
+  DINHEIRO
+  CARTAO_CREDITO
+  CARTAO_DEBITO
+  PIX
+  TRANSFERENCIA
+  CONVENIO
+  OUTRO
+}
+
+model FinancialAccount {
+  id             String    @id @default(uuid())
+  organizationId String    @map("organization_id")
+  name           String
+  type           String
+  bankName       String?   @map("bank_name")
+  accountNumber  String?   @map("account_number")
+  initialBalance Decimal   @default(0) @map("initial_balance") @db.Decimal(15, 2)
+  active         Boolean   @default(true)
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  payments FinancialPayment[]
+
+  @@index([organizationId])
+  @@map("financial_accounts")
+}
+
+model FinancialCategory {
+  id             String              @id @default(uuid())
+  organizationId String              @map("organization_id")
+  name           String
+  type           TransactionType
+  parentId       String?             @map("parent_id")
+  parent         FinancialCategory?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children       FinancialCategory[] @relation("CategoryTree")
+  active         Boolean             @default(true)
+  createdAt      DateTime            @default(now()) @map("created_at")
+
+  transactions FinancialTransaction[]
+
+  @@index([organizationId])
+  @@map("financial_categories")
+}
+
+model FinancialTransaction {
+  id             String              @id @default(uuid())
+  organizationId String              @map("organization_id")
+  unitId         String?             @map("unit_id")
+  categoryId     String?             @map("category_id")
+  category       FinancialCategory?  @relation(fields: [categoryId], references: [id])
+  type           TransactionType
+  status         TransactionStatus   @default(PENDENTE)
+  description    String
+  amount         Decimal             @db.Decimal(15, 2)
+  paidAmount     Decimal             @default(0) @map("paid_amount") @db.Decimal(15, 2)
+  dueDate        DateTime            @map("due_date") @db.Date
+  referenceType  String?             @map("reference_type")
+  referenceId    String?             @map("reference_id")
+  patientId      String?             @map("patient_id")
+  professionalId String?             @map("professional_id")
+  notes          String?
+  idempotencyKey String?             @unique @map("idempotency_key")
+  createdBy      String              @map("created_by")
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
+  cancelledAt    DateTime?           @map("cancelled_at")
+  cancelReason   String?             @map("cancel_reason")
+
+  payments FinancialPayment[]
+
+  @@index([organizationId, dueDate])
+  @@index([organizationId, status])
+  @@index([referenceType, referenceId])
+  @@map("financial_transactions")
+}
+
+model FinancialPayment {
+  id              String               @id @default(uuid())
+  transactionId   String               @map("transaction_id")
+  transaction     FinancialTransaction @relation(fields: [transactionId], references: [id])
+  accountId       String?              @map("account_id")
+  account         FinancialAccount?    @relation(fields: [accountId], references: [id])
+  amount          Decimal              @db.Decimal(15, 2)
+  method          PaymentMethod        @default(DINHEIRO)
+  paidAt          DateTime             @default(now()) @map("paid_at")
+  reversedAt      DateTime?            @map("reversed_at")
+  reversedBy      String?              @map("reversed_by")
+  reversalReason  String?              @map("reversal_reason")
+  notes           String?
+  idempotencyKey  String?              @unique @map("idempotency_key")
+  recordedBy      String               @map("recorded_by")
+
+  @@index([transactionId])
+  @@map("financial_payments")
+}
+
+model FinancialPeriod {
+  id             String    @id @default(uuid())
+  organizationId String    @map("organization_id")
+  year           Int
+  month          Int
+  status         String    @default("ABERTO")
+  closedBy       String?   @map("closed_by")
+  closedAt       DateTime? @map("closed_at")
+  closeReason    String?   @map("close_reason")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  @@unique([organizationId, year, month])
+  @@map("financial_periods")
+}
+
+// ============================================================
+// RF-PAC-010: Auditoria de exportação e ações sensíveis de paciente
+// ============================================================
+
 // RF-PAC-010: Auditoria de exportação e ações sensíveis de paciente
 model PatientAuditLog {
   id             String      @id @default(uuid())

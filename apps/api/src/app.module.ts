@@ -14,6 +14,8 @@ import { AuditModule } from './modules/audit/audit.module';
 import { PatientsModule } from './modules/patients/patients.module';
 import { SchedulingModule } from './modules/scheduling/scheduling.module';
 import { PepModule } from './modules/pep/pep.module';
+import { EstoqueModule } from './modules/estoque/estoque.module';
+import { FinanceiroModule } from './modules/financeiro/financeiro.module';
 
 @Module({
   imports: [
@@ -40,6 +42,8 @@ import { PepModule } from './modules/pep/pep.module';
     PatientsModule,
     SchedulingModule,
     PepModule,
+    EstoqueModule,
+    FinanceiroModule,
   ],
 })
 export class AppModule {}
