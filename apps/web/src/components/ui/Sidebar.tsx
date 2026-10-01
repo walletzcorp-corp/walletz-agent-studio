@@ -21,6 +21,9 @@ import {
   DollarSign,
   ShieldCheck,
   MessageSquare,
+  BrainCircuit,
+  Plug,
+  DoorOpen,
 } from 'lucide-react';
 
 const navItems = [
@@ -39,6 +42,9 @@ const navItems = [
   { href: '/financeiro',     label: 'Financeiro',       icon: DollarSign },
   { href: '/convenios',      label: 'Convênios / TIS',  icon: ShieldCheck },
   { href: '/crm',            label: 'CRM',              icon: MessageSquare },
+  { href: '/salas',          label: 'Salas',            icon: DoorOpen },
+  { href: '/ia',             label: 'IA Clínica',       icon: BrainCircuit },
+  { href: '/integracoes',    label: 'Integrações',      icon: Plug },
   { href: '/audit',          label: 'Auditoria',        icon: ClipboardList },
   { href: '/status',         label: 'Status do Produto', icon: Map },
 ];

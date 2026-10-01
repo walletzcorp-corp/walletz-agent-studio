@@ -1,100 +1,124 @@
 # Guia de Implantação — Walletz Med
 
-> **AVISO**: Este guia descreve o processo de implantação controlada para
-> ambiente de homologação ou produção. Não execute em produção sem revisar
-> cada seção com a equipe técnica responsável.
+**Versão**: 2026-10-01 (Módulos 1-13)
 
----
+> **Este guia é para ambiente de desenvolvimento.** Produção requer revisão de segurança independente, configuração de infraestrutura dedicada, e conformidade LGPD/CFM validada.
 
 ## Pré-requisitos
 
-- Node.js 18+
-- PostgreSQL 14+ (produção recomendada: PostgreSQL 16/18)
-- Variáveis de ambiente configuradas (ver `.env.example`)
+| Dependência | Versão | Porta |
+|-------------|--------|-------|
+| Node.js | 20+ | — |
+| PostgreSQL | 18 | 5433 |
+| pnpm | 8+ | — |
 
-## Variáveis de ambiente obrigatórias
-
-```
-DATABASE_URL=postgresql://user:pass@host:5432/walletz_med
-JWT_SECRET=<segredo-forte-256-bits>
-NODE_ENV=production
-```
-
-Variáveis opcionais (integrações):
-```
-WHATSAPP_API_KEY=     # se ausente, modo demo
-SMS_API_KEY=          # se ausente, modo demo
-SMTP_HOST=            # se ausente, notificações em modo demo
-SMTP_PORT=587
-SMTP_USER=
-SMTP_PASS=
-```
-
-## Banco de dados
+## 1. Configuração Inicial
 
 ```bash
-# 1. Criar banco
-createdb walletz_med
+# Clone e instale dependências
+cd walletz-med
+pnpm install
 
-# 2. Aplicar migrações
+# Copie variáveis de ambiente
+cp .env.example .env
+# Edite .env com suas configurações locais
+```
+
+## 2. Banco de Dados
+
+```bash
+# Inicie o PostgreSQL (binários locais na porta 5433)
+# Ver script: .pgdata/
+
+# Aplique todas as migrações
 cd apps/api
 npx prisma migrate deploy
 
-# 3. (Opcional) Aplicar seed de dados sintéticos
-npx prisma db seed
+# Gere o cliente Prisma
+npx prisma generate
 ```
 
-> RLS PostgreSQL: o script `apps/api/prisma/rls_policies.sql` está disponível
-> mas **não é aplicado automaticamente**. Aplique manualmente após validar em
-> homologação.
+### Migrações Disponíveis
 
-## Build e start
+| Migração | Módulos | Descrição |
+|----------|---------|-----------|
+| `20261001000000_module9_tis_module10_crm` | M9, M10 | TIS, CRM, ConvêniosOperadoras |
+| `20261001100000_module11_ia_module12_int_module13_sal` | M11, M12, M13 | IA, Integrações, Salas |
+
+## 3. Executar em Desenvolvimento
 
 ```bash
-# Na raiz do monorepo
-npm install
-
-# Build da API
+# API (porta 3011)
 cd apps/api
-npm run build
+pnpm run start:dev
 
-# Build do web
+# Web (porta 3010)
 cd apps/web
-npm run build
-
-# Start da API
-cd apps/api
-NODE_ENV=production node dist/main
-
-# Start do web (Next.js)
-cd apps/web
-node .next/standalone/server.js
+pnpm run dev
 ```
 
-## Verificação pós-implantação
+## 4. Testes
 
-1. `GET /api/v1/health` deve retornar `200 OK`
-2. `POST /api/v1/auth/dev-login` deve retornar `401` em `NODE_ENV=production`
-3. Verificar logs de erro nos primeiros 5 minutos de operação
-4. Executar smoke test nos endpoints principais (organizations, patients, scheduling)
-
-## Rollback
-
-Em caso de falha na migração:
 ```bash
-# Marcar migração como rolled back
-npx prisma migrate resolve --rolled-back <nome-da-migration>
-# Corrigir SQL e reimplantar
-npx prisma migrate deploy
+cd apps/api
+npx jest
+
+# Resultado esperado: 231 testes, 14 suítes, 0 falhas
 ```
 
-## Checklist pré-go-live
+## 5. TypeScript Check
 
-- [ ] JWT_SECRET gerado com entropia adequada (não usar o valor de dev)
-- [ ] DATABASE_URL aponta para banco de produção com backup ativo
-- [ ] NODE_ENV=production (desativa dev-login e logs verbosos)
-- [ ] HTTPS configurado no reverse proxy (Nginx/Caddy)
-- [ ] RLS policies revisadas e aplicadas (opcional mas recomendado)
-- [ ] Integrações de notificação (SMTP/WhatsApp/SMS) testadas ou modo demo documentado
-- [ ] Backup automático do banco configurado
-- [ ] Monitoramento de erros (Sentry ou equivalente) configurado
+```bash
+cd apps/api
+npx tsc --noEmit
+
+cd apps/web
+npx tsc --noEmit
+
+# Resultado esperado: 0 erros em ambos
+```
+
+## 6. Módulos Implementados
+
+| # | Código | Status | Observações |
+|---|--------|--------|-------------|
+| 1 | ORG | ✅ | Organização, unidades, usuários |
+| 2 | PAC | ✅ | Pacientes, consentimentos LGPD |
+| 3 | AGE | ✅ | Agenda, jornada operacional |
+| 4 | PEP | ✅ | Prontuário eletrônico |
+| 5 | DOC | ⏳ | Documentos, prescrição — Sprint 2 |
+| 6 | TEL | ⏳ | Telemedicina — Sprint 2 |
+| 7 | EST | ✅ | Estoque, compras |
+| 8 | FIN | ✅ | Financeiro, fiscal |
+| 9 | TIS | ✅ | Convênios TISS (simulação) |
+| 10 | CRM | ✅ | CRM, comunicação comercial |
+| 11 | IA  | ✅ | IA clínica (simulação) |
+| 12 | INT | ✅ | Integrações, portal paciente |
+| 13 | SAL | ✅ | Salas, fluxo físico |
+
+## 7. Restrições por Módulo
+
+### M9 TIS — Convênios
+- XML TISS em **simulação** — não transmite para operadoras
+- Requer: credencial ANS, endpoint homologação, certificado digital
+
+### M11 IA — Inteligência Artificial
+- Provider padrão: `simulated` — nenhuma API de IA é chamada
+- Todo conteúdo gerado é rascunho até revisão humana
+
+### M12 INT — Integrações
+- Todos os conectores em `NAO_CONFIGURADO` por padrão
+- Secretes de webhook nunca armazenados em texto claro
+
+### M13 SAL — Salas
+- Custos de sala não calculados sem integração com FIN/EST
+
+## 8. Variáveis de Produção Adicionais
+
+As seguintes variáveis NÃO devem ter valores de desenvolvimento em produção:
+
+- `DATABASE_URL` — usar credenciais dedicadas com permissões mínimas
+- `NEXTAUTH_SECRET` — gerar valor aleatório único por ambiente
+- `JWT_ISSUER` — apontar para Keycloak de produção
+- `KEYCLOAK_CLIENT_SECRET` — obter do console Keycloak de produção
+- `CORS_ORIGINS` — restringir ao domínio da aplicação

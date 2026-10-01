@@ -16,6 +16,9 @@ Data de revisão: 2026-10-01
 | 8  | FIN    | Financeiro, fiscal e repasses        | IMPLEMENTADO (M8)   |
 | 9  | TIS    | Convênios, TISS e Glosas             | IMPLEMENTADO (M9)   |
 | 10 | CRM    | CRM e Comunicação Comercial          | IMPLEMENTADO (M10)  |
+| 11 | IA     | Inteligência Artificial Clínica       | IMPLEMENTADO (M11)  |
+| 12 | INT    | Integrações e Portal do Paciente      | IMPLEMENTADO (M12)  |
+| 13 | SAL    | Salas, Poltronas e Fluxo Físico       | IMPLEMENTADO (M13)  |
 
 ## Divergência histórica de nomenclatura
 

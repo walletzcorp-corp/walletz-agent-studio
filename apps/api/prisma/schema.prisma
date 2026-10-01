@@ -2395,3 +2395,499 @@ model PatientAuditLog {
   @@index([patientId])
   @@map("patient_audit_logs")
 }
+
+// ============================================================
+// MÓDULO 11 — IA: Inteligência Artificial
+// RF-IA-001 a RF-IA-020
+// ============================================================
+
+enum AiRiskLevel {
+  BAIXO
+  MEDIO
+  ALTO
+  INACEITAVEL
+}
+
+enum AiDraftStatus {
+  PENDENTE
+  ACEITO
+  REJEITADO
+  EXPIRADO
+}
+
+model AiConfig {
+  id                  String      @id @default(uuid())
+  organizationId      String      @map("organization_id")
+  useCase             String      @map("use_case")
+  enabled             Boolean     @default(false)
+  provider            String      @default("simulated")
+  modelId             String?     @map("model_id")
+  modelVersion        String?     @map("model_version")
+  promptVersion       String?     @map("prompt_version")
+  riskLevel           AiRiskLevel @default(MEDIO) @map("risk_level")
+  riskClassification  String      @db.Text @map("risk_classification")
+  purpose             String      @db.Text
+  limitations         String?     @db.Text
+  validatedPopulation String?     @db.Text @map("validated_population")
+  scientificRef       String?     @db.Text @map("scientific_ref")
+  requiresConsent     Boolean     @default(true) @map("requires_consent")
+  allowedSpecialties  Json?       @map("allowed_specialties")
+  updatedBy           String      @map("updated_by")
+  approvedBy          String?     @map("approved_by")
+  approvedAt          DateTime?   @map("approved_at")
+  active              Boolean     @default(true)
+  createdAt           DateTime    @default(now()) @map("created_at")
+  updatedAt           DateTime    @updatedAt @map("updated_at")
+
+  @@unique([organizationId, useCase])
+  @@index([organizationId])
+  @@map("ai_configs")
+}
+
+model AiDraft {
+  id             String        @id @default(uuid())
+  organizationId String        @map("organization_id")
+  patientId      String?       @map("patient_id")
+  entryId        String?       @map("entry_id")
+  useCase        String        @map("use_case")
+  status         AiDraftStatus @default(PENDENTE)
+  inputSummary   String        @db.Text @map("input_summary")
+  output         Json
+  sources        Json?
+  modelId        String?       @map("model_id")
+  modelVersion   String?       @map("model_version")
+  promptVersion  String?       @map("prompt_version")
+  reviewedBy     String?       @map("reviewed_by")
+  reviewedAt     DateTime?     @map("reviewed_at")
+  reviewNotes    String?       @db.Text @map("review_notes")
+  expiresAt      DateTime?     @map("expires_at")
+  createdBy      String        @map("created_by")
+  createdAt      DateTime      @default(now()) @map("created_at")
+
+  usageLogs AiUsageLog[]
+
+  @@index([organizationId, patientId, status])
+  @@index([status, expiresAt])
+  @@map("ai_drafts")
+}
+
+model AiUsageLog {
+  id             String    @id @default(uuid())
+  organizationId String    @map("organization_id")
+  userId         String    @map("user_id")
+  useCase        String    @map("use_case")
+  draftId        String?   @map("draft_id")
+  draft          AiDraft?  @relation(fields: [draftId], references: [id])
+  action         String
+  modelId        String?   @map("model_id")
+  latencyMs      Int?      @map("latency_ms")
+  tokenCount     Int?      @map("token_count")
+  errorType      String?   @map("error_type")
+  occurredAt     DateTime  @default(now()) @map("occurred_at")
+
+  @@index([organizationId, useCase, occurredAt])
+  @@map("ai_usage_logs")
+}
+
+model AiQualityMetric {
+  id              String    @id @default(uuid())
+  organizationId  String    @map("organization_id")
+  useCase         String    @map("use_case")
+  modelId         String    @map("model_id")
+  periodStart     DateTime  @map("period_start") @db.Date
+  periodEnd       DateTime  @map("period_end") @db.Date
+  totalRequests   Int       @default(0) @map("total_requests")
+  acceptedCount   Int       @default(0) @map("accepted_count")
+  rejectedCount   Int       @default(0) @map("rejected_count")
+  avgLatencyMs    Float?    @map("avg_latency_ms")
+  errorCount      Int       @default(0) @map("error_count")
+  driftDetected   Boolean   @default(false) @map("drift_detected")
+  incidentCount   Int       @default(0) @map("incident_count")
+  notes           String?   @db.Text
+  recordedBy      String    @map("recorded_by")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  @@index([organizationId, useCase, periodStart])
+  @@map("ai_quality_metrics")
+}
+
+// ============================================================
+// MÓDULO 12 — INT: Integrações e Portal do Paciente
+// RF-INT-001 a RF-INT-020
+// ============================================================
+
+enum WebhookStatus {
+  ATIVO
+  INATIVO
+}
+
+enum WebhookEventStatus {
+  PENDENTE
+  ENTREGUE
+  FALHOU
+  REPROCESSANDO
+  DEAD_LETTER
+}
+
+enum ConnectorStatus {
+  ATIVO
+  INATIVO
+  NAO_CONFIGURADO
+}
+
+model WebhookEndpoint {
+  id             String        @id @default(uuid())
+  organizationId String        @map("organization_id")
+  name           String
+  url            String
+  secretHash     String        @map("secret_hash")
+  events         Json
+  status         WebhookStatus @default(ATIVO)
+  headers        Json?
+  createdBy      String        @map("created_by")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  deliveries WebhookEventDelivery[]
+
+  @@index([organizationId, status])
+  @@map("webhook_endpoints")
+}
+
+model WebhookEventDelivery {
+  id              String             @id @default(uuid())
+  endpointId      String             @map("endpoint_id")
+  endpoint        WebhookEndpoint    @relation(fields: [endpointId], references: [id])
+  eventType       String             @map("event_type")
+  idempotencyKey  String             @unique @map("idempotency_key")
+  payload         Json
+  status          WebhookEventStatus @default(PENDENTE)
+  attempts        Int                @default(0)
+  lastAttemptAt   DateTime?          @map("last_attempt_at")
+  nextRetryAt     DateTime?          @map("next_retry_at")
+  responseStatus  Int?               @map("response_status")
+  responseBody    String?            @db.Text @map("response_body")
+  errorMessage    String?            @db.Text @map("error_message")
+  createdAt       DateTime           @default(now()) @map("created_at")
+
+  @@index([endpointId, status])
+  @@map("webhook_event_deliveries")
+}
+
+model IntegrationConnector {
+  id             String          @id @default(uuid())
+  organizationId String          @map("organization_id")
+  connectorType  String          @map("connector_type")
+  name           String
+  status         ConnectorStatus @default(NAO_CONFIGURADO)
+  scopes         Json?
+  configJson     Json?           @map("config_json")
+  mappingVersion String?         @map("mapping_version")
+  lastSyncAt     DateTime?       @map("last_sync_at")
+  lastSyncStatus String?         @map("last_sync_status")
+  notes          String?         @db.Text
+  createdBy      String          @map("created_by")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+
+  @@unique([organizationId, connectorType])
+  @@index([organizationId])
+  @@map("integration_connectors")
+}
+
+model PatientPortalSession {
+  id          String    @id @default(uuid())
+  patientId   String    @map("patient_id")
+  token       String    @unique
+  expiresAt   DateTime  @map("expires_at")
+  ipAddress   String?   @map("ip_address")
+  userAgent   String?   @map("user_agent")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  revokedAt   DateTime? @map("revoked_at")
+
+  @@index([patientId])
+  @@index([token])
+  @@map("patient_portal_sessions")
+}
+
+model FhirResource {
+  id             String    @id @default(uuid())
+  organizationId String    @map("organization_id")
+  resourceType   String    @map("resource_type")
+  resourceId     String    @map("resource_id")
+  version        String    @default("R4")
+  payload        Json
+  generatedAt    DateTime  @default(now()) @map("generated_at")
+  generatedBy    String    @map("generated_by")
+
+  @@index([organizationId, resourceType, resourceId])
+  @@map("fhir_resources")
+}
+
+model IntegrationConsentGrant {
+  id             String    @id @default(uuid())
+  organizationId String    @map("organization_id")
+  patientId      String    @map("patient_id")
+  connectorType  String    @map("connector_type")
+  scopes         Json
+  grantedAt      DateTime  @default(now()) @map("granted_at")
+  expiresAt      DateTime? @map("expires_at")
+  revokedAt      DateTime? @map("revoked_at")
+  grantedBy      String    @map("granted_by")
+
+  @@index([patientId, connectorType])
+  @@map("integration_consent_grants")
+}
+
+// ============================================================
+// MÓDULO 13 — SAL: Salas, Poltronas, Equipamentos e Fluxo Físico
+// RF-SAL-001 a RF-SAL-020
+// ============================================================
+
+enum RoomStatus {
+  LIVRE
+  RESERVADA
+  PREPARADA
+  OCUPADA
+  HIGIENIZACAO
+  BLOQUEADA
+  INATIVA
+}
+
+enum RoomType {
+  CONSULTORIO
+  PROCEDIMENTO
+  CIRURGIA
+  RECUPERACAO
+  TRIAGEM
+  EXAME
+  INFUSAO
+  EMERGENCIA
+  OUTRO
+}
+
+enum PositionStatus {
+  LIVRE
+  OCUPADA
+  RESERVADA
+  HIGIENIZACAO
+  BLOQUEADA
+}
+
+enum RoomBookingStatus {
+  RESERVADA
+  CONFIRMADA
+  OCUPADA
+  CONCLUIDA
+  CANCELADA
+}
+
+enum ChecklistType {
+  PREPARO
+  HIGIENIZACAO
+  LIBERACAO
+}
+
+enum ChecklistItemStatus {
+  PENDENTE
+  CONCLUIDO
+  DISPENSADO
+}
+
+model Room {
+  id              String     @id @default(uuid())
+  organizationId  String     @map("organization_id")
+  unitId          String?    @map("unit_id")
+  name            String
+  code            String?
+  type            RoomType   @default(CONSULTORIO)
+  capacity        Int        @default(1)
+  floor           String?
+  building        String?
+  location        String?
+  status          RoomStatus @default(LIVRE)
+  resourcesList   Json?      @map("resources_list")
+  restrictions    Json?
+  allowsCompanion Boolean    @default(false) @map("allows_companion")
+  isIsolation     Boolean    @default(false) @map("is_isolation")
+  isAccessible    Boolean    @default(true)  @map("is_accessible")
+  active          Boolean    @default(true)
+  notes           String?    @db.Text
+  createdBy       String     @map("created_by")
+  createdAt       DateTime   @default(now()) @map("created_at")
+  updatedAt       DateTime   @updatedAt @map("updated_at")
+
+  positions  RoomPosition[]
+  stateLogs  RoomStateLog[]
+  executions RoomChecklistExecution[]
+  bookings   RoomBooking[]
+  incidents  RoomIncident[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, status])
+  @@map("rooms")
+}
+
+model RoomPosition {
+  id           String         @id @default(uuid())
+  roomId       String         @map("room_id")
+  room         Room           @relation(fields: [roomId], references: [id])
+  name         String
+  positionType String         @default("POLTRONA") @map("position_type")
+  status       PositionStatus @default(LIVRE)
+  notes        String?
+  active       Boolean        @default(true)
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+
+  bookings RoomBooking[]
+
+  @@index([roomId])
+  @@map("room_positions")
+}
+
+model RoomStateLog {
+  id         String   @id @default(uuid())
+  roomId     String   @map("room_id")
+  room       Room     @relation(fields: [roomId], references: [id])
+  fromStatus String   @map("from_status")
+  toStatus   String   @map("to_status")
+  changedBy  String   @map("changed_by")
+  reason     String?
+  bookingId  String?  @map("booking_id")
+  occurredAt DateTime @default(now()) @map("occurred_at")
+
+  @@index([roomId, occurredAt])
+  @@map("room_state_logs")
+}
+
+model RoomChecklistTemplate {
+  id             String        @id @default(uuid())
+  organizationId String        @map("organization_id")
+  roomType       String        @map("room_type")
+  checklistType  ChecklistType @map("checklist_type")
+  name           String
+  active         Boolean       @default(true)
+  createdBy      String        @map("created_by")
+  createdAt      DateTime      @default(now()) @map("created_at")
+
+  items      RoomChecklistTemplateItem[]
+  executions RoomChecklistExecution[]
+
+  @@index([organizationId, roomType, checklistType])
+  @@map("room_checklist_templates")
+}
+
+model RoomChecklistTemplateItem {
+  id          String                @id @default(uuid())
+  templateId  String                @map("template_id")
+  template    RoomChecklistTemplate @relation(fields: [templateId], references: [id])
+  description String
+  isCritical  Boolean               @default(false) @map("is_critical")
+  position    Int                   @default(0)
+
+  @@index([templateId])
+  @@map("room_checklist_template_items")
+}
+
+model RoomChecklistExecution {
+  id            String        @id @default(uuid())
+  roomId        String        @map("room_id")
+  room          Room          @relation(fields: [roomId], references: [id])
+  templateId    String        @map("template_id")
+  template      RoomChecklistTemplate @relation(fields: [templateId], references: [id])
+  checklistType ChecklistType @map("checklist_type")
+  status        String        @default("EM_ANDAMENTO")
+  startedBy     String        @map("started_by")
+  completedBy   String?       @map("completed_by")
+  completedAt   DateTime?     @map("completed_at")
+  bookingId     String?       @map("booking_id")
+  createdAt     DateTime      @default(now()) @map("created_at")
+
+  items RoomChecklistExecutionItem[]
+
+  @@index([roomId, checklistType])
+  @@map("room_checklist_executions")
+}
+
+model RoomChecklistExecutionItem {
+  id           String              @id @default(uuid())
+  executionId  String              @map("execution_id")
+  execution    RoomChecklistExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  description  String
+  isCritical   Boolean             @default(false) @map("is_critical")
+  status       ChecklistItemStatus @default(PENDENTE)
+  completedBy  String?             @map("completed_by")
+  completedAt  DateTime?           @map("completed_at")
+  notes        String?
+
+  @@index([executionId])
+  @@map("room_checklist_execution_items")
+}
+
+model RoomBooking {
+  id              String            @id @default(uuid())
+  organizationId  String            @map("organization_id")
+  roomId          String            @map("room_id")
+  room            Room              @relation(fields: [roomId], references: [id])
+  positionId      String?           @map("position_id")
+  position        RoomPosition?     @relation(fields: [positionId], references: [id])
+  appointmentId   String?           @map("appointment_id")
+  patientId       String?           @map("patient_id")
+  professionalId  String?           @map("professional_id")
+  serviceId       String?           @map("service_id")
+  status          RoomBookingStatus @default(RESERVADA)
+  scheduledStart  DateTime          @map("scheduled_start")
+  scheduledEnd    DateTime          @map("scheduled_end")
+  actualStart     DateTime?         @map("actual_start")
+  actualEnd       DateTime?         @map("actual_end")
+  setupMinutes    Int               @default(0) @map("setup_minutes")
+  cleaningMinutes Int               @default(15) @map("cleaning_minutes")
+  hasCompanion    Boolean           @default(false) @map("has_companion")
+  notes           String?
+  createdBy       String            @map("created_by")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  flowEvents RoomPatientFlowEvent[]
+
+  @@index([organizationId, roomId, scheduledStart])
+  @@index([organizationId, status])
+  @@map("room_bookings")
+}
+
+model RoomPatientFlowEvent {
+  id              String      @id @default(uuid())
+  bookingId       String      @map("booking_id")
+  booking         RoomBooking @relation(fields: [bookingId], references: [id])
+  organizationId  String      @map("organization_id")
+  patientId       String?     @map("patient_id")
+  eventType       String      @map("event_type")
+  occurredAt      DateTime    @default(now()) @map("occurred_at")
+  recordedBy      String      @map("recorded_by")
+  notes           String?
+
+  @@index([bookingId])
+  @@index([organizationId, patientId])
+  @@map("room_patient_flow_events")
+}
+
+model RoomIncident {
+  id               String    @id @default(uuid())
+  organizationId   String    @map("organization_id")
+  roomId           String    @map("room_id")
+  room             Room      @relation(fields: [roomId], references: [id])
+  incidentType     String    @map("incident_type")
+  description      String    @db.Text
+  severity         String    @default("MEDIA")
+  status           String    @default("ABERTO")
+  reportedBy       String    @map("reported_by")
+  reportedAt       DateTime  @default(now()) @map("reported_at")
+  resolvedBy       String?   @map("resolved_by")
+  resolvedAt       DateTime? @map("resolved_at")
+  resolutionNotes  String?   @db.Text @map("resolution_notes")
+
+  @@index([organizationId, roomId])
+  @@index([organizationId, status])
+  @@map("room_incidents")
+}

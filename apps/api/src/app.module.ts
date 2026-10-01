@@ -18,6 +18,9 @@ import { EstoqueModule } from './modules/estoque/estoque.module';
 import { FinanceiroModule } from './modules/financeiro/financeiro.module';
 import { TisModule } from './modules/tis/tis.module';
 import { CrmModule } from './modules/crm/crm.module';
+import { IaModule } from './modules/ia/ia.module';
+import { IntModule } from './modules/int/int.module';
+import { SalModule } from './modules/sal/sal.module';
 
 @Module({
   imports: [
@@ -48,6 +51,9 @@ import { CrmModule } from './modules/crm/crm.module';
     FinanceiroModule,
     TisModule,
     CrmModule,
+    IaModule,
+    IntModule,
+    SalModule,
   ],
 })
 export class AppModule {}
