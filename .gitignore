@@ -33,6 +33,13 @@ logs/
 # Test coverage
 coverage/
 
+# TypeScript build cache
+*.tsbuildinfo
+
+# Dev server output logs (generated during local development)
+apps/api/api-out.txt
+apps/web/web-out.txt
+
 # Prisma
 apps/api/prisma/dev.db
 apps/api/prisma/test.db
