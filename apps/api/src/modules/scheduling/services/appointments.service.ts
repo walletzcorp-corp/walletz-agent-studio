@@ -330,6 +330,11 @@ export class AppointmentsService {
     });
   }
 
+  // Used by public token action endpoint — skips tenant check (org checked via token payload).
+  async findOneInternal(id: string) {
+    return this.prisma.appointment.findUnique({ where: { id } });
+  }
+
   async reschedule(id: string, dto: RescheduleDto, user: AuthenticatedUser) {
     return this.prisma.$transaction(async (tx) => {
       const appt = await tx.appointment.findUnique({ where: { id } });

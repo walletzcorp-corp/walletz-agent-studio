@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useToken } from '@/hooks/useToken';
 import { api } from '@/lib/api';
-import { ArrowLeft, Clock, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Clock, CheckCircle2, XCircle, AlertTriangle, CalendarClock } from 'lucide-react';
 
 const STATUS_LABEL: Record<string, string> = {
   AGENDADO: 'Agendado', CONFIRMADO: 'Confirmado', AGUARDANDO: 'Aguardando na recepção',
@@ -56,6 +56,9 @@ export default function AppointmentDetailPage({ params }: { params: { id: string
   const [error, setError] = useState('');
   const [cancelReason, setCancelReason] = useState('');
   const [showCancel, setShowCancel] = useState(false);
+  const [showReschedule, setShowReschedule] = useState(false);
+  const [rescheduleForm, setRescheduleForm] = useState({ date: '', time: '', endsAt: '', reason: '' });
+  const [rescheduleLoading, setRescheduleLoading] = useState(false);
 
   async function load() {
     if (!token) return;
@@ -82,6 +85,28 @@ export default function AppointmentDetailPage({ params }: { params: { id: string
       setError(e.message ?? 'Erro ao executar ação');
     } finally {
       setActionLoading(false);
+    }
+  }
+
+  async function doReschedule() {
+    if (!appt || !token) return;
+    const startsAt = `${rescheduleForm.date}T${rescheduleForm.time}:00`;
+    const endsAt = `${rescheduleForm.date}T${rescheduleForm.endsAt}:00`;
+    setRescheduleLoading(true);
+    setError('');
+    try {
+      await api.post(`/appointments/${id}/reschedule`, {
+        startsAt,
+        endsAt,
+        reason: rescheduleForm.reason || undefined,
+        rowVersion: appt.rowVersion,
+      }, token);
+      setShowReschedule(false);
+      router.push('/schedule');
+    } catch (e: any) {
+      setError(e.message ?? 'Erro ao reagendar');
+    } finally {
+      setRescheduleLoading(false);
     }
   }
 
@@ -241,6 +266,55 @@ export default function AppointmentDetailPage({ params }: { params: { id: string
                 )}
               </>
             )}
+
+            {/* RF-AGE-007: Reagendar */}
+            {['AGENDADO', 'CONFIRMADO'].includes(appt.status) && !showCancel && (
+              <button className="btn-secondary" onClick={() => setShowReschedule(true)}>
+                <CalendarClock size={14} /> Reagendar
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* RF-AGE-007: Reschedule dialog */}
+      {showReschedule && (
+        <div className="card mb-4 border-amber-200 bg-amber-50">
+          <h2 className="text-base font-semibold mb-3 text-amber-800">Reagendar consulta</h2>
+          <p className="text-xs text-amber-700 mb-3">O agendamento atual será marcado como REAGENDADO e um novo será criado.</p>
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            <div>
+              <label className="label text-xs">Nova data *</label>
+              <input type="date" className="input" required
+                min={new Date().toISOString().split('T')[0]}
+                value={rescheduleForm.date}
+                onChange={(e) => setRescheduleForm({ ...rescheduleForm, date: e.target.value })} />
+            </div>
+            <div>
+              <label className="label text-xs">Hora início *</label>
+              <input type="time" className="input" required
+                value={rescheduleForm.time}
+                onChange={(e) => setRescheduleForm({ ...rescheduleForm, time: e.target.value })} />
+            </div>
+            <div>
+              <label className="label text-xs">Hora fim *</label>
+              <input type="time" className="input" required
+                value={rescheduleForm.endsAt}
+                onChange={(e) => setRescheduleForm({ ...rescheduleForm, endsAt: e.target.value })} />
+            </div>
+            <div>
+              <label className="label text-xs">Motivo</label>
+              <input type="text" className="input" placeholder="Opcional…"
+                value={rescheduleForm.reason}
+                onChange={(e) => setRescheduleForm({ ...rescheduleForm, reason: e.target.value })} />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button className="btn-primary" disabled={rescheduleLoading || !rescheduleForm.date || !rescheduleForm.time || !rescheduleForm.endsAt}
+              onClick={doReschedule}>
+              {rescheduleLoading ? 'Reagendando…' : 'Confirmar reagendamento'}
+            </button>
+            <button className="btn-secondary" onClick={() => setShowReschedule(false)}>Cancelar</button>
           </div>
         </div>
       )}

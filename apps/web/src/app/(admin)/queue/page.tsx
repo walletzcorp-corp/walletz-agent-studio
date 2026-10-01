@@ -1,8 +1,9 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import { useToken } from '@/hooks/useToken';
 import { api } from '@/lib/api';
-import { Ticket, ChevronRight, RefreshCw } from 'lucide-react';
+import { Ticket, ChevronRight, RefreshCw, Route } from 'lucide-react';
 
 const TICKET_STATUS_LABEL: Record<string, string> = {
   AGUARDANDO: 'Aguardando', CHAMADO: 'Chamado', EM_ATENDIMENTO: 'Em atendimento',
@@ -119,6 +120,16 @@ export default function QueuePage() {
     } finally {
       setActionLoading(false);
     }
+  }
+
+  // RF-AGE-016: routing state per ticket (session-local — stored until page refresh)
+  const [routingSteps, setRoutingSteps] = useState<Record<string, number>>({});
+
+  function advanceRouting(ticketId: string, max = 3) {
+    setRoutingSteps((prev) => ({
+      ...prev,
+      [ticketId]: Math.min((prev[ticketId] ?? 0) + 1, max),
+    }));
   }
 
   async function setQueueStatus(status: string) {
@@ -285,26 +296,55 @@ export default function QueuePage() {
             <div>
               <h3 className="text-sm font-semibold text-slate-600 mb-2">Chamado / Em atendimento ({called.length + inService.length})</h3>
               <div className="space-y-1">
-                {[...called, ...inService].map((t: any) => (
-                  <div key={t.id} className={`flex items-center justify-between px-3 py-2 rounded-lg border text-sm ${TICKET_COLOR[t.status]}`}>
-                    <div>
-                      <span className="font-mono font-bold">{t.ticketNumber}</span>
-                      {t.patient && <span className="ml-2 text-xs opacity-70">{t.patient.name}</span>}
+                {[...called, ...inService].map((t: any) => {
+                  const step = routingSteps[t.id] ?? 0;
+                  const ROUTING_STEPS = ['Triagem', 'Consulta', 'Procedimento', 'Alta'];
+                  return (
+                    <div key={t.id} className={`px-3 py-2 rounded-lg border text-sm ${TICKET_COLOR[t.status]}`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <div>
+                          <span className="font-mono font-bold">{t.ticketNumber}</span>
+                          {t.patient && (
+                            <Link href={`/patients/${t.patient.id}`} className="ml-2 text-xs opacity-70 hover:underline">
+                              {t.patient.name}
+                            </Link>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          {t.status === 'CHAMADO' && (
+                            <button className="text-xs underline" disabled={actionLoading} onClick={() => updateTicket(t.id, 'EM_ATENDIMENTO')}>
+                              Iniciar
+                            </button>
+                          )}
+                          {t.status === 'EM_ATENDIMENTO' && (
+                            <button className="text-xs underline" disabled={actionLoading} onClick={() => updateTicket(t.id, 'FINALIZADO')}>
+                              Finalizar
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      {/* RF-AGE-016: Routing stepper */}
+                      <div className="flex items-center gap-1 mt-1">
+                        <Route size={10} className="text-purple-400 shrink-0" />
+                        {ROUTING_STEPS.map((s, i) => (
+                          <div key={s} className="flex items-center gap-0.5">
+                            <span className={`px-1.5 py-0.5 rounded text-xs cursor-pointer select-none transition-colors ${
+                              i < step ? 'bg-emerald-100 text-emerald-700 line-through opacity-60' :
+                              i === step ? 'bg-purple-100 text-purple-700 font-semibold ring-1 ring-purple-300' :
+                              'bg-white/60 text-slate-400'
+                            }`}
+                              onClick={() => i === step && advanceRouting(t.id, ROUTING_STEPS.length - 1)}
+                              title={i === step ? `Avançar para próxima etapa` : undefined}
+                            >
+                              {s}
+                            </span>
+                            {i < ROUTING_STEPS.length - 1 && <ChevronRight size={8} className="text-slate-300 shrink-0" />}
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                    <div className="flex gap-2">
-                      {t.status === 'CHAMADO' && (
-                        <button className="text-xs underline" disabled={actionLoading} onClick={() => updateTicket(t.id, 'EM_ATENDIMENTO')}>
-                          Iniciar
-                        </button>
-                      )}
-                      {t.status === 'EM_ATENDIMENTO' && (
-                        <button className="text-xs underline" disabled={actionLoading} onClick={() => updateTicket(t.id, 'FINALIZADO')}>
-                          Finalizar
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
                 {called.length + inService.length === 0 && <p className="text-xs text-slate-400 py-2">Nenhuma senha</p>}
               </div>
 

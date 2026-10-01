@@ -257,9 +257,17 @@ export default function SchedulePage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <h1>Agenda</h1>
-        <Link href="/appointments/new" className="btn-primary">
-          <Plus size={16} /> Novo Agendamento
-        </Link>
+        <div className="flex gap-2">
+          <Link href="/schedule/wait-list" className="btn-secondary text-sm">
+            <Clock size={14} /> Lista de Espera
+          </Link>
+          <Link href="/schedule/availability-rules" className="btn-secondary text-sm">
+            <Calendar size={14} /> Disponibilidade
+          </Link>
+          <Link href="/appointments/new" className="btn-primary">
+            <Plus size={16} /> Novo Agendamento
+          </Link>
+        </div>
       </div>
 
       {/* Filters */}

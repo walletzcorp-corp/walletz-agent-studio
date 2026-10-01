@@ -39,6 +39,10 @@ function NewAppointmentForm() {
     slotIndex: '',
     notes: '',
     isOnlineBooking: false,
+    // RF-AGE-004: recorrência
+    recurrenceEnabled: false,
+    recurrenceType: 'SEMANAL',
+    totalSessions: '4',
   });
 
   useEffect(() => {
@@ -100,6 +104,10 @@ function NewAppointmentForm() {
         endsAt: slot.endsAt,
         notes: form.notes || undefined,
         isOnlineBooking: form.isOnlineBooking,
+        recurrence: form.recurrenceEnabled ? {
+          type: form.recurrenceType,
+          totalSessions: +form.totalSessions,
+        } : undefined,
       }, token!);
       router.push('/schedule');
     } catch (e: any) {
@@ -214,6 +222,38 @@ function NewAppointmentForm() {
           <input type="checkbox" id="online" checked={form.isOnlineBooking}
             onChange={(e) => setForm({ ...form, isOnlineBooking: e.target.checked })} />
           <label htmlFor="online" className="text-sm text-slate-700">Agendamento online</label>
+        </div>
+
+        {/* RF-AGE-004: Recorrência */}
+        <div className="border-t border-surface-border pt-4">
+          <div className="flex items-center gap-2 mb-3">
+            <input type="checkbox" id="recurrence" checked={form.recurrenceEnabled}
+              onChange={(e) => setForm({ ...form, recurrenceEnabled: e.target.checked })} />
+            <label htmlFor="recurrence" className="text-sm font-medium text-slate-700">Agendamento recorrente</label>
+          </div>
+          {form.recurrenceEnabled && (
+            <div className="grid grid-cols-2 gap-4 pl-2 border-l-2 border-brand-emerald">
+              <div>
+                <label className="label">Frequência</label>
+                <select className="input" value={form.recurrenceType}
+                  onChange={(e) => setForm({ ...form, recurrenceType: e.target.value })}>
+                  <option value="SEMANAL">Semanal</option>
+                  <option value="QUINZENAL">Quinzenal</option>
+                  <option value="MENSAL">Mensal</option>
+                </select>
+              </div>
+              <div>
+                <label className="label">Nº de sessões (incluindo esta)</label>
+                <input type="number" className="input" min="2" max="52"
+                  value={form.totalSessions}
+                  onChange={(e) => setForm({ ...form, totalSessions: e.target.value })} />
+              </div>
+              <p className="col-span-2 text-xs text-slate-500">
+                Serão criados {+form.totalSessions} agendamentos com intervalo {form.recurrenceType.toLowerCase()}.
+                Horários com conflito são ignorados automaticamente.
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="flex gap-3 pt-2">

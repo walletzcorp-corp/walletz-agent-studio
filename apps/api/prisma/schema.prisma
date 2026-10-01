@@ -922,6 +922,8 @@ model Appointment {
   history         AppointmentHistory[]
   waitListEntries WaitListEntry[]  @relation("PromotedAppointment")
   clinicalEntries ClinicalEntry[]
+  notifications   AppointmentNotification[]
+  tokens          AppointmentToken[]
 
   @@index([unitId, startsAt])
   @@index([professionalId, startsAt])
@@ -1514,6 +1516,48 @@ model PreAdmissionFormResponse {
 
   @@index([patientId, formId])
   @@map("pre_admission_form_responses")
+}
+
+// RF-AGE-006: Notificações de agendamento (rastreamento + idempotência)
+model AppointmentNotification {
+  id             String      @id @default(uuid())
+  appointmentId  String      @map("appointment_id")
+  appointment    Appointment @relation(fields: [appointmentId], references: [id])
+  organizationId String      @map("organization_id")
+
+  channel        String      // WHATSAPP, SMS, EMAIL
+  event          String      // CONFIRMACAO, CANCELAMENTO, REAGENDAMENTO, LEMBRETE
+  idempotencyKey String      @unique @map("idempotency_key") // appointmentId:event:channel
+
+  status         String      @default("PENDENTE") // PENDENTE, ENVIADO, FALHOU, DEMO
+  recipient      String      // telefone ou email — nunca logado em claro
+  content        String?
+  sentAt         DateTime?   @map("sent_at")
+  failReason     String?     @map("fail_reason")
+  isDemo         Boolean     @default(false) @map("is_demo")
+
+  createdAt      DateTime    @default(now()) @map("created_at")
+
+  @@index([appointmentId])
+  @@map("appointment_notifications")
+}
+
+// RF-AGE-007: Tokens seguros para link de confirmação/cancelamento/reagendamento
+model AppointmentToken {
+  id             String      @id @default(uuid())
+  appointmentId  String      @map("appointment_id")
+  appointment    Appointment @relation(fields: [appointmentId], references: [id])
+  organizationId String      @map("organization_id")
+
+  token          String      @unique // token aleatório seguro — NUNCA logado
+  action         String      // CONFIRMAR, CANCELAR, REAGENDAR
+  expiresAt      DateTime    @map("expires_at")
+  usedAt         DateTime?   @map("used_at")
+
+  createdAt      DateTime    @default(now()) @map("created_at")
+
+  @@index([appointmentId])
+  @@map("appointment_tokens")
 }
 
 // RF-PAC-010: Auditoria de exportação e ações sensíveis de paciente
