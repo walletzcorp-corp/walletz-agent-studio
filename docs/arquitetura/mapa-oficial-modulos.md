@@ -23,6 +23,10 @@ Data de revisão: 2026-10-01
 | 15 | QUA    | Qualidade e Segurança do Paciente     | IMPLEMENTADO (M15)  |
 | 16 | ATI    | Ativos, Manutenção e Cadeia do Frio   | IMPLEMENTADO (M16)  |
 | 17 | EQP    | Equipe, Escalas e Credenciais         | IMPLEMENTADO (M17)  |
+| 18 | ENG    | Engajamento, Referência e Reputação   | IMPLEMENTADO (M18)  |
+| 19 | DIA    | Laboratório e Diagnóstico por Imagem  | IMPLEMENTADO (M19)  |
+| 20 | NCD    | Studio No-code e Automação            | IMPLEMENTADO (M20)  |
+| 21 | MIG    | Migração, Onboarding e Suporte        | IMPLEMENTADO (M21)  |
 
 ## Divergência histórica de nomenclatura
 

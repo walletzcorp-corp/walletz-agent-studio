@@ -3534,3 +3534,520 @@ model TeamCompetency {
   @@map("team_competencies")
 }
 
+// ─── M18 ENG — Engajamento, Referência e Reputação ───────────────────────────
+
+enum EngReferralStatus {
+  ENVIADO
+  ACEITO
+  EM_ATENDIMENTO
+  CONCLUIDO
+  REJEITADO
+  CANCELADO
+}
+
+enum EngReferralPriority {
+  ELETIVA
+  URGENTE
+  EMERGENCIA
+}
+
+enum EngReviewStatus {
+  PENDENTE
+  PUBLICADO
+  REJEITADO
+  ARQUIVADO
+}
+
+enum EngCampaignType {
+  EDUCATIVO
+  ASSISTENCIAL
+  COMERCIAL
+}
+
+enum EngSurveyStage {
+  POS_AGENDAMENTO
+  POS_ATENDIMENTO
+  POS_ALTA
+  POS_EXAME
+  CUSTOMIZADO
+}
+
+model EngPublicProfile {
+  id               String   @id @default(uuid())
+  organizationId   String   @map("organization_id")
+  slug             String
+  displayName      String   @map("display_name")
+  description      String?  @db.Text
+  active           Boolean  @default(true)
+  config           Json     @default("{}")
+  createdBy        String   @map("created_by")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@unique([organizationId, slug])
+  @@index([organizationId])
+  @@map("eng_public_profiles")
+}
+
+model EngReferral {
+  id               String              @id @default(uuid())
+  organizationId   String              @map("organization_id")
+  patientId        String              @map("patient_id")
+  originProfId     String              @map("origin_prof_id")
+  destOrgId        String?             @map("dest_org_id")
+  destProfId       String?             @map("dest_prof_id")
+  destPartnerId    String?             @map("dest_partner_id")
+  reason           String              @db.Text
+  priority         EngReferralPriority @default(ELETIVA)
+  status           EngReferralStatus   @default(ENVIADO)
+  acceptedAt       DateTime?           @map("accepted_at")
+  attendedAt       DateTime?           @map("attended_at")
+  closedAt         DateTime?           @map("closed_at")
+  notes            String?             @db.Text
+  createdBy        String              @map("created_by")
+  createdAt        DateTime            @default(now()) @map("created_at")
+  updatedAt        DateTime            @updatedAt @map("updated_at")
+
+  @@index([organizationId, patientId])
+  @@index([organizationId, status])
+  @@map("eng_referrals")
+}
+
+model EngReview {
+  id               String          @id @default(uuid())
+  organizationId   String          @map("organization_id")
+  patientId        String          @map("patient_id")
+  appointmentId    String?         @map("appointment_id")
+  rating           Int
+  comment          String?         @db.Text
+  status           EngReviewStatus @default(PENDENTE)
+  responseText     String?         @db.Text @map("response_text")
+  respondedBy      String?         @map("responded_by")
+  respondedAt      DateTime?       @map("responded_at")
+  approvedBy       String?         @map("approved_by")
+  approvedAt       DateTime?       @map("approved_at")
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
+
+  @@index([organizationId, status])
+  @@index([organizationId, patientId])
+  @@map("eng_reviews")
+}
+
+model EngPartner {
+  id               String    @id @default(uuid())
+  organizationId   String    @map("organization_id")
+  partnerName      String    @map("partner_name")
+  partnerType      String    @map("partner_type")
+  specialty        String?
+  contact          Json      @default("{}")
+  verified         Boolean   @default(false)
+  verifiedBy       String?   @map("verified_by")
+  verifiedAt       DateTime? @map("verified_at")
+  active           Boolean   @default(true)
+  createdBy        String    @map("created_by")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@index([organizationId, active])
+  @@map("eng_partners")
+}
+
+model EngCampaign {
+  id               String          @id @default(uuid())
+  organizationId   String          @map("organization_id")
+  title            String
+  campaignType     EngCampaignType @map("campaign_type")
+  content          String          @db.Text
+  scheduledAt      DateTime?       @map("scheduled_at")
+  sentAt           DateTime?       @map("sent_at")
+  targetCount      Int             @default(0) @map("target_count")
+  sentCount        Int             @default(0) @map("sent_count")
+  active           Boolean         @default(true)
+  createdBy        String          @map("created_by")
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
+
+  @@index([organizationId, campaignType])
+  @@map("eng_campaigns")
+}
+
+model EngSurvey {
+  id               String         @id @default(uuid())
+  organizationId   String         @map("organization_id")
+  patientId        String         @map("patient_id")
+  appointmentId    String?        @map("appointment_id")
+  stage            EngSurveyStage
+  questions        Json           @default("[]")
+  answers          Json?          @default("[]")
+  completedAt      DateTime?      @map("completed_at")
+  npsScore         Int?           @map("nps_score")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+
+  @@index([organizationId, stage])
+  @@index([organizationId, patientId])
+  @@map("eng_surveys")
+}
+
+// ─── M19 DIA — Laboratório e Diagnóstico por Imagem ──────────────────────────
+
+enum DiaOrderStatus {
+  SOLICITADO
+  AGUARDANDO_AUTORIZACAO
+  AUTORIZADO
+  AGENDADO
+  COLETADO
+  EM_PROCESSAMENTO
+  RESULTADO_DISPONIVEL
+  ENTREGUE
+  CANCELADO
+}
+
+enum DiaSampleStatus {
+  RECEBIDA
+  EM_PROCESSAMENTO
+  PROCESSADA
+  REJEITADA
+  RECOLETADA
+}
+
+enum DiaResultStatus {
+  RASCUNHO
+  REVISAO
+  LIBERADO
+  RETIFICADO
+}
+
+model DiaOrder {
+  id               String         @id @default(uuid())
+  organizationId   String         @map("organization_id")
+  patientId        String         @map("patient_id")
+  appointmentId    String?        @map("appointment_id")
+  requestedBy      String         @map("requested_by")
+  examCode         String         @map("exam_code")
+  examName         String         @map("exam_name")
+  examType         String         @map("exam_type")
+  prepInstructions String?        @db.Text @map("prep_instructions")
+  authorizationId  String?        @map("authorization_id")
+  status           DiaOrderStatus @default(SOLICITADO)
+  scheduledAt      DateTime?      @map("scheduled_at")
+  notes            String?        @db.Text
+  createdBy        String         @map("created_by")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+
+  samples  DiaSample[]
+  results  DiaResult[]
+
+  @@index([organizationId, patientId])
+  @@index([organizationId, status])
+  @@map("dia_orders")
+}
+
+model DiaSample {
+  id               String          @id @default(uuid())
+  organizationId   String          @map("organization_id")
+  orderId          String          @map("order_id")
+  barcode          String
+  sampleType       String          @map("sample_type")
+  collectedAt      DateTime?       @map("collected_at")
+  collectedBy      String?         @map("collected_by")
+  status           DiaSampleStatus @default(RECEBIDA)
+  rejectionReason  String?         @db.Text @map("rejection_reason")
+  rejectedBy       String?         @map("rejected_by")
+  rejectedAt       DateTime?       @map("rejected_at")
+  parentSampleId   String?         @map("parent_sample_id")
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
+
+  order            DiaOrder        @relation(fields: [orderId], references: [id])
+
+  @@unique([organizationId, barcode])
+  @@index([orderId])
+  @@map("dia_samples")
+}
+
+model DiaResult {
+  id               String          @id @default(uuid())
+  organizationId   String          @map("organization_id")
+  orderId          String          @map("order_id")
+  version          Int             @default(1)
+  status           DiaResultStatus @default(RASCUNHO)
+  resultData       Json            @map("result_data")
+  isCritical       Boolean         @default(false) @map("is_critical")
+  criticalAckedBy  String?         @map("critical_acked_by")
+  criticalAckedAt  DateTime?       @map("critical_acked_at")
+  releasedBy       String?         @map("released_by")
+  releasedAt       DateTime?       @map("released_at")
+  rectifiedBy      String?         @map("rectified_by")
+  rectifiedAt      DateTime?       @map("rectified_at")
+  rectificationNote String?        @db.Text @map("rectification_note")
+  deliveredAt      DateTime?       @map("delivered_at")
+  createdBy        String          @map("created_by")
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
+
+  order            DiaOrder        @relation(fields: [orderId], references: [id])
+
+  @@index([orderId])
+  @@index([organizationId, isCritical])
+  @@map("dia_results")
+}
+
+model DiaWorkItem {
+  id               String    @id @default(uuid())
+  organizationId   String    @map("organization_id")
+  orderId          String    @map("order_id")
+  assignedTo       String?   @map("assigned_to")
+  equipmentId      String?   @map("equipment_id")
+  priority         String    @default("NORMAL")
+  scheduledAt      DateTime? @map("scheduled_at")
+  startedAt        DateTime? @map("started_at")
+  completedAt      DateTime? @map("completed_at")
+  notes            String?   @db.Text
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@index([organizationId, assignedTo])
+  @@map("dia_work_items")
+}
+
+// ─── M20 NCD — Studio No-code e Automação ────────────────────────────────────
+
+enum NcdTemplateType {
+  FORMULARIO
+  PROTOCOLO
+  CHECKLIST
+  JORNADA
+}
+
+enum NcdVersionStatus {
+  RASCUNHO
+  AGUARDANDO_APROVACAO
+  PUBLICADO
+  RETIRADO
+}
+
+enum NcdAutomationStatus {
+  ATIVO
+  INATIVO
+  ERRO
+  PAUSADO
+}
+
+model NcdTemplate {
+  id               String          @id @default(uuid())
+  organizationId   String          @map("organization_id")
+  name             String
+  templateType     NcdTemplateType @map("template_type")
+  specialty        String?
+  description      String?         @db.Text
+  isLibraryModel   Boolean         @default(false) @map("is_library_model")
+  currentVersionId String?         @map("current_version_id")
+  createdBy        String          @map("created_by")
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
+
+  versions         NcdVersion[]
+  automations      NcdAutomation[]
+
+  @@index([organizationId, templateType])
+  @@map("ncd_templates")
+}
+
+model NcdVersion {
+  id               String           @id @default(uuid())
+  organizationId   String           @map("organization_id")
+  templateId       String           @map("template_id")
+  versionNumber    Int              @map("version_number")
+  status           NcdVersionStatus @default(RASCUNHO)
+  schema           Json
+  rules            Json             @default("[]")
+  allowedRoles     Json             @default("[]") @map("allowed_roles")
+  approvedBy       String?          @map("approved_by")
+  approvedAt       DateTime?        @map("approved_at")
+  publishedAt      DateTime?        @map("published_at")
+  retiredAt        DateTime?        @map("retired_at")
+  retiredBy        String?          @map("retired_by")
+  changeNotes      String?          @db.Text @map("change_notes")
+  createdBy        String           @map("created_by")
+  createdAt        DateTime         @default(now()) @map("created_at")
+
+  template         NcdTemplate      @relation(fields: [templateId], references: [id])
+
+  @@unique([templateId, versionNumber])
+  @@index([organizationId, status])
+  @@map("ncd_versions")
+}
+
+model NcdAutomation {
+  id               String              @id @default(uuid())
+  organizationId   String              @map("organization_id")
+  templateId       String?             @map("template_id")
+  name             String
+  triggerEvent     String              @map("trigger_event")
+  conditions       Json                @default("[]")
+  actions          Json                @default("[]")
+  status           NcdAutomationStatus @default(ATIVO)
+  maxExecutions    Int?                @map("max_executions")
+  executionCount   Int                 @default(0) @map("execution_count")
+  lastError        String?             @db.Text @map("last_error")
+  lastRunAt        DateTime?           @map("last_run_at")
+  createdBy        String              @map("created_by")
+  createdAt        DateTime            @default(now()) @map("created_at")
+  updatedAt        DateTime            @updatedAt @map("updated_at")
+
+  template         NcdTemplate?        @relation(fields: [templateId], references: [id])
+
+  @@index([organizationId, status])
+  @@map("ncd_automations")
+}
+
+model NcdSimulation {
+  id               String    @id @default(uuid())
+  organizationId   String    @map("organization_id")
+  versionId        String    @map("version_id")
+  inputData        Json      @map("input_data")
+  outputData       Json?     @map("output_data")
+  passed           Boolean   @default(false)
+  runBy            String    @map("run_by")
+  runAt            DateTime  @default(now()) @map("run_at")
+
+  @@index([organizationId, versionId])
+  @@map("ncd_simulations")
+}
+
+// ─── M21 MIG — Migração, Onboarding e Suporte ────────────────────────────────
+
+enum MigJobStatus {
+  RASCUNHO
+  VALIDANDO
+  VALIDADO
+  PILOTO
+  APROVADO
+  EXECUTANDO
+  CONCLUIDO
+  REVERTIDO
+  CANCELADO
+}
+
+enum MigTicketStatus {
+  ABERTO
+  EM_ATENDIMENTO
+  AGUARDANDO_CLIENTE
+  RESOLVIDO
+  FECHADO
+}
+
+enum MigTicketPriority {
+  BAIXA
+  MEDIA
+  ALTA
+  CRITICA
+}
+
+model MigJob {
+  id               String       @id @default(uuid())
+  organizationId   String       @map("organization_id")
+  name             String
+  sourceFormat     String       @map("source_format")
+  targetModule     String       @map("target_module")
+  mapping          Json         @default("{}")
+  status           MigJobStatus @default(RASCUNHO)
+  totalRows        Int          @default(0) @map("total_rows")
+  validRows        Int          @default(0) @map("valid_rows")
+  rejectedRows     Int          @default(0) @map("rejected_rows")
+  duplicateRows    Int          @default(0) @map("duplicate_rows")
+  inputHash        String?      @map("input_hash")
+  rejectionReport  Json?        @map("rejection_report")
+  approvedBy       String?      @map("approved_by")
+  approvedAt       DateTime?    @map("approved_at")
+  formalAcceptedAt DateTime?    @map("formal_accepted_at")
+  rollbackAvailable Boolean     @default(false) @map("rollback_available")
+  notes            String?      @db.Text
+  createdBy        String       @map("created_by")
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
+
+  @@index([organizationId, status])
+  @@map("mig_jobs")
+}
+
+model MigHealthScore {
+  id               String    @id @default(uuid())
+  organizationId   String    @map("organization_id")
+  scoreDate        DateTime  @map("score_date") @db.Date
+  implantationScore Int      @default(0) @map("implantation_score")
+  adoptionScore    Int       @default(0) @map("adoption_score")
+  securityScore    Int       @default(0) @map("security_score")
+  operationScore   Int       @default(0) @map("operation_score")
+  overallScore     Int       @default(0) @map("overall_score")
+  criteria         Json      @default("{}")
+  calculatedBy     String    @map("calculated_by")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  @@unique([organizationId, scoreDate])
+  @@index([organizationId])
+  @@map("mig_health_scores")
+}
+
+model MigTicket {
+  id               String             @id @default(uuid())
+  organizationId   String             @map("organization_id")
+  title            String
+  description      String             @db.Text
+  priority         MigTicketPriority  @default(MEDIA)
+  status           MigTicketStatus    @default(ABERTO)
+  category         String?
+  assignedTo       String?            @map("assigned_to")
+  resolvedAt       DateTime?          @map("resolved_at")
+  closedAt         DateTime?          @map("closed_at")
+  slaDeadline      DateTime?          @map("sla_deadline")
+  resolutionNote   String?            @db.Text @map("resolution_note")
+  createdBy        String             @map("created_by")
+  createdAt        DateTime           @default(now()) @map("created_at")
+  updatedAt        DateTime           @updatedAt @map("updated_at")
+
+  @@index([organizationId, status])
+  @@index([organizationId, priority])
+  @@map("mig_tickets")
+}
+
+model MigAccessGrant {
+  id               String    @id @default(uuid())
+  organizationId   String    @map("organization_id")
+  grantedTo        String    @map("granted_to")
+  scope            String    @db.Text
+  reason           String    @db.Text
+  expiresAt        DateTime  @map("expires_at")
+  revokedAt        DateTime? @map("revoked_at")
+  revokedBy        String?   @map("revoked_by")
+  maskingEnabled   Boolean   @default(true) @map("masking_enabled")
+  approvedBy       String    @map("approved_by")
+  auditLog         Json      @default("[]") @map("audit_log")
+  createdBy        String    @map("created_by")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@index([organizationId, grantedTo])
+  @@index([organizationId, expiresAt])
+  @@map("mig_access_grants")
+}
+
+model MigOnboardingConfig {
+  id               String    @id @default(uuid())
+  organizationId   String    @map("organization_id")
+  orgSize          String?   @map("org_size")
+  specialty        String?
+  checklistItems   Json      @default("[]") @map("checklist_items")
+  completedItems   Json      @default("[]") @map("completed_items")
+  academyProgress  Json      @default("{}") @map("academy_progress")
+  createdBy        String    @map("created_by")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@unique([organizationId])
+  @@map("mig_onboarding_configs")
+}
+

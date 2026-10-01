@@ -26,6 +26,10 @@ import {
   DoorOpen,
   Pill,
   Zap,
+  HeartHandshake,
+  FlaskConical,
+  Workflow,
+  PackageOpen,
 } from 'lucide-react';
 
 const navItems = [
@@ -51,6 +55,10 @@ const navItems = [
   { href: '/qualidade',      label: 'Qualidade',        icon: ShieldCheck },
   { href: '/ativos',         label: 'Ativos',           icon: Zap },
   { href: '/equipe',         label: 'Equipe',           icon: Users },
+  { href: '/engajamento',    label: 'Engajamento',      icon: HeartHandshake },
+  { href: '/diagnostico',    label: 'Diagnóstico',      icon: FlaskConical },
+  { href: '/studio',         label: 'Studio No-code',   icon: Workflow },
+  { href: '/migracao',       label: 'Migração',         icon: PackageOpen },
   { href: '/audit',          label: 'Auditoria',        icon: ClipboardList },
   { href: '/status',         label: 'Status do Produto', icon: Map },
 ];

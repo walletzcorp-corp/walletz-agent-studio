@@ -25,6 +25,10 @@ import { MedModule } from './modules/med/med.module';
 import { QuaModule } from './modules/qua/qua.module';
 import { AtiModule } from './modules/ati/ati.module';
 import { EqpModule } from './modules/eqp/eqp.module';
+import { EngModule } from './modules/eng/eng.module';
+import { DiaModule } from './modules/dia/dia.module';
+import { NcdModule } from './modules/ncd/ncd.module';
+import { MigModule } from './modules/mig/mig.module';
 
 @Module({
   imports: [
@@ -62,6 +66,10 @@ import { EqpModule } from './modules/eqp/eqp.module';
     QuaModule,
     AtiModule,
     EqpModule,
+    EngModule,
+    DiaModule,
+    NcdModule,
+    MigModule,
   ],
 })
 export class AppModule {}
