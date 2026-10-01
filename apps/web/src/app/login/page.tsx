@@ -2,6 +2,20 @@
 import { signIn, useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { ArrowRight } from 'lucide-react';
+
+function PrismFlowLogo({ size = 52 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <ellipse cx="26" cy="18" rx="14" ry="8.5" stroke="#152DFF" strokeWidth="5.5"
+        fill="none" strokeLinecap="round" transform="rotate(-30 26 18)" />
+      <ellipse cx="18" cy="33" rx="14" ry="8.5" stroke="#00B7A8" strokeWidth="5.5"
+        fill="none" strokeLinecap="round" transform="rotate(90 18 33)" />
+      <ellipse cx="34" cy="33" rx="14" ry="8.5" stroke="#FF784F" strokeWidth="5.5"
+        fill="none" strokeLinecap="round" transform="rotate(150 34 33)" />
+    </svg>
+  );
+}
 
 export default function LoginPage() {
   const { data: session, status } = useSession();
@@ -28,7 +42,6 @@ export default function LoginPage() {
         setDevError(data.error ?? 'Erro ao obter token de dev');
         return;
       }
-      // Armazena o token em cookie (acessível em server components) e sessionStorage
       document.cookie = `walletz_dev_token=${data.access_token}; path=/; max-age=28800; SameSite=Lax`;
       sessionStorage.setItem('walletz_dev_token', data.access_token);
       sessionStorage.setItem('walletz_dev_user', JSON.stringify(data.user));
@@ -42,62 +55,119 @@ export default function LoginPage() {
 
   if (status === 'loading') {
     return (
-      <div className="min-h-screen bg-brand-graphite flex items-center justify-center">
-        <p className="text-white text-sm">Carregando...</p>
+      <div className="min-h-screen flex items-center justify-center" style={{ background: '#0f172a' }}>
+        <div className="flex flex-col items-center gap-4">
+          <PrismFlowLogo />
+          <p className="text-slate-400 text-sm">Carregando...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-brand-graphite flex items-center justify-center px-4">
-      <div className="w-full max-w-sm">
-        {/* Logo / nome */}
-        <div className="text-center mb-8">
-          <span className="text-brand-emerald font-bold text-3xl tracking-tight">Walletz</span>
-          <span className="text-white font-light text-3xl"> Med</span>
-          <p className="text-slate-400 text-sm mt-1">Sistema Operacional para Clínicas</p>
-        </div>
+    <div
+      className="min-h-screen flex items-center justify-center px-4"
+      style={{
+        background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%)',
+      }}
+    >
+      {/* Background glow */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
+        <div
+          className="absolute -top-24 -left-24 w-96 h-96 rounded-full opacity-10"
+          style={{ background: '#152DFF', filter: 'blur(80px)' }}
+        />
+        <div
+          className="absolute -bottom-24 -right-24 w-96 h-96 rounded-full opacity-10"
+          style={{ background: '#00B7A8', filter: 'blur(80px)' }}
+        />
+        <div
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-72 h-72 rounded-full opacity-5"
+          style={{ background: '#FF784F', filter: 'blur(60px)' }}
+        />
+      </div>
 
-        <div className="bg-brand-graphite-light rounded-2xl p-8 shadow-2xl space-y-4">
-          <div>
-            <h1 className="text-white text-xl font-semibold mb-1">Entrar</h1>
-            <p className="text-slate-400 text-sm">
-              Use sua conta institucional para acessar
+      <div className="relative w-full max-w-sm">
+        {/* Logo mark + wordmark */}
+        <div className="flex flex-col items-center mb-8">
+          <PrismFlowLogo size={56} />
+          <div className="mt-4 text-center">
+            <div className="text-3xl font-bold tracking-tight leading-tight">
+              <span style={{ color: '#152DFF' }}>Walletz</span>
+              <span style={{ color: '#00B7A8' }}>Med</span>
+            </div>
+            <div className="text-[10px] font-semibold tracking-[0.22em] text-slate-500 uppercase mt-0.5">
+              Prism Flow
+            </div>
+            <p className="text-slate-400 text-xs mt-2">
+              People. Resources. Information. Care in Flow.
             </p>
           </div>
+        </div>
 
-          {/* Login Keycloak (produção) */}
-          <button
-            onClick={() => signIn('keycloak', { callbackUrl: '/dashboard' })}
-            className="btn-primary w-full justify-center py-3"
-          >
-            Entrar com Keycloak
-          </button>
-
-          {/* Divisor */}
-          <div className="flex items-center gap-2">
-            <div className="flex-1 border-t border-slate-700" />
-            <span className="text-slate-500 text-xs">ou</span>
-            <div className="flex-1 border-t border-slate-700" />
+        {/* Card */}
+        <div
+          className="rounded-2xl p-8 shadow-2xl space-y-4"
+          style={{
+            background: 'rgba(30,41,59,0.85)',
+            backdropFilter: 'blur(16px)',
+            border: '1px solid rgba(255,255,255,0.08)',
+          }}
+        >
+          <div>
+            <h1 className="text-white text-xl font-bold mb-1">Entrar</h1>
+            <p className="text-slate-400 text-sm">Use sua conta institucional para acessar</p>
           </div>
 
-          {/* Login Dev (sem Keycloak) */}
+          {/* Keycloak */}
+          <button
+            onClick={() => signIn('keycloak', { callbackUrl: '/dashboard' })}
+            className="w-full py-3 rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-2 transition-all hover:-translate-y-px hover:shadow-lg"
+            style={{ background: '#152DFF' }}
+          >
+            Entrar com Keycloak
+            <ArrowRight size={16} />
+          </button>
+
+          <div className="flex items-center gap-2">
+            <div className="flex-1 border-t border-white/10" />
+            <span className="text-slate-500 text-xs">ou</span>
+            <div className="flex-1 border-t border-white/10" />
+          </div>
+
+          {/* Dev login */}
           <button
             onClick={handleDevLogin}
             disabled={devLoading}
-            className="w-full py-3 rounded-lg border border-brand-emerald text-brand-emerald text-sm font-medium hover:bg-brand-emerald hover:text-white transition-colors disabled:opacity-50"
+            className="w-full py-3 rounded-xl border text-sm font-medium transition-all disabled:opacity-50"
+            style={{
+              borderColor: '#00B7A8',
+              color: '#00B7A8',
+            }}
+            onMouseEnter={e => {
+              (e.currentTarget as HTMLButtonElement).style.background = '#00B7A8';
+              (e.currentTarget as HTMLButtonElement).style.color = '#fff';
+            }}
+            onMouseLeave={e => {
+              (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
+              (e.currentTarget as HTMLButtonElement).style.color = '#00B7A8';
+            }}
           >
             {devLoading ? 'Autenticando...' : 'Entrar como Dev Admin (sem Keycloak)'}
           </button>
 
           {devError && (
-            <p className="text-red-400 text-xs text-center">{devError}</p>
+            <p className="text-red-400 text-xs text-center bg-red-950/40 rounded-lg px-3 py-2">{devError}</p>
           )}
 
           <p className="text-slate-500 text-xs text-center">
-            Dev: <code className="text-brand-emerald">dev-admin@walletz-med.local</code>
+            Dev: <code style={{ color: '#00B7A8' }}>dev-admin@walletz-med.local</code>
           </p>
         </div>
+
+        <p className="text-slate-600 text-xs text-center mt-6">
+          © {new Date().getFullYear()} Walletz Corp. Todos os direitos reservados.
+        </p>
       </div>
     </div>
   );
