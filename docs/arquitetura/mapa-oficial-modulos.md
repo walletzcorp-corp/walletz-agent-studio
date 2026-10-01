@@ -19,6 +19,10 @@ Data de revisão: 2026-10-01
 | 11 | IA     | Inteligência Artificial Clínica       | IMPLEMENTADO (M11)  |
 | 12 | INT    | Integrações e Portal do Paciente      | IMPLEMENTADO (M12)  |
 | 13 | SAL    | Salas, Poltronas e Fluxo Físico       | IMPLEMENTADO (M13)  |
+| 14 | MED    | Segurança de Medicamentos             | IMPLEMENTADO (M14)  |
+| 15 | QUA    | Qualidade e Segurança do Paciente     | IMPLEMENTADO (M15)  |
+| 16 | ATI    | Ativos, Manutenção e Cadeia do Frio   | IMPLEMENTADO (M16)  |
+| 17 | EQP    | Equipe, Escalas e Credenciais         | IMPLEMENTADO (M17)  |
 
 ## Divergência histórica de nomenclatura
 

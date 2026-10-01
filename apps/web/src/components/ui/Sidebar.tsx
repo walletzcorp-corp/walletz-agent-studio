@@ -24,6 +24,8 @@ import {
   BrainCircuit,
   Plug,
   DoorOpen,
+  Pill,
+  Zap,
 } from 'lucide-react';
 
 const navItems = [
@@ -45,6 +47,10 @@ const navItems = [
   { href: '/salas',          label: 'Salas',            icon: DoorOpen },
   { href: '/ia',             label: 'IA Clínica',       icon: BrainCircuit },
   { href: '/integracoes',    label: 'Integrações',      icon: Plug },
+  { href: '/medicamentos',   label: 'Medicamentos',     icon: Pill },
+  { href: '/qualidade',      label: 'Qualidade',        icon: ShieldCheck },
+  { href: '/ativos',         label: 'Ativos',           icon: Zap },
+  { href: '/equipe',         label: 'Equipe',           icon: Users },
   { href: '/audit',          label: 'Auditoria',        icon: ClipboardList },
   { href: '/status',         label: 'Status do Produto', icon: Map },
 ];

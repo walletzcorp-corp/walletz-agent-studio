@@ -1,6 +1,6 @@
 # Guia de Implantação — Walletz Med
 
-**Versão**: 2026-10-01 (Módulos 1-13)
+**Versão**: 2026-10-01 (Módulos 1-17)
 
 > **Este guia é para ambiente de desenvolvimento.** Produção requer revisão de segurança independente, configuração de infraestrutura dedicada, e conformidade LGPD/CFM validada.
 
@@ -44,6 +44,7 @@ npx prisma generate
 |----------|---------|-----------|
 | `20261001000000_module9_tis_module10_crm` | M9, M10 | TIS, CRM, ConvêniosOperadoras |
 | `20261001100000_module11_ia_module12_int_module13_sal` | M11, M12, M13 | IA, Integrações, Salas |
+| `20261001200000_module14_med_module15_qua_module16_ati_module17_eqp` | M14, M15, M16, M17 | Medicamentos, Qualidade, Ativos, Equipe |
 
 ## 3. Executar em Desenvolvimento
 
@@ -63,7 +64,7 @@ pnpm run dev
 cd apps/api
 npx jest
 
-# Resultado esperado: 231 testes, 14 suítes, 0 falhas
+# Resultado esperado: ~367 testes, 18 suítes, 0 falhas
 ```
 
 ## 5. TypeScript Check

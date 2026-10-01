@@ -21,6 +21,10 @@ import { CrmModule } from './modules/crm/crm.module';
 import { IaModule } from './modules/ia/ia.module';
 import { IntModule } from './modules/int/int.module';
 import { SalModule } from './modules/sal/sal.module';
+import { MedModule } from './modules/med/med.module';
+import { QuaModule } from './modules/qua/qua.module';
+import { AtiModule } from './modules/ati/ati.module';
+import { EqpModule } from './modules/eqp/eqp.module';
 
 @Module({
   imports: [
@@ -54,6 +58,10 @@ import { SalModule } from './modules/sal/sal.module';
     IaModule,
     IntModule,
     SalModule,
+    MedModule,
+    QuaModule,
+    AtiModule,
+    EqpModule,
   ],
 })
 export class AppModule {}

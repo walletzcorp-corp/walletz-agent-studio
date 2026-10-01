@@ -2891,3 +2891,646 @@ model RoomIncident {
   @@index([organizationId, status])
   @@map("room_incidents")
 }
+
+// -----------------------------------------------------------
+// M14 MED — Segurança de Medicamentos e Procedimentos
+// -----------------------------------------------------------
+
+enum MedRecordStatus {
+  RESERVADO
+  PREPARADO
+  ADMINISTRADO
+  DEVOLVIDO
+  DESCARTADO
+  BAIXADO
+  CANCELADO
+}
+
+enum MedRouteType {
+  ORAL
+  EV
+  IM
+  SC
+  TOPICO
+  INALATORIO
+  SL
+  RETAL
+  TRANSDERMICO
+  NASAL
+  OCULAR
+  OTOLOGICO
+  OUTRO
+}
+
+enum MedAdverseReactionSeverity {
+  LEVE
+  MODERADA
+  GRAVE
+  FATAL
+}
+
+enum MedLotAlertType {
+  VENCIMENTO
+  RECOLHIMENTO
+  FORA_CONDICAO
+  SUSPEITA_QUALIDADE
+}
+
+model MedProtocol {
+  id                  String    @id @default(uuid())
+  organizationId      String    @map("organization_id")
+  name                String
+  code                String?
+  description         String?   @db.Text
+  version             String    @default("1.0")
+  active              Boolean   @default(true)
+  approvedBy          String?   @map("approved_by")
+  approvedAt          DateTime? @map("approved_at")
+  requiresDualCheck   Boolean   @default(false) @map("requires_dual_check")
+  routes              Json?
+  createdBy           String    @map("created_by")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  records MedAdministrationRecord[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, active])
+  @@map("med_protocols")
+}
+
+model MedAdministrationRecord {
+  id                  String          @id @default(uuid())
+  organizationId      String          @map("organization_id")
+  patientId           String          @map("patient_id")
+  prescriptionRef     String?         @map("prescription_ref")
+  protocolId          String?         @map("protocol_id")
+  protocol            MedProtocol?    @relation(fields: [protocolId], references: [id])
+  appointmentId       String?         @map("appointment_id")
+  roomBookingId       String?         @map("room_booking_id")
+  medicationName      String          @map("medication_name")
+  medicationCode      String?         @map("medication_code")
+  dose                Decimal         @db.Decimal(15, 4)
+  doseUnit            String          @map("dose_unit")
+  route               MedRouteType
+  lotNumber           String?         @map("lot_number")
+  expiryDate          DateTime?       @map("expiry_date")
+  scheduledAt         DateTime        @map("scheduled_at")
+  preparedAt          DateTime?       @map("prepared_at")
+  administeredAt      DateTime?       @map("administered_at")
+  status              MedRecordStatus @default(RESERVADO)
+  patient1stId        String?         @map("patient_1st_id")
+  patient2ndId        String?         @map("patient_2nd_id")
+  identifiedBy        String?         @map("identified_by")
+  preparedBy          String?         @map("prepared_by")
+  administeredBy      String?         @map("administered_by")
+  returnedBy          String?         @map("returned_by")
+  returnedAt          DateTime?       @map("returned_at")
+  wasteReason         String?         @map("waste_reason")
+  notes               String?         @db.Text
+  infusionRateMl      Decimal?        @db.Decimal(15, 4) @map("infusion_rate_ml")
+  infusionDurationMin Int?            @map("infusion_duration_min")
+  isControlled        Boolean         @default(false) @map("is_controlled")
+  isHighAlert         Boolean         @default(false) @map("is_high_alert")
+  createdBy           String          @map("created_by")
+  createdAt           DateTime        @default(now()) @map("created_at")
+  updatedAt           DateTime        @updatedAt @map("updated_at")
+
+  verifications    MedVerification[]
+  adverseReactions MedAdverseReaction[]
+  auditTrail       MedRecordAudit[]
+
+  @@index([organizationId, patientId])
+  @@index([organizationId, status])
+  @@index([organizationId, scheduledAt])
+  @@index([lotNumber])
+  @@map("med_administration_records")
+}
+
+model MedVerification {
+  id          String                  @id @default(uuid())
+  recordId    String                  @map("record_id")
+  record      MedAdministrationRecord @relation(fields: [recordId], references: [id])
+  verifiedBy  String                  @map("verified_by")
+  verifiedAt  DateTime                @default(now()) @map("verified_at")
+  role        String                  @default("VERIFICADOR_1")
+  checkItems  Json?                   @map("check_items")
+  notes       String?
+
+  @@unique([recordId, role])
+  @@index([recordId])
+  @@map("med_verifications")
+}
+
+model MedAdverseReaction {
+  id              String                     @id @default(uuid())
+  organizationId  String                     @map("organization_id")
+  recordId        String?                    @map("record_id")
+  record          MedAdministrationRecord?   @relation(fields: [recordId], references: [id])
+  patientId       String                     @map("patient_id")
+  medicationName  String                     @map("medication_name")
+  reactionDesc    String                     @db.Text @map("reaction_desc")
+  severity        MedAdverseReactionSeverity @default(LEVE)
+  onsetAt         DateTime                   @map("onset_at")
+  resolvedAt      DateTime?                  @map("resolved_at")
+  treatment       String?                    @db.Text
+  reportedBy      String                     @map("reported_by")
+  reportedAt      DateTime                   @default(now()) @map("reported_at")
+  notifiedQuality Boolean                    @default(false) @map("notified_quality")
+  notes           String?                    @db.Text
+  createdAt       DateTime                   @default(now()) @map("created_at")
+
+  @@index([organizationId, patientId])
+  @@index([organizationId, severity])
+  @@map("med_adverse_reactions")
+}
+
+model MedLotAlert {
+  id              String          @id @default(uuid())
+  organizationId  String          @map("organization_id")
+  lotNumber       String          @map("lot_number")
+  medicationName  String          @map("medication_name")
+  medicationCode  String?         @map("medication_code")
+  alertType       MedLotAlertType @map("alert_type")
+  reason          String          @db.Text
+  blockedAt       DateTime        @default(now()) @map("blocked_at")
+  blockedBy       String          @map("blocked_by")
+  resolvedAt      DateTime?       @map("resolved_at")
+  resolvedBy      String?         @map("resolved_by")
+  resolutionNotes String?         @db.Text @map("resolution_notes")
+  active          Boolean         @default(true)
+  affectedRecords Int             @default(0) @map("affected_records")
+
+  @@index([organizationId, active])
+  @@index([lotNumber])
+  @@map("med_lot_alerts")
+}
+
+model MedRecordAudit {
+  id         String                  @id @default(uuid())
+  recordId   String                  @map("record_id")
+  record     MedAdministrationRecord @relation(fields: [recordId], references: [id])
+  action     String
+  fieldName  String?                 @map("field_name")
+  oldValue   String?                 @db.Text @map("old_value")
+  newValue   String?                 @db.Text @map("new_value")
+  reason     String?                 @db.Text
+  changedBy  String                  @map("changed_by")
+  changedAt  DateTime                @default(now()) @map("changed_at")
+
+  @@index([recordId, changedAt])
+  @@map("med_record_audits")
+}
+
+// -----------------------------------------------------------
+// M15 QUA — Qualidade e Segurança do Paciente
+// -----------------------------------------------------------
+
+enum QualityIncidentStatus {
+  ABERTO
+  EM_ANALISE
+  EM_ACAO
+  ENCERRADO
+  CANCELADO
+}
+
+enum QualityIncidentType {
+  QUASE_FALHA
+  INCIDENTE_SEM_DANO
+  INCIDENTE_COM_DANO
+  EVENTO_SENTINELA
+}
+
+enum QualityActionStatus {
+  PENDENTE
+  EM_ANDAMENTO
+  CONCLUIDA
+  VERIFICADA
+  CANCELADA
+}
+
+enum QualityProtocolStatus {
+  RASCUNHO
+  VIGENTE
+  ARQUIVADO
+}
+
+model QualityIncident {
+  id                    String                @id @default(uuid())
+  organizationId        String                @map("organization_id")
+  unitId                String?               @map("unit_id")
+  incidentType          QualityIncidentType   @map("incident_type")
+  status                QualityIncidentStatus @default(ABERTO)
+  title                 String
+  description           String                @db.Text
+  occurredAt            DateTime              @map("occurred_at")
+  location              String?
+  patientId             String?               @map("patient_id")
+  isAnonymous           Boolean               @default(false) @map("is_anonymous")
+  reportedBy            String?               @map("reported_by")
+  reportedAt            DateTime              @default(now()) @map("reported_at")
+  riskClassification    String?               @map("risk_classification")
+  rootCause             String?               @db.Text @map("root_cause")
+  contributingFactors   Json?                 @map("contributing_factors")
+  immediateActions      String?               @db.Text @map("immediate_actions")
+  analysisBy            String?               @map("analysis_by")
+  analysisAt            DateTime?             @map("analysis_at")
+  closedBy              String?               @map("closed_by")
+  closedAt              DateTime?             @map("closed_at")
+  notifyRegulatory      Boolean               @default(false) @map("notify_regulatory")
+  regulatoryNotifiedAt  DateTime?             @map("regulatory_notified_at")
+  regulatoryNotifiedBy  String?               @map("regulatory_notified_by")
+  notes                 String?               @db.Text
+  createdAt             DateTime              @default(now()) @map("created_at")
+  updatedAt             DateTime              @updatedAt @map("updated_at")
+
+  actionPlans QualityActionPlan[]
+  addenda     QualityIncidentAddendum[]
+
+  @@index([organizationId, status])
+  @@index([organizationId, incidentType])
+  @@index([organizationId, occurredAt])
+  @@map("quality_incidents")
+}
+
+model QualityIncidentAddendum {
+  id         String          @id @default(uuid())
+  incidentId String          @map("incident_id")
+  incident   QualityIncident @relation(fields: [incidentId], references: [id])
+  content    String          @db.Text
+  addedBy    String          @map("added_by")
+  addedAt    DateTime        @default(now()) @map("added_at")
+
+  @@index([incidentId])
+  @@map("quality_incident_addenda")
+}
+
+model QualityActionPlan {
+  id               String              @id @default(uuid())
+  organizationId   String              @map("organization_id")
+  incidentId       String?             @map("incident_id")
+  incident         QualityIncident?    @relation(fields: [incidentId], references: [id])
+  title            String
+  description      String              @db.Text
+  actionType       String              @default("CORRETIVA")
+  status           QualityActionStatus @default(PENDENTE)
+  responsibleId    String              @map("responsible_id")
+  dueDate          DateTime            @map("due_date")
+  startedAt        DateTime?           @map("started_at")
+  completedAt      DateTime?           @map("completed_at")
+  evidence         String?             @db.Text
+  verifiedBy       String?             @map("verified_by")
+  verifiedAt       DateTime?           @map("verified_at")
+  verificationNote String?             @db.Text @map("verification_note")
+  createdBy        String              @map("created_by")
+  createdAt        DateTime            @default(now()) @map("created_at")
+  updatedAt        DateTime            @updatedAt @map("updated_at")
+
+  @@index([organizationId, status])
+  @@index([incidentId])
+  @@map("quality_action_plans")
+}
+
+model QualityProtocol {
+  id              String                @id @default(uuid())
+  organizationId  String                @map("organization_id")
+  code            String?
+  title           String
+  category        String?
+  version         String                @default("1.0")
+  status          QualityProtocolStatus @default(RASCUNHO)
+  content         String                @db.Text
+  approvedBy      String?               @map("approved_by")
+  approvedAt      DateTime?             @map("approved_at")
+  effectiveFrom   DateTime?             @map("effective_from")
+  effectiveTo     DateTime?             @map("effective_to")
+  policyOwner     String?               @map("policy_owner")
+  nextReviewDate  DateTime?             @map("next_review_date")
+  createdBy       String                @map("created_by")
+  createdAt       DateTime              @default(now()) @map("created_at")
+  updatedAt       DateTime              @updatedAt @map("updated_at")
+
+  @@index([organizationId, status])
+  @@index([organizationId, category])
+  @@map("quality_protocols")
+}
+
+model QualityIndicator {
+  id              String   @id @default(uuid())
+  organizationId  String   @map("organization_id")
+  name            String
+  code            String?
+  formula         String?  @db.Text
+  unit            String?
+  targetValue     Decimal? @db.Decimal(15, 4) @map("target_value")
+  active          Boolean  @default(true)
+  createdBy       String   @map("created_by")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  measurements QualityIndicatorMeasurement[]
+
+  @@index([organizationId, active])
+  @@map("quality_indicators")
+}
+
+model QualityIndicatorMeasurement {
+  id            String           @id @default(uuid())
+  indicatorId   String           @map("indicator_id")
+  indicator     QualityIndicator @relation(fields: [indicatorId], references: [id])
+  periodStart   DateTime         @map("period_start")
+  periodEnd     DateTime         @map("period_end")
+  value         Decimal          @db.Decimal(15, 4)
+  notes         String?
+  recordedBy    String           @map("recorded_by")
+  recordedAt    DateTime         @default(now()) @map("recorded_at")
+
+  @@index([indicatorId, periodStart])
+  @@map("quality_indicator_measurements")
+}
+
+// -----------------------------------------------------------
+// M16 ATI — Ativos, Manutenção, Esterilização e Cadeia do Frio
+// -----------------------------------------------------------
+
+enum AssetStatus {
+  DISPONIVEL
+  EM_USO
+  EM_MANUTENCAO
+  BLOQUEADO
+  DESCARTADO
+  CEDIDO
+}
+
+enum AssetMaintenanceStatus {
+  SOLICITADA
+  APROVADA
+  EM_EXECUCAO
+  CONCLUIDA
+  CANCELADA
+}
+
+enum AssetMaintenanceType {
+  PREVENTIVA
+  CORRETIVA
+  CALIBRACAO
+  INSPECAO
+  LIMPEZA
+}
+
+model Asset {
+  id                    String      @id @default(uuid())
+  organizationId        String      @map("organization_id")
+  unitId                String?     @map("unit_id")
+  tag                   String?
+  name                  String
+  category              String?
+  manufacturer          String?
+  model                 String?
+  serialNumber          String?     @map("serial_number")
+  acquisitionDate       DateTime?   @map("acquisition_date")
+  acquisitionValue      Decimal?    @db.Decimal(15, 2) @map("acquisition_value")
+  status                AssetStatus @default(DISPONIVEL)
+  location              String?
+  requiresCalibration   Boolean     @default(false) @map("requires_calibration")
+  calibrationPeriodDays Int?        @map("calibration_period_days")
+  lastCalibratedAt      DateTime?   @map("last_calibrated_at")
+  nextCalibrationAt     DateTime?   @map("next_calibration_at")
+  requiresSterilization Boolean     @default(false) @map("requires_sterilization")
+  requiresColdChain     Boolean     @default(false) @map("requires_cold_chain")
+  minTempC              Decimal?    @db.Decimal(5, 2) @map("min_temp_c")
+  maxTempC              Decimal?    @db.Decimal(5, 2) @map("max_temp_c")
+  notes                 String?     @db.Text
+  blockedReason         String?     @db.Text @map("blocked_reason")
+  blockedAt             DateTime?   @map("blocked_at")
+  blockedBy             String?     @map("blocked_by")
+  active                Boolean     @default(true)
+  createdBy             String      @map("created_by")
+  createdAt             DateTime    @default(now()) @map("created_at")
+  updatedAt             DateTime    @updatedAt @map("updated_at")
+
+  maintenanceOrders   AssetMaintenanceOrder[]
+  sterilizationCycles AssetSterilizationCycle[]
+  coldChainLogs       AssetColdChainLog[]
+
+  @@unique([organizationId, tag])
+  @@index([organizationId, status])
+  @@index([organizationId, category])
+  @@map("assets")
+}
+
+model AssetMaintenanceOrder {
+  id               String                 @id @default(uuid())
+  organizationId   String                 @map("organization_id")
+  assetId          String                 @map("asset_id")
+  asset            Asset                  @relation(fields: [assetId], references: [id])
+  maintenanceType  AssetMaintenanceType   @map("maintenance_type")
+  status           AssetMaintenanceStatus @default(SOLICITADA)
+  title            String
+  description      String?                @db.Text
+  requestedBy      String                 @map("requested_by")
+  requestedAt      DateTime               @default(now()) @map("requested_at")
+  approvedBy       String?                @map("approved_by")
+  approvedAt       DateTime?              @map("approved_at")
+  scheduledAt      DateTime?              @map("scheduled_at")
+  startedAt        DateTime?              @map("started_at")
+  completedAt      DateTime?              @map("completed_at")
+  executedBy       String?                @map("executed_by")
+  cost             Decimal?               @db.Decimal(15, 2)
+  findings         String?                @db.Text
+  nextDueAt        DateTime?              @map("next_due_at")
+  createdAt        DateTime               @default(now()) @map("created_at")
+  updatedAt        DateTime               @updatedAt @map("updated_at")
+
+  @@index([organizationId, assetId])
+  @@index([organizationId, status])
+  @@map("asset_maintenance_orders")
+}
+
+model AssetSterilizationCycle {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  assetId        String   @map("asset_id")
+  asset          Asset    @relation(fields: [assetId], references: [id])
+  cycleNumber    String?  @map("cycle_number")
+  method         String
+  processStart   DateTime @map("process_start")
+  processEnd     DateTime? @map("process_end")
+  temperature    Decimal? @db.Decimal(5, 2)
+  pressure       Decimal? @db.Decimal(8, 3)
+  passed         Boolean?
+  batchItems     Json?    @map("batch_items")
+  operatorId     String   @map("operator_id")
+  validatedBy    String?  @map("validated_by")
+  validatedAt    DateTime? @map("validated_at")
+  notes          String?  @db.Text
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([organizationId, assetId])
+  @@index([organizationId, processStart])
+  @@map("asset_sterilization_cycles")
+}
+
+model AssetColdChainLog {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  assetId        String   @map("asset_id")
+  asset          Asset    @relation(fields: [assetId], references: [id])
+  readingAt      DateTime @map("reading_at")
+  temperatureC   Decimal  @db.Decimal(5, 2) @map("temperature_c")
+  humidityPct    Decimal? @db.Decimal(5, 2) @map("humidity_pct")
+  source         String   @default("MANUAL")
+  recordedBy     String?  @map("recorded_by")
+  isExcursion    Boolean  @default(false) @map("is_excursion")
+
+  @@index([organizationId, assetId, readingAt])
+  @@map("asset_cold_chain_logs")
+}
+
+model AssetColdChainExcursion {
+  id              String    @id @default(uuid())
+  organizationId  String    @map("organization_id")
+  assetId         String    @map("asset_id")
+  startedAt       DateTime  @map("started_at")
+  endedAt         DateTime? @map("ended_at")
+  minTempC        Decimal?  @db.Decimal(5, 2) @map("min_temp_c")
+  maxTempC        Decimal?  @db.Decimal(5, 2) @map("max_temp_c")
+  affectedItems   Json?     @map("affected_items")
+  assessment      String?   @db.Text
+  decision        String?
+  decidedBy       String?   @map("decided_by")
+  decidedAt       DateTime? @map("decided_at")
+  notifiedQuality Boolean   @default(false) @map("notified_quality")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@index([organizationId, assetId])
+  @@index([organizationId, startedAt])
+  @@map("asset_cold_chain_excursions")
+}
+
+// -----------------------------------------------------------
+// M17 EQP — Equipe, Escalas e Credenciais
+// -----------------------------------------------------------
+
+enum CredentialStatus {
+  ATIVA
+  VENCIDA
+  SUSPENSA
+  CANCELADA
+}
+
+enum WorkShiftStatus {
+  AGENDADO
+  EM_ANDAMENTO
+  CONCLUIDO
+  CANCELADO
+  FALTA
+  SUBSTITUIDO
+}
+
+model EqpCredential {
+  id              String           @id @default(uuid())
+  organizationId  String           @map("organization_id")
+  professionalId  String           @map("professional_id")
+  credentialType  String           @map("credential_type")
+  number          String?
+  issuingBody     String?          @map("issuing_body")
+  issuedAt        DateTime?        @map("issued_at")
+  expiresAt       DateTime?        @map("expires_at")
+  status          CredentialStatus @default(ATIVA)
+  scope           String?
+  documentUrl     String?          @map("document_url")
+  verifiedBy      String?          @map("verified_by")
+  verifiedAt      DateTime?        @map("verified_at")
+  notes           String?          @db.Text
+  createdBy       String           @map("created_by")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+
+  @@index([organizationId, professionalId])
+  @@index([organizationId, credentialType, status])
+  @@map("eqp_credentials")
+}
+
+model WorkSchedule {
+  id              String    @id @default(uuid())
+  organizationId  String    @map("organization_id")
+  unitId          String?   @map("unit_id")
+  name            String
+  description     String?
+  startDate       DateTime  @map("start_date")
+  endDate         DateTime? @map("end_date")
+  active          Boolean   @default(true)
+  createdBy       String    @map("created_by")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  shifts WorkShift[]
+
+  @@index([organizationId, active])
+  @@map("work_schedules")
+}
+
+model WorkShift {
+  id              String          @id @default(uuid())
+  scheduleId      String          @map("schedule_id")
+  schedule        WorkSchedule    @relation(fields: [scheduleId], references: [id])
+  organizationId  String          @map("organization_id")
+  professionalId  String          @map("professional_id")
+  role            String?
+  shiftStart      DateTime        @map("shift_start")
+  shiftEnd        DateTime        @map("shift_end")
+  breakMinutes    Int             @default(0) @map("break_minutes")
+  status          WorkShiftStatus @default(AGENDADO)
+  actualStart     DateTime?       @map("actual_start")
+  actualEnd       DateTime?       @map("actual_end")
+  substituteId    String?         @map("substitute_id")
+  cancelReason    String?         @db.Text @map("cancel_reason")
+  notified        Boolean         @default(false)
+  createdBy       String          @map("created_by")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+
+  auditLogs WorkShiftAudit[]
+
+  @@index([scheduleId, professionalId])
+  @@index([organizationId, shiftStart])
+  @@index([organizationId, professionalId, shiftStart])
+  @@map("work_shifts")
+}
+
+model WorkShiftAudit {
+  id         String    @id @default(uuid())
+  shiftId    String    @map("shift_id")
+  shift      WorkShift @relation(fields: [shiftId], references: [id])
+  action     String
+  oldStatus  String?   @map("old_status")
+  newStatus  String?   @map("new_status")
+  changedBy  String    @map("changed_by")
+  reason     String?   @db.Text
+  changedAt  DateTime  @default(now()) @map("changed_at")
+
+  @@index([shiftId])
+  @@map("work_shift_audits")
+}
+
+model TeamCompetency {
+  id              String    @id @default(uuid())
+  organizationId  String    @map("organization_id")
+  professionalId  String    @map("professional_id")
+  competencyName  String    @map("competency_name")
+  competencyCode  String?   @map("competency_code")
+  level           String?
+  certifiedAt     DateTime? @map("certified_at")
+  certifiedBy     String?   @map("certified_by")
+  expiresAt       DateTime? @map("expires_at")
+  active          Boolean   @default(true)
+  createdBy       String    @map("created_by")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@index([organizationId, professionalId])
+  @@index([organizationId, competencyName])
+  @@map("team_competencies")
+}
+
