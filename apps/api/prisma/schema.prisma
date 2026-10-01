@@ -1884,6 +1884,495 @@ model FinancialPeriod {
 }
 
 // ============================================================
+// MÓDULO 9 — TIS: Convênios, TISS e Glosas
+// ============================================================
+
+enum GuideType {
+  CONSULTA
+  SP_SADT
+  INTERNACAO
+  HONORARIOS
+}
+
+enum GuideStatus {
+  RASCUNHO
+  PENDENTE_AUTORIZACAO
+  AUTORIZADO
+  NEGADO
+  ENVIADO
+  PAGO
+  GLOSADO
+  PARCIALMENTE_PAGO
+  RECURSO
+  CANCELADO
+}
+
+enum LotStatus {
+  ABERTO
+  FECHADO
+  ENVIADO
+  RETORNADO
+  PAGO
+  CANCELADO
+}
+
+enum ClaimStatus {
+  ABERTA
+  APRESENTADA
+  ACEITA
+  NEGADA
+  RECURSO
+}
+
+model InsuranceCarrier {
+  id              String             @id @default(uuid())
+  organizationId  String             @map("organization_id")
+  ansCode         String             @map("ans_code")
+  name            String
+  tradeName       String?            @map("trade_name")
+  cnpj            String?
+  phone           String?
+  email           String?
+  active          Boolean            @default(true)
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+
+  plans     InsurancePlan[]
+  contracts InsuranceContract[]
+
+  @@unique([organizationId, ansCode])
+  @@index([organizationId])
+  @@map("insurance_carriers")
+}
+
+model InsurancePlan {
+  id          String           @id @default(uuid())
+  carrierId   String           @map("carrier_id")
+  carrier     InsuranceCarrier @relation(fields: [carrierId], references: [id])
+  name        String
+  planCode    String           @map("plan_code")
+  planType    String           @map("plan_type")
+  active      Boolean          @default(true)
+  createdAt   DateTime         @default(now()) @map("created_at")
+
+  contracts InsuranceContract[]
+
+  @@unique([carrierId, planCode])
+  @@index([carrierId])
+  @@map("insurance_plans")
+}
+
+model InsuranceContract {
+  id                 String           @id @default(uuid())
+  organizationId     String           @map("organization_id")
+  carrierId          String           @map("carrier_id")
+  carrier            InsuranceCarrier @relation(fields: [carrierId], references: [id])
+  planId             String?          @map("plan_id")
+  plan               InsurancePlan?   @relation(fields: [planId], references: [id])
+  contractNumber     String           @map("contract_number")
+  tissVersion        String           @map("tiss_version") // ex: "3.05.00"
+  operatorCode       String           @map("operator_code")
+  providerCode       String           @map("provider_code")
+  validFrom          DateTime         @map("valid_from") @db.Date
+  validUntil         DateTime?        @map("valid_until") @db.Date
+  active             Boolean          @default(true)
+  createdAt          DateTime         @default(now()) @map("created_at")
+  updatedAt          DateTime         @updatedAt @map("updated_at")
+
+  guides InsuranceGuide[]
+  lots   InsuranceLot[]
+
+  @@unique([organizationId, contractNumber])
+  @@index([organizationId])
+  @@map("insurance_contracts")
+}
+
+model TussCode {
+  id            String    @id @default(uuid())
+  organizationId String   @map("organization_id")
+  code          String
+  description   String
+  tableCode     String    @map("table_code")
+  version       String
+  validFrom     DateTime  @map("valid_from") @db.Date
+  validUntil    DateTime? @map("valid_until") @db.Date
+  unitValue     Decimal?  @map("unit_value") @db.Decimal(15, 4)
+  active        Boolean   @default(true)
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  guideItems InsuranceGuideItem[]
+
+  @@unique([organizationId, code, version])
+  @@index([organizationId])
+  @@map("tuss_codes")
+}
+
+model InsuranceGuide {
+  id               String            @id @default(uuid())
+  organizationId   String            @map("organization_id")
+  contractId       String            @map("contract_id")
+  contract         InsuranceContract @relation(fields: [contractId], references: [id])
+  guideType        GuideType
+  status           GuideStatus       @default(RASCUNHO)
+  guideNumber      String?           @map("guide_number")
+  authorizationNumber String?        @map("authorization_number")
+
+  patientId        String?           @map("patient_id")
+  appointmentId    String?           @map("appointment_id")
+  professionalId   String?           @map("professional_id")
+  unitId           String            @map("unit_id")
+
+  serviceDate      DateTime          @map("service_date") @db.Date
+  validationErrors Json?             @map("validation_errors")
+
+  idempotencyKey   String?           @unique @map("idempotency_key")
+  createdBy        String            @map("created_by")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+  submittedAt      DateTime?         @map("submitted_at")
+  paidAt           DateTime?         @map("paid_at")
+  cancelledAt      DateTime?         @map("cancelled_at")
+
+  items    InsuranceGuideItem[]
+  lotItems InsuranceLotItem[]
+  claims   InsuranceClaim[]
+
+  @@index([organizationId])
+  @@index([contractId])
+  @@map("insurance_guides")
+}
+
+model InsuranceGuideItem {
+  id          String         @id @default(uuid())
+  guideId     String         @map("guide_id")
+  guide       InsuranceGuide @relation(fields: [guideId], references: [id], onDelete: Cascade)
+  tussCodeId  String?        @map("tuss_code_id")
+  tussCode    TussCode?      @relation(fields: [tussCodeId], references: [id])
+  description String
+  quantity    Decimal        @db.Decimal(15, 4)
+  unitValue   Decimal        @map("unit_value") @db.Decimal(15, 4)
+  totalValue  Decimal        @map("total_value") @db.Decimal(15, 4)
+  tableCode   String?        @map("table_code")
+  itemCode    String?        @map("item_code")
+
+  @@index([guideId])
+  @@map("insurance_guide_items")
+}
+
+model InsuranceLot {
+  id              String            @id @default(uuid())
+  organizationId  String            @map("organization_id")
+  contractId      String            @map("contract_id")
+  contract        InsuranceContract @relation(fields: [contractId], references: [id])
+  lotNumber       String            @map("lot_number")
+  status          LotStatus         @default(ABERTO)
+  competenceMonth Int               @map("competence_month")
+  competenceYear  Int               @map("competence_year")
+  totalValue      Decimal           @default(0) @map("total_value") @db.Decimal(15, 2)
+  xmlPayload      String?           @map("xml_payload") @db.Text
+  protocolNumber  String?           @map("protocol_number")
+  sentAt          DateTime?         @map("sent_at")
+  returnedAt      DateTime?         @map("returned_at")
+  returnNotes     String?           @map("return_notes")
+  paidValue       Decimal?          @map("paid_value") @db.Decimal(15, 2)
+  paidAt          DateTime?         @map("paid_at")
+  createdBy       String            @map("created_by")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  items InsuranceLotItem[]
+
+  @@unique([organizationId, lotNumber])
+  @@index([organizationId])
+  @@map("insurance_lots")
+}
+
+model InsuranceLotItem {
+  id      String         @id @default(uuid())
+  lotId   String         @map("lot_id")
+  lot     InsuranceLot   @relation(fields: [lotId], references: [id], onDelete: Cascade)
+  guideId String         @map("guide_id")
+  guide   InsuranceGuide @relation(fields: [guideId], references: [id])
+  value   Decimal        @db.Decimal(15, 2)
+
+  @@unique([lotId, guideId])
+  @@index([lotId])
+  @@map("insurance_lot_items")
+}
+
+model InsuranceClaim {
+  id             String         @id @default(uuid())
+  organizationId String         @map("organization_id")
+  guideId        String         @map("guide_id")
+  guide          InsuranceGuide @relation(fields: [guideId], references: [id])
+  status         ClaimStatus    @default(ABERTA)
+  itemDescription String        @map("item_description")
+  claimReason    String         @map("claim_reason")
+  claimCode      String?        @map("claim_code")
+  glosedValue    Decimal        @map("glosed_value") @db.Decimal(15, 2)
+  responsibleParty String       @map("responsible_party")
+  dueDate        DateTime?      @map("due_date") @db.Date
+  resolvedAt     DateTime?      @map("resolved_at")
+  notes          String?
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+
+  appeals InsuranceClaimAppeal[]
+
+  @@index([organizationId])
+  @@index([guideId])
+  @@map("insurance_claims")
+}
+
+model InsuranceClaimAppeal {
+  id          String         @id @default(uuid())
+  claimId     String         @map("claim_id")
+  claim       InsuranceClaim @relation(fields: [claimId], references: [id])
+  appealText  String         @map("appeal_text") @db.Text
+  documentRef String?        @map("document_ref")
+  submittedBy String         @map("submitted_by")
+  submittedAt DateTime       @default(now()) @map("submitted_at")
+  result      String?
+  resultAt    DateTime?      @map("result_at")
+
+  @@index([claimId])
+  @@map("insurance_claim_appeals")
+}
+
+// ============================================================
+// MÓDULO 10 — CRM: CRM e Comunicação
+// ============================================================
+
+enum LeadStatus {
+  NOVO
+  QUALIFICADO
+  EM_CONTATO
+  NEGOCIACAO
+  CONVERTIDO
+  PERDIDO
+}
+
+enum OpportunityStatus {
+  ABERTA
+  GANHA
+  PERDIDA
+  PAUSADA
+}
+
+enum ActivityType {
+  LIGACAO
+  EMAIL
+  WHATSAPP
+  REUNIAO
+  TAREFA
+  NOTA
+}
+
+enum CrmTicketStatus {
+  ABERTO
+  EM_ANDAMENTO
+  AGUARDANDO_CLIENTE
+  RESOLVIDO
+  FECHADO
+}
+
+enum CrmTicketPriority {
+  BAIXA
+  MEDIA
+  ALTA
+  CRITICA
+}
+
+model CrmFunnel {
+  id             String            @id @default(uuid())
+  organizationId String            @map("organization_id")
+  name           String
+  description    String?
+  active         Boolean           @default(true)
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+
+  stages       CrmFunnelStage[]
+  opportunities CrmOpportunity[]
+
+  @@index([organizationId])
+  @@map("crm_funnels")
+}
+
+model CrmFunnelStage {
+  id          String     @id @default(uuid())
+  funnelId    String     @map("funnel_id")
+  funnel      CrmFunnel  @relation(fields: [funnelId], references: [id], onDelete: Cascade)
+  name        String
+  position    Int
+  probability Int        @default(50)
+  isWon       Boolean    @default(false) @map("is_won")
+  isLost      Boolean    @default(false) @map("is_lost")
+
+  opportunities CrmOpportunity[]
+
+  @@unique([funnelId, position])
+  @@index([funnelId])
+  @@map("crm_funnel_stages")
+}
+
+model CrmLead {
+  id              String     @id @default(uuid())
+  organizationId  String     @map("organization_id")
+  name            String
+  email           String?
+  phone           String?
+  source          String?
+  campaign        String?
+  interest        String?
+  status          LeadStatus @default(NOVO)
+  consentGiven    Boolean    @default(false) @map("consent_given")
+  consentDate     DateTime?  @map("consent_date")
+  consentChannel  String?    @map("consent_channel")
+  ownedBy         String?    @map("owned_by")
+  convertedAt     DateTime?  @map("converted_at")
+  convertedToPatientId String? @map("converted_to_patient_id")
+  lossReason      String?    @map("loss_reason")
+  notes           String?
+  createdAt       DateTime   @default(now()) @map("created_at")
+  updatedAt       DateTime   @updatedAt @map("updated_at")
+
+  opportunities CrmOpportunity[]
+  activities    CrmActivity[]
+
+  @@index([organizationId])
+  @@map("crm_leads")
+}
+
+model CrmOpportunity {
+  id              String            @id @default(uuid())
+  organizationId  String            @map("organization_id")
+  leadId          String?           @map("lead_id")
+  lead            CrmLead?          @relation(fields: [leadId], references: [id])
+  funnelId        String            @map("funnel_id")
+  funnel          CrmFunnel         @relation(fields: [funnelId], references: [id])
+  stageId         String            @map("stage_id")
+  stage           CrmFunnelStage    @relation(fields: [stageId], references: [id])
+  title           String
+  serviceId       String?           @map("service_id")
+  value           Decimal?          @db.Decimal(15, 2)
+  probability     Int               @default(50)
+  expectedCloseDate DateTime?       @map("expected_close_date") @db.Date
+  status          OpportunityStatus @default(ABERTA)
+  ownedBy         String?           @map("owned_by")
+  lossReason      String?           @map("loss_reason")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  activities CrmActivity[]
+  proposals  CrmProposal[]
+
+  @@index([organizationId])
+  @@index([funnelId, stageId])
+  @@map("crm_opportunities")
+}
+
+model CrmActivity {
+  id              String        @id @default(uuid())
+  organizationId  String        @map("organization_id")
+  leadId          String?       @map("lead_id")
+  lead            CrmLead?      @relation(fields: [leadId], references: [id])
+  opportunityId   String?       @map("opportunity_id")
+  opportunity     CrmOpportunity? @relation(fields: [opportunityId], references: [id])
+  type            ActivityType
+  subject         String
+  description     String?
+  dueDate         DateTime?     @map("due_date")
+  completedAt     DateTime?     @map("completed_at")
+  performedBy     String        @map("performed_by")
+  createdAt       DateTime      @default(now()) @map("created_at")
+
+  @@index([organizationId])
+  @@index([leadId])
+  @@map("crm_activities")
+}
+
+model CrmProposal {
+  id              String         @id @default(uuid())
+  organizationId  String         @map("organization_id")
+  opportunityId   String         @map("opportunity_id")
+  opportunity     CrmOpportunity @relation(fields: [opportunityId], references: [id])
+  title           String
+  value           Decimal        @db.Decimal(15, 2)
+  validUntil      DateTime?      @map("valid_until") @db.Date
+  status          String         @default("RASCUNHO")
+  content         String?        @db.Text
+  acceptedAt      DateTime?      @map("accepted_at")
+  acceptedBy      String?        @map("accepted_by")
+  rejectedAt      DateTime?      @map("rejected_at")
+  rejectionReason String?        @map("rejection_reason")
+  createdBy       String         @map("created_by")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  @@index([organizationId])
+  @@map("crm_proposals")
+}
+
+model CrmTemplate {
+  id              String    @id @default(uuid())
+  organizationId  String    @map("organization_id")
+  name            String
+  channel         String
+  purpose         String
+  subject         String?
+  body            String    @db.Text
+  approved        Boolean   @default(false)
+  approvedBy      String?   @map("approved_by")
+  approvedAt      DateTime? @map("approved_at")
+  active          Boolean   @default(true)
+  createdBy       String    @map("created_by")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@index([organizationId])
+  @@map("crm_templates")
+}
+
+model CrmTicket {
+  id              String         @id @default(uuid())
+  organizationId  String         @map("organization_id")
+  leadId          String?        @map("lead_id")
+  patientId       String?        @map("patient_id")
+  subject         String
+  category        String?
+  status          CrmTicketStatus   @default(ABERTO)
+  priority        CrmTicketPriority @default(MEDIA)
+  assignedTo      String?        @map("assigned_to")
+  slaDeadline     DateTime?      @map("sla_deadline")
+  resolvedAt      DateTime?      @map("resolved_at")
+  closedAt        DateTime?      @map("closed_at")
+  channel         String?
+  createdBy       String         @map("created_by")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  messages CrmTicketMessage[]
+
+  @@index([organizationId])
+  @@map("crm_tickets")
+}
+
+model CrmTicketMessage {
+  id          String     @id @default(uuid())
+  ticketId    String     @map("ticket_id")
+  ticket      CrmTicket  @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  body        String     @db.Text
+  authorSub   String     @map("author_sub")
+  authorName  String     @map("author_name")
+  isInternal  Boolean    @default(false) @map("is_internal")
+  createdAt   DateTime   @default(now()) @map("created_at")
+
+  @@index([ticketId])
+  @@map("crm_ticket_messages")
+}
+
+// ============================================================
 // RF-PAC-010: Auditoria de exportação e ações sensíveis de paciente
 // ============================================================
 

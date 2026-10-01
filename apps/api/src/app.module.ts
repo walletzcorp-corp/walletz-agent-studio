@@ -16,6 +16,8 @@ import { SchedulingModule } from './modules/scheduling/scheduling.module';
 import { PepModule } from './modules/pep/pep.module';
 import { EstoqueModule } from './modules/estoque/estoque.module';
 import { FinanceiroModule } from './modules/financeiro/financeiro.module';
+import { TisModule } from './modules/tis/tis.module';
+import { CrmModule } from './modules/crm/crm.module';
 
 @Module({
   imports: [
@@ -44,6 +46,8 @@ import { FinanceiroModule } from './modules/financeiro/financeiro.module';
     PepModule,
     EstoqueModule,
     FinanceiroModule,
+    TisModule,
+    CrmModule,
   ],
 })
 export class AppModule {}

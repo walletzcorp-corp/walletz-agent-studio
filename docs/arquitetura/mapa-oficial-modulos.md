@@ -1,19 +1,21 @@
 # Mapa Oficial dos Módulos — Walletz Med
 
-Data de revisão: 2026-09-30
+Data de revisão: 2026-10-01
 
 ## Ordem canônica
 
-| # | Código | Nome completo                        | Status              |
-|---|--------|--------------------------------------|---------------------|
-| 1 | ORG    | Organização, unidades e acesso       | IMPLEMENTADO        |
-| 2 | PAC    | Pacientes e consentimentos           | IMPLEMENTADO        |
-| 3 | AGE    | Agenda e jornada operacional         | IMPLEMENTADO        |
-| 4 | PEP    | Prontuário eletrônico do paciente    | IMPLEMENTADO        |
-| 5 | DOC    | Documentos e prescrição              | NÃO IMPLEMENTADO    |
-| 6 | TEL    | Telemedicina                         | NÃO IMPLEMENTADO    |
-| 7 | EST    | Estoque, compras e rastreabilidade   | IMPLEMENTADO (M7)   |
-| 8 | FIN    | Financeiro, fiscal e repasses        | IMPLEMENTADO (M8)   |
+| #  | Código | Nome completo                        | Status              |
+|----|--------|--------------------------------------|---------------------|
+| 1  | ORG    | Organização, unidades e acesso       | IMPLEMENTADO        |
+| 2  | PAC    | Pacientes e consentimentos           | IMPLEMENTADO        |
+| 3  | AGE    | Agenda e jornada operacional         | IMPLEMENTADO        |
+| 4  | PEP    | Prontuário eletrônico do paciente    | IMPLEMENTADO        |
+| 5  | DOC    | Documentos e prescrição              | NÃO IMPLEMENTADO    |
+| 6  | TEL    | Telemedicina                         | NÃO IMPLEMENTADO    |
+| 7  | EST    | Estoque, compras e rastreabilidade   | IMPLEMENTADO (M7)   |
+| 8  | FIN    | Financeiro, fiscal e repasses        | IMPLEMENTADO (M8)   |
+| 9  | TIS    | Convênios, TISS e Glosas             | IMPLEMENTADO (M9)   |
+| 10 | CRM    | CRM e Comunicação Comercial          | IMPLEMENTADO (M10)  |
 
 ## Divergência histórica de nomenclatura
 
