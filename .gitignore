@@ -40,6 +40,12 @@ coverage/
 apps/api/api-out.txt
 apps/api-out.txt
 apps/web/web-out.txt
+.api*.log
+.api*.err
+.web*.log
+.web*.err
+.lt.log
+.lt2.log
 
 # Prisma
 apps/api/prisma/dev.db
