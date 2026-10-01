@@ -12,8 +12,8 @@ import { EntryStatus, PepAuditAction } from '@prisma/client';
 
 interface CreateEntryDto {
   recordId: string;
-  organizationId: string;
-  unitId: string;
+  organizationId?: string;
+  unitId?: string;
   appointmentId?: string;
   templateId?: string;
   subjective?: string;
@@ -72,17 +72,27 @@ export class ClinicalEntriesService {
   }
 
   async create(dto: CreateEntryDto, user: AuthenticatedUser) {
-    if (!user.isWalletzAdmin && !user.organizationIds.includes(dto.organizationId)) {
-      throw new ForbiddenException('Sem acesso a esta organização');
-    }
-
     const record = await this.prisma.medicalRecord.findUnique({ where: { id: dto.recordId } });
     if (!record) throw new NotFoundException('Prontuário não encontrado');
-    if (record.organizationId !== dto.organizationId) throw new ForbiddenException('Prontuário não pertence a esta organização');
+
+    const organizationId = dto.organizationId ?? record.organizationId;
+
+    if (!user.isWalletzAdmin && !user.organizationIds.includes(organizationId)) {
+      throw new ForbiddenException('Sem acesso a esta organização');
+    }
+    if (record.organizationId !== organizationId) throw new ForbiddenException('Prontuário não pertence a esta organização');
+
+    // Resolve unitId: use provided or fall back to first active unit of the organization
+    let unitId = dto.unitId;
+    if (!unitId) {
+      const unit = await this.prisma.unit.findFirst({ where: { organizationId, status: 'ATIVA' as any } });
+      if (!unit) throw new NotFoundException('Nenhuma unidade ativa encontrada na organização');
+      unitId = unit.id;
+    }
 
     if (dto.appointmentId) {
       const appt = await this.prisma.appointment.findFirst({
-        where: { id: dto.appointmentId, organizationId: dto.organizationId },
+        where: { id: dto.appointmentId, organizationId },
       });
       if (!appt) throw new NotFoundException('Atendimento não encontrado nesta organização');
     }
@@ -90,8 +100,8 @@ export class ClinicalEntriesService {
     const entry = await this.prisma.clinicalEntry.create({
       data: {
         recordId: dto.recordId,
-        organizationId: dto.organizationId,
-        unitId: dto.unitId,
+        organizationId,
+        unitId,
         professionalId: user.sub,
         appointmentId: dto.appointmentId,
         templateId: dto.templateId,

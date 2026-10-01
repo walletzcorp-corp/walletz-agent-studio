@@ -97,6 +97,7 @@ describe('ClinicalEntriesService', () => {
   });
 
   it('deve negar criação de entrada para organização sem acesso', async () => {
+    mockPrisma.medicalRecord.findUnique.mockResolvedValue(mockRecord);
     await expect(
       service.create({ recordId: RECORD_ID, organizationId: ORG_A, unitId: 'u1' }, orgBUser),
     ).rejects.toThrow(ForbiddenException);

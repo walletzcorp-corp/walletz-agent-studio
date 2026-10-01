@@ -69,6 +69,7 @@ export class TelService {
     // RV-TELE-001: agendamento deve pertencer à organização
     const appointment = await this.prisma.appointment.findFirst({
       where: { id: data.appointmentId, organizationId },
+      include: { patient: { select: { id: true, name: true } } },
     });
     if (!appointment) {
       throw new NotFoundException('Agendamento não encontrado na organização');
@@ -81,6 +82,10 @@ export class TelService {
     if (existing) {
       throw new ConflictException('Já existe uma sala para este agendamento');
     }
+
+    // Auto-populate patientId from appointment if not explicitly provided
+    const resolvedPatientId = data.patientId ?? appointment.patientId ?? undefined;
+    const resolvedPatientName = data.patientDisplayName ?? (appointment as any).patient?.name ?? 'Paciente';
 
     const room = await this.prisma.$transaction(async (tx) => {
       const created = await tx.telRoom.create({
@@ -102,14 +107,14 @@ export class TelService {
         },
       });
 
-      // Paciente como participante (se fornecido)
-      if (data.patientId) {
+      // Paciente como participante (derivado do agendamento ou fornecido explicitamente)
+      if (resolvedPatientId) {
         await tx.telParticipant.create({
           data: {
             roomId: created.id,
             role: TelParticipantRole.PACIENTE,
-            patientId: data.patientId,
-            displayName: data.patientDisplayName ?? 'Paciente',
+            patientId: resolvedPatientId,
+            displayName: resolvedPatientName,
           },
         });
 
@@ -121,7 +126,7 @@ export class TelService {
             roomId: created.id,
             token,
             role: TelParticipantRole.PACIENTE,
-            patientId: data.patientId,
+            patientId: resolvedPatientId,
             expiresAt,
           },
         });

@@ -13,7 +13,15 @@ export class MedicalRecordsService {
     }
   }
 
-  async getOrCreate(patientId: string, organizationId: string, user: AuthenticatedUser) {
+  async getOrCreate(patientId: string, organizationId: string | undefined, user: AuthenticatedUser) {
+    // For admin users without explicit orgId, derive from patient record
+    if (!organizationId) {
+      if (!user.isWalletzAdmin) throw new NotFoundException('organizationId é obrigatório');
+      const p = await this.prisma.patient.findFirst({ where: { id: patientId }, select: { organizationId: true } });
+      if (!p) throw new NotFoundException('Paciente não encontrado');
+      organizationId = p.organizationId;
+    }
+
     this.assertAccess(organizationId, user);
 
     const patient = await this.prisma.patient.findFirst({
