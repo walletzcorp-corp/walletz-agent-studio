@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Video, Clock, CheckCircle2, XCircle, Users, FileText,
   Mic, Camera, Wifi, AlertTriangle, RefreshCw, Shield,
-  PhoneOff, MonitorCheck, Share2, Plus,
+  PhoneOff, MonitorCheck, Share2, Plus, Link2, Copy,
 } from 'lucide-react';
 import { useToken } from '@/hooks/useToken';
 import { api } from '@/lib/api';
@@ -87,15 +87,41 @@ type Tab = 'salas' | 'sala-espera' | 'dispositivos' | 'auditoria';
 // ── RoomCard ──────────────────────────────────────────────────────────────────
 function RoomCard({
   room,
+  orgId,
+  authToken,
   onAction,
 }: {
   room: Room;
+  orgId: string;
+  authToken: string | undefined;
   onAction: (type: 'start' | 'admit' | 'end', roomId: string, participantId?: string) => Promise<void>;
 }) {
   const cfg = statusColor[room.status];
   const time = new Date(room.scheduledAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   const patient = room.participants.find((p) => p.role === 'PACIENTE');
   const professional = room.participants.find((p) => p.role === 'PROFISSIONAL');
+  const [copyLoading, setCopyLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  async function handleCopyLink() {
+    setCopyLoading(true);
+    try {
+      const result = await api.get<{ token: string; expiresAt: string }>(
+        `/tel/${orgId}/rooms/${room.id}/access-link`,
+        authToken ?? '',
+      );
+      const url = `${window.location.origin}/sala/${result.token}`;
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 3000);
+    } catch (e: any) {
+      alert(e.message ?? 'Não foi possível gerar o link do paciente.');
+    } finally {
+      setCopyLoading(false);
+    }
+  }
+
+  const canCopyLink = ['AGENDADA', 'AGUARDANDO', 'EM_ANDAMENTO'].includes(room.status);
 
   return (
     <div className="card hover:shadow-card-hover transition-all">
@@ -136,7 +162,14 @@ function RoomCard({
         )}
         {room.status === 'EM_ANDAMENTO' && (
           <>
-            <button className="btn-teal text-xs py-1.5 px-3">Entrar na sala</button>
+            <a
+              href={`/sala/profissional?room=${room.id}&org=${orgId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-teal text-xs py-1.5 px-3 inline-flex items-center gap-1"
+            >
+              <Video size={12} /> Entrar na sala
+            </a>
             <button
               className="btn-danger text-xs py-1.5 px-3 flex items-center gap-1"
               onClick={() => onAction('end', room.id)}
@@ -144,6 +177,22 @@ function RoomCard({
               <PhoneOff size={12} /> Encerrar
             </button>
           </>
+        )}
+        {canCopyLink && (
+          <button
+            className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1"
+            onClick={handleCopyLink}
+            disabled={copyLoading}
+          >
+            {copyLoading ? (
+              <RefreshCw size={12} className="animate-spin" />
+            ) : copied ? (
+              <CheckCircle2 size={12} className="text-emerald-500" />
+            ) : (
+              <Link2 size={12} />
+            )}
+            {copied ? 'Link copiado!' : 'Link do paciente'}
+          </button>
         )}
         {room.status === 'ENCERRADA' && room.clinicalEntryId && (
           <span className="badge badge-green text-xs flex items-center gap-1">
@@ -449,7 +498,7 @@ export default function TelemedicinePage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {rooms.map((room) => (
-                <RoomCard key={room.id} room={room} onAction={handleAction} />
+                <RoomCard key={room.id} room={room} orgId={orgId} authToken={token} onAction={handleAction} />
               ))}
             </div>
           )}

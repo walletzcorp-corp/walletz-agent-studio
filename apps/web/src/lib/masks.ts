@@ -109,3 +109,49 @@ export async function lookupCep(cep: string): Promise<CepResult | null> {
 export function validateEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
+
+// ── CNPJ lookup (BrasilAPI — dados espelhados da Receita Federal) ─────────────
+
+export interface CnpjResult {
+  razaoSocial: string;
+  nomeFantasia: string;
+  situacao: string;
+  logradouro?: string;
+  numero?: string;
+  complemento?: string;
+  bairro?: string;
+  municipio?: string;
+  uf?: string;
+  cep?: string;
+  telefone?: string;
+  email?: string;
+  fonte: string; // transparência da fonte usada
+}
+
+export async function lookupCnpj(cnpj: string): Promise<CnpjResult | null> {
+  const digits = cnpj.replace(/\D/g, '');
+  if (digits.length !== 14) return null;
+  try {
+    const res = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${digits}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const d = await res.json();
+    if (d.message) throw new Error(d.message);
+    return {
+      razaoSocial: d.razao_social ?? '',
+      nomeFantasia: d.nome_fantasia ?? '',
+      situacao: d.descricao_situacao_cadastral ?? '',
+      logradouro: d.logradouro,
+      numero: d.numero,
+      complemento: d.complemento,
+      bairro: d.bairro,
+      municipio: d.municipio,
+      uf: d.uf,
+      cep: d.cep?.replace(/\D/g, ''),
+      telefone: d.ddd_telefone_1,
+      email: d.email,
+      fonte: 'BrasilAPI (dados espelhados da Receita Federal — não é consulta direta ao órgão)',
+    };
+  } catch (err: any) {
+    throw new Error(err.message ?? 'Serviço de consulta de CNPJ indisponível');
+  }
+}

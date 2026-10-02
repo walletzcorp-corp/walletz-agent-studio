@@ -501,3 +501,78 @@ export class TelService {
     return { agendadas, emAndamento, encerradas, canceladas };
   }
 }
+
+  // ── RF-TEL-015: Obter link de acesso do paciente ────────────────────────────
+
+  async getAccessLink(organizationId: string, roomId: string, user: AuthenticatedUser) {
+    this.assertAccess(organizationId, user);
+    const room = await this.prisma.telRoom.findFirst({
+      where: { id: roomId, organizationId },
+      include: {
+        accessLinks: {
+          where: { role: TelParticipantRole.PACIENTE, revokedAt: null },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
+      },
+    });
+    if (!room) throw new NotFoundException('Sala não encontrada');
+
+    if (room.accessLinks.length > 0) {
+      return { token: room.accessLinks[0].token, expiresAt: room.accessLinks[0].expiresAt };
+    }
+
+    // Cria novo link se não existir
+    const token = this.generateToken();
+    const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
+    await this.prisma.telAccessLink.create({
+      data: { roomId, token, role: TelParticipantRole.PACIENTE, expiresAt },
+    });
+    return { token, expiresAt };
+  }
+
+  // ── RF-TEL-016: Resolver token público (sem autenticação) ───────────────────
+
+  async resolveJoinToken(token: string) {
+    const link = await this.prisma.telAccessLink.findFirst({
+      where: { token },
+      include: {
+        room: {
+          include: {
+            participants: { select: { id: true, displayName: true, role: true, status: true } },
+          },
+        },
+      },
+    });
+    if (!link) throw new NotFoundException('Link inválido ou expirado');
+    if (link.revokedAt) throw new ForbiddenException('Link foi revogado');
+    if (link.expiresAt < new Date()) throw new ForbiddenException('Link expirado');
+
+    // Registra uso se ainda não foi usado
+    if (!link.usedAt) {
+      await this.prisma.telAccessLink.update({ where: { id: link.id }, data: { usedAt: new Date() } });
+    }
+
+    const patient = link.room.participants.find((p) => p.role === TelParticipantRole.PACIENTE);
+    return {
+      roomId: link.roomId,
+      organizationId: link.room.organizationId,
+      roomStatus: link.room.status,
+      scheduledAt: link.room.scheduledAt,
+      participantId: patient?.id ?? null,
+      patientName: patient?.displayName ?? 'Paciente',
+      participantStatus: patient?.status ?? null,
+      linkId: link.id,
+      role: link.role,
+    };
+  }
+
+  // ── RF-TEL-017: Paciente entra pela sala via token ──────────────────────────
+
+  async joinRoomByToken(token: string) {
+    const info = await this.resolveJoinToken(token);
+    if (!info.participantId) throw new NotFoundException('Participante não encontrado');
+
+    await this.participantJoined(info.roomId, info.participantId, info.participantId, TelParticipantRole.PACIENTE);
+    return { ...info, joined: true };
+  }

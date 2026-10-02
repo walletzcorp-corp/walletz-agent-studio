@@ -3,8 +3,8 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useToken } from '@/hooks/useToken';
 import { api } from '@/lib/api';
-import { maskCnpj, validateCnpj, maskPhone, maskCep, lookupCep } from '@/lib/masks';
-import { Search, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { maskCnpj, validateCnpj, maskPhone, maskCep, lookupCep, lookupCnpj, CnpjResult } from '@/lib/masks';
+import { Search, Loader2, CheckCircle2, AlertTriangle, Info } from 'lucide-react';
 
 const ESTADOS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
 
@@ -15,6 +15,9 @@ export default function NewOrganizationPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [cnpjError, setCnpjError] = useState('');
+  const [cnpjLookupLoading, setCnpjLookupLoading] = useState(false);
+  const [cnpjLookupResult, setCnpjLookupResult] = useState<CnpjResult | null>(null);
+  const [cnpjLookupError, setCnpjLookupError] = useState('');
   const [cepLoading, setCepLoading] = useState(false);
   const [form, setForm] = useState({
     cnpj: '',
@@ -31,18 +34,49 @@ export default function NewOrganizationPage() {
     uf: '',
   });
 
-  function handleCnpj(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleCnpj(e: React.ChangeEvent<HTMLInputElement>) {
     const masked = maskCnpj(e.target.value);
     setForm((f) => ({ ...f, cnpj: masked }));
     const raw = masked.replace(/\D/g, '');
     if (raw.length === 14) {
       if (!validateCnpj(raw)) {
         setCnpjError('CNPJ inválido — verifique os dígitos');
+        setCnpjLookupResult(null);
+        setCnpjLookupError('');
       } else {
         setCnpjError('');
+        setCnpjLookupResult(null);
+        setCnpjLookupError('');
+        setCnpjLookupLoading(true);
+        try {
+          const result = await lookupCnpj(raw);
+          setCnpjLookupResult(result);
+          if (result) {
+            setForm((f) => ({
+              ...f,
+              razaoSocial: result.razaoSocial || f.razaoSocial,
+              nomeFantasia: result.nomeFantasia || f.nomeFantasia,
+              logradouro: result.logradouro || f.logradouro,
+              numero: result.numero || f.numero,
+              complemento: result.complemento || f.complemento,
+              bairro: result.bairro || f.bairro,
+              cidade: result.municipio || f.cidade,
+              uf: result.uf || f.uf,
+              cep: result.cep ? maskCep(result.cep) : f.cep,
+              telefone: result.telefone ? maskPhone(result.telefone) : f.telefone,
+              email: result.email || f.email,
+            }));
+          }
+        } catch (err: any) {
+          setCnpjLookupError(err.message ?? 'Não foi possível consultar o CNPJ — preencha manualmente.');
+        } finally {
+          setCnpjLookupLoading(false);
+        }
       }
     } else {
       setCnpjError('');
+      setCnpjLookupResult(null);
+      setCnpjLookupError('');
     }
   }
 
@@ -134,6 +168,32 @@ export default function NewOrganizationPage() {
             )}
           </div>
           {cnpjError && <p className="text-red-500 text-xs mt-1">{cnpjError}</p>}
+          {cnpjLookupLoading && (
+            <p className="text-slate-500 text-xs mt-1 flex items-center gap-1">
+              <Loader2 size={12} className="animate-spin" /> Consultando dados cadastrais…
+            </p>
+          )}
+          {cnpjLookupError && (
+            <div className="mt-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800 flex items-start gap-2">
+              <AlertTriangle size={13} className="flex-shrink-0 mt-0.5" />
+              <span>{cnpjLookupError} — preencha os campos manualmente.</span>
+            </div>
+          )}
+          {cnpjLookupResult && (
+            <div className="mt-2 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-xs text-emerald-800">
+              <div className="flex items-start gap-2">
+                <Info size={13} className="flex-shrink-0 mt-0.5 text-emerald-600" />
+                <div>
+                  <p className="font-semibold">{cnpjLookupResult.razaoSocial}</p>
+                  {cnpjLookupResult.nomeFantasia && <p className="text-emerald-700">{cnpjLookupResult.nomeFantasia}</p>}
+                  <p className={`mt-0.5 font-medium ${cnpjLookupResult.situacao === 'ATIVA' ? 'text-emerald-700' : 'text-amber-700'}`}>
+                    Situação: {cnpjLookupResult.situacao}
+                  </p>
+                  <p className="mt-1 text-emerald-600 italic">{cnpjLookupResult.fonte}</p>
+                </div>
+              </div>
+            </div>
+          )}
           <p className="text-slate-400 text-xs mt-1">O CNPJ é validado pelos dígitos verificadores</p>
         </div>
 

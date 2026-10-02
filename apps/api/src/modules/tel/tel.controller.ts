@@ -176,4 +176,14 @@ export class TelController {
   ) {
     return this.telService.getDashboard(orgId, user);
   }
+
+  // RF-TEL-015: obter link de acesso do paciente
+  @Get(':orgId/rooms/:roomId/access-link')
+  getAccessLink(
+    @Param('orgId') orgId: string,
+    @Param('roomId') roomId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.telService.getAccessLink(orgId, roomId, user);
+  }
 }
