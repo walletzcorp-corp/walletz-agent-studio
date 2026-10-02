@@ -3,6 +3,8 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useToken } from '@/hooks/useToken';
 import { api } from '@/lib/api';
+import { maskCpf, validateCpf, maskPhone } from '@/lib/masks';
+import { CheckCircle2 } from 'lucide-react';
 
 const UFS = ['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO'];
 
@@ -11,6 +13,7 @@ export default function NewProfessionalPage() {
   const token = useToken();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [cpfError, setCpfError] = useState('');
   const [orgs, setOrgs] = useState<{ id: string; nomeFantasia: string }[]>([]);
   const [specialties, setSpecialties] = useState<{ id: string; name: string }[]>([]);
   const [selectedSpecialties, setSelectedSpecialties] = useState<string[]>([]);
@@ -42,6 +45,17 @@ export default function NewProfessionalPage() {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
 
+  function handleCpf(e: React.ChangeEvent<HTMLInputElement>) {
+    const masked = maskCpf(e.target.value);
+    setForm((f) => ({ ...f, cpf: masked }));
+    const raw = masked.replace(/\D/g, '');
+    if (raw.length === 11) {
+      setCpfError(validateCpf(raw) ? '' : 'CPF inválido');
+    } else {
+      setCpfError('');
+    }
+  }
+
   const toggleSpecialty = (id: string) =>
     setSelectedSpecialties((prev) =>
       prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id],
@@ -50,9 +64,14 @@ export default function NewProfessionalPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    const rawCpf = form.cpf.replace(/\D/g, '');
+    if (rawCpf.length > 0 && rawCpf.length < 11) { setError('CPF incompleto.'); return; }
+    if (rawCpf.length === 11 && !validateCpf(rawCpf)) { setError('CPF inválido — verifique os dígitos.'); return; }
     setLoading(true);
     try {
-      await api.post('/professionals', { ...form, specialtyIds: selectedSpecialties }, token);
+      const payload: any = { ...form, specialtyIds: selectedSpecialties };
+      if (rawCpf) payload.cpf = rawCpf; else delete payload.cpf;
+      await api.post('/professionals', payload, token);
       router.push('/professionals');
     } catch (err: any) {
       setError(err.message);
@@ -89,11 +108,29 @@ export default function NewProfessionalPage() {
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="label">CPF</label>
-            <input name="cpf" value={form.cpf} onChange={handleChange} className="input" placeholder="000.000.000-00" />
+            <div className="relative">
+              <input
+                className={`input pr-9 ${cpfError ? 'border-red-400 focus:ring-red-300' : form.cpf.replace(/\D/g,'').length === 11 && !cpfError ? 'border-emerald-400' : ''}`}
+                value={form.cpf}
+                onChange={handleCpf}
+                placeholder="000.000.000-00"
+                inputMode="numeric"
+              />
+              {form.cpf.replace(/\D/g,'').length === 11 && !cpfError && (
+                <CheckCircle2 size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-500" />
+              )}
+            </div>
+            {cpfError && <p className="text-red-500 text-xs mt-1">{cpfError}</p>}
           </div>
           <div>
             <label className="label">Telefone</label>
-            <input name="telefone" value={form.telefone} onChange={handleChange} className="input" />
+            <input
+              className="input"
+              value={form.telefone}
+              onChange={(e) => setForm((f) => ({ ...f, telefone: maskPhone(e.target.value) }))}
+              placeholder="(00) 00000-0000"
+              inputMode="numeric"
+            />
           </div>
         </div>
 

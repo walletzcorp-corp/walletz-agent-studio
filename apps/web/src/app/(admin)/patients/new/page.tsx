@@ -3,7 +3,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useToken } from '@/hooks/useToken';
 import { api } from '@/lib/api';
-import { AlertTriangle, Search } from 'lucide-react';
+import { AlertTriangle, Search, Loader2, CheckCircle2 } from 'lucide-react';
+import { maskCpf, validateCpf, maskPhone, maskCep, lookupCep } from '@/lib/masks';
 
 const SEXO = [{ value: '', label: 'Não informado' }, { value: 'F', label: 'Feminino' }, { value: 'M', label: 'Masculino' }, { value: 'O', label: 'Outro' }];
 const ESTADOS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
@@ -22,6 +23,8 @@ export default function NewPatientPage() {
   const token = useToken();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [cpfError, setCpfError] = useState('');
+  const [cepLoading, setCepLoading] = useState(false);
   const [orgs, setOrgs] = useState<{ id: string; nomeFantasia: string }[]>([]);
   const [candidates, setCandidates] = useState<DupCandidate[]>([]);
   const [dupChecked, setDupChecked] = useState(false);
@@ -58,11 +61,17 @@ export default function NewPatientPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
+    const rawCpf = form.cpf.replace(/\D/g, '');
+    if (rawCpf.length > 0 && rawCpf.length < 11) { setError('CPF incompleto.'); return; }
+    if (rawCpf.length === 11 && !validateCpf(rawCpf)) { setError('CPF inválido — verifique os dígitos.'); return; }
     setLoading(true);
     try {
       const payload: any = { organizationId: form.organizationId, name: form.name, marketingBlocked: form.marketingBlocked };
-      const fields: (keyof typeof form)[] = ['nomeSocial','cpf','cns','rg','dataNasc','sexo','estadoCivil','nacionalidade','naturalidade','telefone','email','notes','logradouro','numero','complemento','bairro','cidade','uf','cep'];
+      const fields: (keyof typeof form)[] = ['nomeSocial','cns','rg','dataNasc','sexo','estadoCivil','nacionalidade','naturalidade','telefone','email','notes','logradouro','numero','complemento','bairro','cidade','uf'];
       for (const f of fields) { if (form[f]) payload[f] = form[f]; }
+      if (rawCpf) payload.cpf = rawCpf;
+      const rawCep = form.cep.replace(/\D/g, '');
+      if (rawCep) payload.cep = rawCep;
       await api.post('/patients', payload, token!);
       router.push('/patients');
     } catch (e: any) {
@@ -74,6 +83,36 @@ export default function NewPatientPage() {
 
   const set = (field: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setForm((f) => ({ ...f, [field]: e.target.value }));
+
+  function handleCpf(e: React.ChangeEvent<HTMLInputElement>) {
+    const masked = maskCpf(e.target.value);
+    setForm((f) => ({ ...f, cpf: masked }));
+    const raw = masked.replace(/\D/g, '');
+    if (raw.length === 11) {
+      setCpfError(validateCpf(raw) ? '' : 'CPF inválido');
+    } else {
+      setCpfError('');
+    }
+  }
+
+  async function handleCep(e: React.ChangeEvent<HTMLInputElement>) {
+    const masked = maskCep(e.target.value);
+    setForm((f) => ({ ...f, cep: masked }));
+    if (masked.replace(/\D/g, '').length === 8) {
+      setCepLoading(true);
+      const result = await lookupCep(masked);
+      setCepLoading(false);
+      if (result) {
+        setForm((f) => ({
+          ...f,
+          logradouro: result.logradouro || f.logradouro,
+          bairro: result.bairro || f.bairro,
+          cidade: result.cidade || f.cidade,
+          uf: result.uf || f.uf,
+        }));
+      }
+    }
+  }
 
   return (
     <div className="max-w-2xl">
@@ -110,7 +149,19 @@ export default function NewPatientPage() {
             </div>
             <div>
               <label className="label">CPF</label>
-              <input className="input" value={form.cpf} onChange={set('cpf')} placeholder="000.000.000-00" />
+              <div className="relative">
+                <input
+                  className={`input pr-9 ${cpfError ? 'border-red-400 focus:ring-red-300' : form.cpf.replace(/\D/g,'').length === 11 && !cpfError ? 'border-emerald-400' : ''}`}
+                  value={form.cpf}
+                  onChange={handleCpf}
+                  placeholder="000.000.000-00"
+                  inputMode="numeric"
+                />
+                {form.cpf.replace(/\D/g,'').length === 11 && !cpfError && (
+                  <CheckCircle2 size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-500" />
+                )}
+              </div>
+              {cpfError && <p className="text-red-500 text-xs mt-1">{cpfError}</p>}
             </div>
             <div>
               <label className="label">CNS (Cartão Nacional de Saúde)</label>
@@ -151,7 +202,13 @@ export default function NewPatientPage() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="label">Telefone</label>
-              <input className="input" value={form.telefone} onChange={set('telefone')} placeholder="(00) 00000-0000" />
+              <input
+                className="input"
+                value={form.telefone}
+                onChange={(e) => setForm((f) => ({ ...f, telefone: maskPhone(e.target.value) }))}
+                placeholder="(00) 00000-0000"
+                inputMode="numeric"
+              />
             </div>
             <div>
               <label className="label">E-mail</label>
@@ -182,7 +239,16 @@ export default function NewPatientPage() {
             </div>
             <div>
               <label className="label">CEP</label>
-              <input className="input" value={form.cep} onChange={set('cep')} placeholder="00000-000" />
+              <div className="relative">
+                <input
+                  className="input pr-9"
+                  value={form.cep}
+                  onChange={handleCep}
+                  placeholder="00000-000"
+                  inputMode="numeric"
+                />
+                {cepLoading && <Loader2 size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 animate-spin" />}
+              </div>
             </div>
             <div className="col-span-2">
               <label className="label">Cidade</label>
