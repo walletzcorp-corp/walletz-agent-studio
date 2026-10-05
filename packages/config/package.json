@@ -4,6 +4,8 @@
   "private": true,
   "exports": {
     "./typescript": "./typescript/index.json",
+    "./typescript/nextjs": "./typescript/nextjs.json",
+    "./typescript/nestjs": "./typescript/nestjs.json",
     "./eslint/base": "./eslint/base.js",
     "./eslint/next": "./eslint/next.js",
     "./eslint/nest": "./eslint/nest.js",
