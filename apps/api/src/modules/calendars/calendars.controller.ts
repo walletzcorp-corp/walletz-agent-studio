@@ -86,15 +86,17 @@ export class CalendarsCallbackController {
       return res.redirect(`/agendas?error=${encodeURIComponent(error)}`);
     }
     try {
-      const { tenantId } = await this.svc.handleCallback(
+      await this.svc.handleCallback(
         code,
         state,
         req.user?.sub ?? 'system',
       );
-      return res.redirect(`/agendas?connected=${provider}`);
+      const appUrl = process.env['APP_URL'] ?? 'http://localhost:3000';
+      return res.redirect(`${appUrl}/agendas?connected=${provider}`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'unknown';
-      return res.redirect(`/agendas?error=${encodeURIComponent(msg)}`);
+      const appUrl = process.env['APP_URL'] ?? 'http://localhost:3000';
+      return res.redirect(`${appUrl}/agendas?error=${encodeURIComponent(msg)}`);
     }
   }
 }
