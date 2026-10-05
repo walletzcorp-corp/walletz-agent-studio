@@ -30,10 +30,11 @@ export class QuotaService {
     const limits = this.getLimits(planId);
     if (limits.maxAgents === -1) return;
 
-    const [{ value }] = await this.db
+    const rows = await this.db
       .select({ value: count() })
       .from(agents)
       .where(and(eq(agents.tenantId, tenantId), isNull(agents.deletedAt)));
+    const value = rows[0]?.value ?? 0;
 
     if (value >= limits.maxAgents) {
       throw new ForbiddenException(`Limite de ${limits.maxAgents} agentes atingido no plano atual`);
@@ -44,10 +45,11 @@ export class QuotaService {
     const limits = this.getLimits(planId);
     if (limits.maxMembers === -1) return;
 
-    const [{ value }] = await this.db
+    const memberRows = await this.db
       .select({ value: count() })
       .from(memberships)
       .where(and(eq(memberships.tenantId, tenantId), eq(memberships.status, 'active')));
+    const value = memberRows[0]?.value ?? 0;
 
     if (value >= limits.maxMembers) {
       throw new ForbiddenException(`Limite de ${limits.maxMembers} membros atingido no plano atual`);

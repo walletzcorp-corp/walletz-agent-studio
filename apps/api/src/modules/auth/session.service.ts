@@ -22,10 +22,10 @@ export class SessionService {
       .values({
         id: createId(),
         userId: params.userId,
-        tenantId: params.tenantId,
+        tenantId: params.tenantId ?? null,
         refreshTokenHash: 'pending',
-        ipAddress: params.ipAddress,
-        userAgent: params.userAgent,
+        ipAddress: params.ipAddress ?? null,
+        userAgent: params.userAgent ?? null,
         expiresAt,
       })
       .returning();

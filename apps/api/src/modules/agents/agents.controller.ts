@@ -22,7 +22,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/auth.service';
 
 @ApiTags('agents')
-@Controller('v1/tenants/:tenantId/agents')
+@Controller('tenants/:tenantId/agents')
 @UseGuards(JwtAuthGuard, RbacGuard)
 @ApiBearerAuth()
 @ApiHeader({ name: 'x-tenant-slug', required: true })

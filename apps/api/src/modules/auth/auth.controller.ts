@@ -23,7 +23,7 @@ import { CurrentUser } from './decorators/current-user.decorator';
 import type { JwtPayload } from './auth.service';
 
 @ApiTags('auth')
-@Controller('v1/auth')
+@Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 

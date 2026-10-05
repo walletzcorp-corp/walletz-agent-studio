@@ -6,7 +6,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/auth.service';
 
 @ApiTags('users')
-@Controller('v1/users')
+@Controller('users')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class UsersController {

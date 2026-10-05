@@ -9,9 +9,9 @@ import { TenantsModule } from './modules/tenants/tenants.module';
 import { UsersModule } from './modules/users/users.module';
 import { AgentsModule } from './modules/agents/agents.module';
 import { KnowledgeModule } from './modules/knowledge/knowledge.module';
-import { ConversationsModule } from './modules/conversations/conversations.module';
-import { ContactsModule } from './modules/contacts/contacts.module';
-import { WhatsAppModule } from './modules/whatsapp/whatsapp.module';
+import { ConversationModule } from './modules/conversations/conversations.module';
+import { ContactModule } from './modules/contacts/contacts.module';
+import { WhatsappModule } from './modules/whatsapp/whatsapp.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { HealthModule } from './modules/health/health.module';
 import { AuditModule } from './shared/audit/audit.module';
@@ -64,9 +64,9 @@ import { anthropicConfig } from './config/anthropic.config';
     UsersModule,
     AgentsModule,
     KnowledgeModule,
-    ConversationsModule,
-    ContactsModule,
-    WhatsAppModule,
+    ConversationModule,
+    ContactModule,
+    WhatsappModule,
     BillingModule,
   ],
 })

@@ -1,6 +1,7 @@
 {
   "extends": "@walletz/config/typescript/nestjs",
   "compilerOptions": {
+    "exactOptionalPropertyTypes": false,
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"],

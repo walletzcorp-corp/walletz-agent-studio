@@ -28,7 +28,7 @@ import type { JwtPayload } from '../auth/auth.service';
 import type { TenantContext } from './decorators/current-tenant.decorator';
 
 @ApiTags('tenants')
-@Controller('v1/tenants')
+@Controller('tenants')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class TenantsController {

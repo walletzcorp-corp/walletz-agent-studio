@@ -88,7 +88,7 @@ async function bootstrap() {
   const port = configService.get<number>('PORT', 3001);
   await app.listen(port);
 
-  logger.log(`API running on port ${port} [${configService.get('NODE_ENV')}]`);
+  logger.info(`API running on port ${port} [${configService.get('NODE_ENV')}]`);
 }
 
 bootstrap().catch((err) => {

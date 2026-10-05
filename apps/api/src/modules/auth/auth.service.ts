@@ -56,10 +56,8 @@ export class AuthService {
       throw new ConflictException('Email already registered');
     }
 
-    const passwordHash = await bcrypt.hash(
-      dto.password,
-      this.configService.get<number>('BCRYPT_ROUNDS', BCRYPT_ROUNDS_DEFAULT),
-    );
+    const rounds = Number(this.configService.get('BCRYPT_ROUNDS', BCRYPT_ROUNDS_DEFAULT));
+    const passwordHash = await bcrypt.hash(dto.password, rounds);
 
     const verificationToken = randomBytes(32).toString('hex');
     const user = await this.usersService.create({
@@ -187,10 +185,8 @@ export class AuthService {
       throw new BadRequestException('Invalid or expired reset token');
     }
 
-    const passwordHash = await bcrypt.hash(
-      dto.password,
-      this.configService.get<number>('BCRYPT_ROUNDS', BCRYPT_ROUNDS_DEFAULT),
-    );
+    const rounds = Number(this.configService.get('BCRYPT_ROUNDS', BCRYPT_ROUNDS_DEFAULT));
+    const passwordHash = await bcrypt.hash(dto.password, rounds);
 
     await this.usersService.updatePassword(user.id, passwordHash);
     await this.sessionService.revokeAllForUser(user.id);
@@ -215,10 +211,8 @@ export class AuthService {
       throw new UnauthorizedException('Invalid current password');
     }
 
-    const passwordHash = await bcrypt.hash(
-      dto.newPassword,
-      this.configService.get<number>('BCRYPT_ROUNDS', BCRYPT_ROUNDS_DEFAULT),
-    );
+    const rounds = Number(this.configService.get('BCRYPT_ROUNDS', BCRYPT_ROUNDS_DEFAULT));
+    const passwordHash = await bcrypt.hash(dto.newPassword, rounds);
 
     await this.usersService.updatePassword(userId, passwordHash);
     await this.sessionService.revokeAllForUser(userId);
