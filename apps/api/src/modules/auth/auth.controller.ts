@@ -1,18 +1,23 @@
 import {
   Controller,
   Post,
+  Get,
   Body,
+  Query,
   Req,
   HttpCode,
   HttpStatus,
   UseGuards,
-  Get,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+import { VerifyMfaSetupDto, DisableMfaDto } from './dto/verify-mfa.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
 import type { JwtPayload } from './auth.service';
@@ -24,35 +29,30 @@ export class AuthController {
 
   @Post('register')
   @ApiOperation({ summary: 'Cadastrar novo usuário' })
-  @ApiResponse({ status: 201, description: 'Usuário criado' })
+  @ApiResponse({ status: 201 })
   @ApiResponse({ status: 409, description: 'Email já cadastrado' })
   async register(@Body() dto: RegisterDto, @Req() req: Request) {
-    return this.authService.register(
-      dto,
-      req.ip,
-      req.headers['user-agent'],
-    );
+    return this.authService.register(dto, req.ip, req.headers['user-agent']);
+  }
+
+  @Get('verify-email')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Confirmar email' })
+  async verifyEmail(@Query('token') token: string) {
+    await this.authService.verifyEmail(token);
   }
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Login' })
-  @ApiResponse({ status: 200, description: 'Tokens de acesso' })
-  @ApiResponse({ status: 401, description: 'Credenciais inválidas' })
   async login(@Body() dto: LoginDto, @Req() req: Request) {
-    return this.authService.login(
-      dto,
-      req.ip,
-      req.headers['user-agent'],
-    );
+    return this.authService.login(dto, req.ip, req.headers['user-agent']);
   }
 
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Renovar tokens' })
-  async refresh(
-    @Body() body: { refreshToken: string; sessionId: string },
-  ) {
+  async refresh(@Body() body: { refreshToken: string; sessionId: string }) {
     return this.authService.refreshTokens(body.refreshToken, body.sessionId);
   }
 
@@ -63,6 +63,55 @@ export class AuthController {
   @ApiOperation({ summary: 'Logout' })
   async logout(@CurrentUser() user: JwtPayload) {
     await this.authService.logout(user.sessionId);
+  }
+
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Solicitar redefinição de senha' })
+  async forgotPassword(@Body() dto: ForgotPasswordDto, @Req() req: Request) {
+    await this.authService.forgotPassword(dto, req.ip);
+  }
+
+  @Post('reset-password')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Redefinir senha' })
+  async resetPassword(@Body() dto: ResetPasswordDto, @Req() req: Request) {
+    await this.authService.resetPassword(dto, req.ip);
+  }
+
+  @Post('change-password')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Alterar senha' })
+  async changePassword(@CurrentUser() user: JwtPayload, @Body() dto: ChangePasswordDto, @Req() req: Request) {
+    await this.authService.changePassword(user.sub, dto, req.ip);
+  }
+
+  @Get('mfa/setup')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Iniciar configuração de MFA' })
+  async setupMfa(@CurrentUser() user: JwtPayload) {
+    return this.authService.setupMfa(user.sub);
+  }
+
+  @Post('mfa/confirm')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Confirmar configuração de MFA' })
+  async confirmMfa(@CurrentUser() user: JwtPayload, @Body() dto: VerifyMfaSetupDto, @Req() req: Request) {
+    await this.authService.confirmMfaSetup(user.sub, dto, req.ip);
+  }
+
+  @Post('mfa/disable')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Desativar MFA' })
+  async disableMfa(@CurrentUser() user: JwtPayload, @Body() dto: DisableMfaDto, @Req() req: Request) {
+    await this.authService.disableMfa(user.sub, dto, req.ip);
   }
 
   @Get('me')

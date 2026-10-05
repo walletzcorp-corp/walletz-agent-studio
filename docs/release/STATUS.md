@@ -1,7 +1,7 @@
 # Status da Release — Walletz Agent Studio
 
 **Última atualização**: 2026-10-05  
-**Sprint atual**: 0 — Fundação
+**Sprint atual**: 1 — Auth, Tenancy, RBAC, Design System
 
 ---
 
@@ -9,9 +9,9 @@
 
 | Estado | Módulos |
 |--------|---------|
-| ✅ Pronto | — |
-| 🔄 Em progresso | Sprint 0: Fundação |
-| ⏳ Pendente | A, B, C, D, E, F, G, H, I, J, K, L, M, N |
+| ✅ Pronto | Sprint 0 — Fundação |
+| 🔄 Em progresso | Sprint 1 — Auth, Tenancy, RBAC, Design System |
+| ⏳ Pendente | Agents (B), Knowledge (C), Teach AI (D), RAG (E), Lab (F), Conversations (G), Contacts (H), Calendar (J), Campaigns (K), Analytics (M), Billing (N) |
 | 🔴 Bloqueado externamente | WhatsApp Cloud API, Google OAuth, Microsoft OAuth, Stripe |
 
 ---

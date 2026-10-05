@@ -17,6 +17,8 @@ import { HealthModule } from './modules/health/health.module';
 import { AuditModule } from './shared/audit/audit.module';
 import { OutboxModule } from './shared/outbox/outbox.module';
 import { TelemetryModule } from './shared/telemetry/telemetry.module';
+import { MailModule } from './shared/mail/mail.module';
+import { RbacModule } from './shared/rbac/rbac.module';
 import { appConfig } from './config/app.config';
 import { databaseConfig } from './config/database.config';
 import { redisConfig } from './config/redis.config';
@@ -50,9 +52,11 @@ import { anthropicConfig } from './config/anthropic.config';
     ]),
     ScheduleModule.forRoot(),
     TelemetryModule,
+    MailModule,
     DatabaseModule,
     RedisModule,
     AuditModule,
+    RbacModule,
     OutboxModule,
     HealthModule,
     AuthModule,

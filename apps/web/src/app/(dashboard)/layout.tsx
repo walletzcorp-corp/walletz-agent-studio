@@ -1,21 +1,58 @@
-// Sprint 1: Dashboard layout with sidebar navigation
-// Navigation: Início, Meus Agentes, Ensinar IA, Laboratório,
-//             Conversas, Contatos, Campanhas, Agendas, Resultados, Configurações
+'use client';
+
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { Sidebar } from '../../components/sidebar';
+import { UserMenu } from '../../components/user-menu';
+import { useAuth } from '../../hooks/use-auth';
+import { Skeleton } from '@walletz/ui';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex h-screen bg-gray-50">
-      <aside className="w-64 bg-white border-r border-gray-200 flex flex-col">
-        <div className="h-16 flex items-center px-6 border-b border-gray-200">
-          <span className="font-bold text-lg text-gray-900">Walletz</span>
+  const { isAuthenticated, isLoading, email, tenantName, logout } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      router.replace('/auth/login');
+    }
+  }, [isAuthenticated, isLoading, router]);
+
+  useEffect(() => {
+    const handler = () => logout();
+    window.addEventListener('walletz:logout', handler);
+    return () => window.removeEventListener('walletz:logout', handler);
+  }, [logout]);
+
+  if (isLoading) {
+    return (
+      <div className="flex h-screen bg-background">
+        <div className="w-64 border-r border-border bg-card p-4 space-y-2">
+          <Skeleton className="h-8 w-full" />
+          {Array.from({ length: 8 }).map((_, i) => (
+            <Skeleton key={i} className="h-10 w-full" />
+          ))}
         </div>
-        <nav className="flex-1 p-4 space-y-1">
-          {/* Sprint 1: NavigationMenu component */}
-          <p className="text-sm text-gray-500 px-3">Menu — Sprint 1</p>
-        </nav>
-      </aside>
+        <div className="flex-1 p-8 space-y-4">
+          <Skeleton className="h-8 w-64" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-3/4" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) return null;
+
+  return (
+    <div className="flex h-screen bg-background overflow-hidden">
+      <div className="flex flex-col w-64 shrink-0">
+        <Sidebar tenantName={tenantName ?? undefined} />
+        <div className="border-r border-border bg-card px-3 py-3">
+          <UserMenu email={email} />
+        </div>
+      </div>
       <main className="flex-1 overflow-auto">
-        <div className="p-8">{children}</div>
+        {children}
       </main>
     </div>
   );
