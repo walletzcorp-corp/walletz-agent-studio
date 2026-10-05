@@ -9,9 +9,9 @@
 
 | Estado | Módulos |
 |--------|---------|
-| ✅ Pronto | Sprint 0 — Fundação, Sprint 1 — Auth/RBAC/Tenancy/Design System, Sprint 2 — Agent Builder |
-| ✅ Validado em dev | Register, Login, Logout, Dashboard, Tenant isolation — testados no browser e via API |
-| ⏳ Pendente | Knowledge (C), Teach AI (D), RAG (E), Lab (F), Conversations (G), Contacts (H), Calendar (J), Campaigns (K), Analytics (M), Billing (N) |
+| ✅ Pronto | Sprint 0–2 — Fundação, Auth/RBAC/Tenancy, Agent Builder |
+| ✅ Validado em dev | Auth flow, Agents, Knowledge Ingestion (Sprint 3), Teach AI + Approval (Sprint 4) |
+| ⏳ Pendente | RAG (E), Lab (F), Conversations (G), Contacts (H), Calendar (J), Campaigns (K), Analytics (M), Billing (N) |
 | 🔴 Bloqueado externamente | WhatsApp Cloud API, Google OAuth, Microsoft OAuth, Stripe |
 
 ---

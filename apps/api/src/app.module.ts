@@ -11,6 +11,7 @@ import { TenantsModule } from './modules/tenants/tenants.module';
 import { UsersModule } from './modules/users/users.module';
 import { AgentsModule } from './modules/agents/agents.module';
 import { KnowledgeModule } from './modules/knowledge/knowledge.module';
+import { TeachModule } from './modules/teach/teach.module';
 import { ConversationModule } from './modules/conversations/conversations.module';
 import { ContactModule } from './modules/contacts/contacts.module';
 import { WhatsappModule } from './modules/whatsapp/whatsapp.module';
@@ -81,6 +82,7 @@ import { anthropicConfig } from './config/anthropic.config';
     UsersModule,
     AgentsModule,
     KnowledgeModule,
+    TeachModule,
     ConversationModule,
     ContactModule,
     WhatsappModule,
