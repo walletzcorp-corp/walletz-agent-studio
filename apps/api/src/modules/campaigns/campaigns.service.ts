@@ -1,13 +1,18 @@
 import {
-  Injectable, Inject, NotFoundException, BadRequestException, ForbiddenException,
+  Injectable, Inject, NotFoundException, BadRequestException,
 } from '@nestjs/common';
-import { eq, and, isNull, desc, inArray } from 'drizzle-orm';
+import { eq, and, isNull, desc, gte } from 'drizzle-orm';
 import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';
 import { segments, campaigns, campaignRecipients } from '../../database/schema/campaigns';
 import { contacts, contactIdentities, consents, suppressions } from '../../database/schema/contacts';
-import { whatsappAccounts } from '../../database/schema/whatsapp';
+import { whatsappAccounts, whatsappTemplates, whatsappMessageLogs } from '../../database/schema/whatsapp';
 import { AuditService } from '../../shared/audit/audit.service';
-import { createId } from '../../database/utils/id';
+
+// Frequency-cap window: a contact may receive at most 1 outbound campaign message per window
+const FREQUENCY_CAP_HOURS = 24;
+
+// Template categories that conflict with outbound marketing campaigns
+const BLOCKED_TEMPLATE_CATEGORIES = ['AUTHENTICATION'];
 
 export interface SendPolicyResult {
   eligible: number;
@@ -123,15 +128,24 @@ export class CampaignsService {
   }
 
   // ─── Send Policy Gateway ─────────────────────────────────────────────────────
+  //
+  // Decision order (mirrors the product spec):
+  //   1. Número válido?
+  //   2. Tem consentimento?
+  //   3. Está em opt-out?
+  //   4. Existe template aprovado? (campaign-level)
+  //   5. Finalidade combina com o template? (campaign-level)
+  //   6. Contato já recebeu mensagem recentemente? (frequency cap)
+  //   7. Dentro das políticas da empresa?
 
   async checkEligibility(tenantId: string, campaignId: string): Promise<SendPolicyResult> {
     const campaign = await this.getCampaign(tenantId, campaignId);
 
     if (!campaign.segmentId) {
-      throw new BadRequestException('Campaign has no segment selected');
+      throw new BadRequestException('Campanha sem segmento selecionado');
     }
 
-    // Check WhatsApp is connected
+    // ── Check 4 (campaign-level): WhatsApp connected ──
     const [wa] = await this.db
       .select()
       .from(whatsappAccounts)
@@ -142,11 +156,44 @@ export class CampaignsService {
       throw new BadRequestException('Nenhuma conta WhatsApp conectada');
     }
 
+    // ── Check 4 (campaign-level): template name set ──
     if (!campaign.templateName) {
-      throw new BadRequestException('Campanha requer um template aprovado');
+      throw new BadRequestException('Campanha sem template definido');
     }
 
-    // Get all contacts with whatsapp identities
+    // ── Check 4 (campaign-level): template exists and is APPROVED ──
+    const [approvedTemplate] = await this.db
+      .select({ id: whatsappTemplates.id, category: whatsappTemplates.category, status: whatsappTemplates.status })
+      .from(whatsappTemplates)
+      .where(
+        and(
+          eq(whatsappTemplates.tenantId, tenantId),
+          eq(whatsappTemplates.accountId, wa.id),
+          eq(whatsappTemplates.name, campaign.templateName),
+        ),
+      )
+      .limit(1);
+
+    if (!approvedTemplate) {
+      throw new BadRequestException(
+        `Template "${campaign.templateName}" não encontrado. Sincronize os templates da conta WhatsApp.`,
+      );
+    }
+
+    if (approvedTemplate.status !== 'APPROVED') {
+      throw new BadRequestException(
+        `Template "${campaign.templateName}" não está aprovado pela Meta (status: ${approvedTemplate.status}).`,
+      );
+    }
+
+    // ── Check 5 (campaign-level): template category vs campaign purpose ──
+    if (BLOCKED_TEMPLATE_CATEGORIES.includes(approvedTemplate.category.toUpperCase())) {
+      throw new BadRequestException(
+        `Template de categoria "${approvedTemplate.category}" não pode ser usado em campanhas de marketing.`,
+      );
+    }
+
+    // ── Get all contacts with whatsapp identities for the tenant ──
     const identities = await this.db
       .select({
         contactId: contactIdentities.contactId,
@@ -170,6 +217,7 @@ export class CampaignsService {
     for (const identity of identities) {
       const blockReason = await this.checkSingleRecipient(
         tenantId,
+        wa.id,
         identity.contactId,
         identity.phone,
       );
@@ -185,7 +233,6 @@ export class CampaignsService {
       }
     }
 
-    // Update campaign counts
     await this.db
       .update(campaigns)
       .set({
@@ -201,24 +248,14 @@ export class CampaignsService {
 
   private async checkSingleRecipient(
     tenantId: string,
+    accountId: string,
     contactId: string,
     phone: string,
   ): Promise<string | null> {
-    // 1. Check suppression list
-    const [suppressed] = await this.db
-      .select()
-      .from(suppressions)
-      .where(
-        and(
-          eq(suppressions.tenantId, tenantId),
-          eq(suppressions.channel, 'whatsapp'),
-          eq(suppressions.normalizedValue, phone),
-        ),
-      )
-      .limit(1);
-    if (suppressed) return 'opt_out';
+    // 1. O número é válido? (E.164: starts with +, 8–15 digits total)
+    if (!this.isValidE164(phone)) return 'invalid_phone';
 
-    // 2. Check consent
+    // 2. Tem consentimento?
     const [consent] = await this.db
       .select()
       .from(consents)
@@ -234,7 +271,38 @@ export class CampaignsService {
       .limit(1);
     if (!consent) return 'no_consent';
 
-    // 3. Check if contact is blocked
+    // 3. Está em opt-out?
+    const [suppressed] = await this.db
+      .select()
+      .from(suppressions)
+      .where(
+        and(
+          eq(suppressions.tenantId, tenantId),
+          eq(suppressions.channel, 'whatsapp'),
+          eq(suppressions.normalizedValue, phone),
+        ),
+      )
+      .limit(1);
+    if (suppressed) return 'opt_out';
+
+    // 6. O contato já recebeu mensagem recentemente? (frequency cap)
+    const capWindow = new Date(Date.now() - FREQUENCY_CAP_HOURS * 60 * 60 * 1000);
+    const [recentMsg] = await this.db
+      .select({ id: whatsappMessageLogs.id })
+      .from(whatsappMessageLogs)
+      .where(
+        and(
+          eq(whatsappMessageLogs.tenantId, tenantId),
+          eq(whatsappMessageLogs.accountId, accountId),
+          eq(whatsappMessageLogs.direction, 'outbound'),
+          eq(whatsappMessageLogs.to, phone),
+          gte(whatsappMessageLogs.createdAt, capWindow),
+        ),
+      )
+      .limit(1);
+    if (recentMsg) return 'frequency_capped';
+
+    // 7. Está dentro das políticas da empresa?
     const [contact] = await this.db
       .select({ isBlocked: contacts.isBlocked })
       .from(contacts)
@@ -245,6 +313,10 @@ export class CampaignsService {
     return null;
   }
 
+  private isValidE164(phone: string): boolean {
+    return /^\+[1-9]\d{7,14}$/.test(phone);
+  }
+
   async launchCampaign(tenantId: string, campaignId: string, userId: string) {
     const campaign = await this.getCampaign(tenantId, campaignId);
 
@@ -252,7 +324,6 @@ export class CampaignsService {
       throw new BadRequestException(`Campanha não pode ser iniciada (status: ${campaign.status})`);
     }
 
-    // Run eligibility check
     const eligibility = await this.checkEligibility(tenantId, campaignId);
 
     if (eligibility.eligible === 0) {
