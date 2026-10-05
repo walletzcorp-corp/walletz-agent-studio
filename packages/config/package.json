@@ -1,0 +1,12 @@
+{
+  "name": "@walletz/config",
+  "version": "0.1.0",
+  "private": true,
+  "exports": {
+    "./typescript": "./typescript/index.json",
+    "./eslint/base": "./eslint/base.js",
+    "./eslint/next": "./eslint/next.js",
+    "./eslint/nest": "./eslint/nest.js",
+    "./prettier": "./prettier/index.js"
+  }
+}

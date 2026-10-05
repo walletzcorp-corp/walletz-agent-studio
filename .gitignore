@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+.next/
+build/
+out/
+*.tsbuildinfo
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Test artifacts
+coverage/
+playwright-report/
+test-results/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Editor
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Turbo
+.turbo/
+
+# Docker volumes (never commit data)
+postgres_data/
+redis_data/
+minio_data/
+
+# Security - NEVER commit these
+*.pem
+*.key
+*.cert
+secrets/
+credentials/
