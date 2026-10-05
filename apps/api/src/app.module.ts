@@ -18,6 +18,7 @@ import { ContactModule } from './modules/contacts/contacts.module';
 import { WhatsappModule } from './modules/whatsapp/whatsapp.module';
 import { CampaignsModule } from './modules/campaigns/campaigns.module';
 import { BillingModule } from './modules/billing/billing.module';
+import { CalendarsModule } from './modules/calendars/calendars.module';
 import { HealthModule } from './modules/health/health.module';
 import { AuditModule } from './shared/audit/audit.module';
 import { OutboxModule } from './shared/outbox/outbox.module';
@@ -91,6 +92,7 @@ import { anthropicConfig } from './config/anthropic.config';
     WhatsappModule,
     CampaignsModule,
     BillingModule,
+    CalendarsModule,
   ],
 })
 export class AppModule {}

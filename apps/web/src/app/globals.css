@@ -2,63 +2,238 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Neural Design System — Walletz Agent Studio ── */
+/* Premium dark SaaS identity. Always dark. */
+
 :root {
-  --background: 0 0% 100%;
-  --foreground: 222.2 84% 4.9%;
-  --card: 0 0% 100%;
-  --card-foreground: 222.2 84% 4.9%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 222.2 84% 4.9%;
-  --primary: 221.2 83.2% 53.3%;
-  --primary-foreground: 210 40% 98%;
-  --secondary: 210 40% 96.1%;
-  --secondary-foreground: 222.2 47.4% 11.2%;
-  --muted: 210 40% 96.1%;
-  --muted-foreground: 215.4 16.3% 46.9%;
-  --accent: 210 40% 96.1%;
-  --accent-foreground: 222.2 47.4% 11.2%;
-  --destructive: 0 84.2% 60.2%;
-  --destructive-foreground: 210 40% 98%;
-  --border: 214.3 31.8% 91.4%;
-  --input: 214.3 31.8% 91.4%;
-  --ring: 221.2 83.2% 53.3%;
-  --radius: 0.5rem;
+  /* ── Core semantic tokens mapped to Neural palette ── */
+  --background:   221 48% 5%;      /* #070B14 — deep space */
+  --foreground:   210 40% 98%;     /* #F8FAFC — text primary */
+
+  --card:         218 41% 14%;     /* #162033 — elevated card */
+  --card-foreground: 210 40% 98%;
+
+  --popover:      221 39% 11%;     /* #111827 — popovers */
+  --popover-foreground: 210 40% 98%;
+
+  --primary:      254 100% 64%;    /* #6D4AFF — Neural violet */
+  --primary-foreground: 0 0% 100%;
+
+  --secondary:    221 39% 11%;     /* #111827 — surface 2 */
+  --secondary-foreground: 215 20% 83%; /* #CBD5E1 */
+
+  --muted:        221 49% 8%;      /* #0B1220 — surface 1 */
+  --muted-foreground: 215 20% 65%; /* #94A3B8 */
+
+  --accent:       221 39% 11%;     /* #111827 */
+  --accent-foreground: 210 40% 98%;
+
+  --destructive:  0 84% 60%;       /* #EF4444 */
+  --destructive-foreground: 0 0% 100%;
+
+  --border:       218 33% 21%;     /* #243146 */
+  --input:        221 39% 11%;     /* #111827 */
+  --ring:         254 100% 64%;    /* #6D4AFF */
+
+  --radius: 0.625rem;
+
+  /* ── Neural extended palette ── */
+  --surface-0:    221 48% 5%;      /* #070B14 */
+  --surface-1:    221 49% 8%;      /* #0B1220 */
+  --surface-2:    221 39% 11%;     /* #111827 */
+  --surface-3:    218 41% 14%;     /* #162033 */
+
+  --neural-violet:  254 100% 64%;  /* #6D4AFF */
+  --neural-violet-h:251 100% 68%;  /* #7C5CFF hover */
+  --neural-blue:    217 91% 60%;   /* #3B82F6 */
+  --neural-cyan:    190 82% 53%;   /* #22D3EE */
+  --neural-success: 158 84% 39%;   /* #10B981 */
+  --neural-warning: 38 92% 50%;    /* #F59E0B */
+  --neural-danger:  0 84% 60%;     /* #EF4444 */
+
+  --text-primary:   210 40% 98%;   /* #F8FAFC */
+  --text-secondary: 215 20% 83%;   /* #CBD5E1 */
+  --text-muted:     215 20% 65%;   /* #94A3B8 */
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 48%;
-  }
-}
-
-:root[data-theme="dark"] {
-  --background: 222.2 84% 4.9%;
-  --foreground: 210 40% 98%;
-}
-
+/* ── Base resets ── */
 * {
   border-color: hsl(var(--border));
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
   background-color: hsl(var(--background));
   color: hsl(var(--foreground));
+  font-family: var(--font-inter, 'Inter', sans-serif);
+  line-height: 1.6;
+}
+
+h1, h2, h3, h4, h5, h6,
+.font-display {
+  font-family: var(--font-sora, var(--font-inter, 'Inter', sans-serif));
+  letter-spacing: -0.02em;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: hsl(var(--surface-1)); }
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground)); }
+
+/* ── Neural utility classes ── */
+@layer utilities {
+  .neural-card {
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+  }
+
+  .neural-surface-1 { background: hsl(var(--surface-1)); }
+  .neural-surface-2 { background: hsl(var(--surface-2)); }
+  .neural-surface-3 { background: hsl(var(--surface-3)); }
+
+  .neural-glow {
+    box-shadow: 0 0 24px hsl(var(--neural-violet) / 0.18),
+                0 0 8px  hsl(var(--neural-violet) / 0.10);
+  }
+
+  .neural-glow-sm {
+    box-shadow: 0 0 12px hsl(var(--neural-violet) / 0.12);
+  }
+
+  .text-gradient-violet {
+    background: linear-gradient(135deg, hsl(var(--neural-violet)), hsl(var(--neural-blue)));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .border-neural {
+    border-color: hsl(var(--border));
+  }
+
+  .badge-success {
+    background: hsl(var(--neural-success) / 0.15);
+    color: hsl(var(--neural-success));
+    border: 1px solid hsl(var(--neural-success) / 0.3);
+  }
+
+  .badge-warning {
+    background: hsl(var(--neural-warning) / 0.15);
+    color: hsl(var(--neural-warning));
+    border: 1px solid hsl(var(--neural-warning) / 0.3);
+  }
+
+  .badge-danger {
+    background: hsl(var(--neural-danger) / 0.15);
+    color: hsl(var(--neural-danger));
+    border: 1px solid hsl(var(--neural-danger) / 0.3);
+  }
+
+  .badge-primary {
+    background: hsl(var(--neural-violet) / 0.15);
+    color: hsl(var(--neural-violet));
+    border: 1px solid hsl(var(--neural-violet) / 0.3);
+  }
+
+  .badge-blue {
+    background: hsl(var(--neural-blue) / 0.15);
+    color: hsl(var(--neural-blue));
+    border: 1px solid hsl(var(--neural-blue) / 0.3);
+  }
+
+  .badge-cyan {
+    background: hsl(var(--neural-cyan) / 0.15);
+    color: hsl(var(--neural-cyan));
+    border: 1px solid hsl(var(--neural-cyan) / 0.3);
+  }
+
+  .btn-primary {
+    background: hsl(var(--neural-violet));
+    color: white;
+    border: none;
+    font-weight: 500;
+    transition: background 0.15s, box-shadow 0.15s;
+  }
+
+  .btn-primary:hover {
+    background: hsl(var(--neural-violet-h));
+    box-shadow: 0 4px 16px hsl(var(--neural-violet) / 0.35);
+  }
+
+  .btn-ghost {
+    background: transparent;
+    color: hsl(var(--text-secondary));
+    border: 1px solid hsl(var(--border));
+    transition: background 0.15s, color 0.15s;
+  }
+
+  .btn-ghost:hover {
+    background: hsl(var(--surface-2));
+    color: hsl(var(--foreground));
+  }
+
+  .stat-card {
+    background: hsl(var(--surface-2));
+    border: 1px solid hsl(var(--border));
+    border-radius: calc(var(--radius) + 2px);
+    padding: 1.25rem 1.5rem;
+    transition: border-color 0.15s;
+  }
+
+  .stat-card:hover {
+    border-color: hsl(var(--neural-violet) / 0.4);
+  }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+  }
+
+  .page-container {
+    padding: 2rem;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .data-table th {
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: hsl(var(--text-muted));
+    padding: 0.75rem 1rem;
+    text-align: left;
+    border-bottom: 1px solid hsl(var(--border));
+  }
+
+  .data-table td {
+    padding: 0.875rem 1rem;
+    border-bottom: 1px solid hsl(var(--border) / 0.5);
+    font-size: 0.875rem;
+    color: hsl(var(--text-secondary));
+    vertical-align: middle;
+  }
+
+  .data-table tr:last-child td { border-bottom: none; }
+
+  .data-table tr:hover td {
+    background: hsl(var(--surface-2) / 0.5);
+  }
 }
