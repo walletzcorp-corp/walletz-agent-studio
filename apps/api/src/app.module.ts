@@ -1,9 +1,11 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { ScheduleModule } from '@nestjs/schedule';
+import { BullModule } from '@nestjs/bullmq';
 import { DatabaseModule } from './database/database.module';
 import { RedisModule } from './shared/redis/redis.module';
+import { StorageModule } from './shared/storage/storage.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { UsersModule } from './modules/users/users.module';
@@ -51,10 +53,25 @@ import { anthropicConfig } from './config/anthropic.config';
       },
     ]),
     ScheduleModule.forRoot(),
+    BullModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        connection: {
+          url: config.getOrThrow<string>('REDIS_URL'),
+        },
+        defaultJobOptions: {
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 5000 },
+          removeOnComplete: 100,
+          removeOnFail: 500,
+        },
+      }),
+    }),
     TelemetryModule,
     MailModule,
     DatabaseModule,
     RedisModule,
+    StorageModule,
     AuditModule,
     RbacModule,
     OutboxModule,

@@ -27,6 +27,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { href: '/dashboard', label: 'Início', icon: Home },
   { href: '/agentes', label: 'Meus Agentes', icon: Bot },
+  { href: '/conhecimento', label: 'Base de Conhecimento', icon: BookOpen },
   { href: '/ensinar', label: 'Ensinar IA', icon: BookOpen },
   { href: '/laboratorio', label: 'Laboratório', icon: FlaskConical },
   { href: '/conversas', label: 'Conversas', icon: MessageSquare },

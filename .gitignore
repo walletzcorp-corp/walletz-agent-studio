@@ -46,3 +46,5 @@ minio_data/
 *.cert
 secrets/
 credentials/
+
+apps/api/uploads/

@@ -1,7 +1,7 @@
 # Status da Release — Walletz Agent Studio
 
 **Última atualização**: 2026-10-05  
-**Sprint atual**: 1 — Auth, Tenancy, RBAC, Design System
+**Sprint atual**: 3 — Sprint 2 concluído, infraestrutura de dev validada
 
 ---
 
@@ -9,9 +9,9 @@
 
 | Estado | Módulos |
 |--------|---------|
-| ✅ Pronto | Sprint 0 — Fundação |
-| 🔄 Em progresso | Sprint 1 — Auth, Tenancy, RBAC, Design System |
-| ⏳ Pendente | Agents (B), Knowledge (C), Teach AI (D), RAG (E), Lab (F), Conversations (G), Contacts (H), Calendar (J), Campaigns (K), Analytics (M), Billing (N) |
+| ✅ Pronto | Sprint 0 — Fundação, Sprint 1 — Auth/RBAC/Tenancy/Design System, Sprint 2 — Agent Builder |
+| ✅ Validado em dev | Register, Login, Logout, Dashboard, Tenant isolation — testados no browser e via API |
+| ⏳ Pendente | Knowledge (C), Teach AI (D), RAG (E), Lab (F), Conversations (G), Contacts (H), Calendar (J), Campaigns (K), Analytics (M), Billing (N) |
 | 🔴 Bloqueado externamente | WhatsApp Cloud API, Google OAuth, Microsoft OAuth, Stripe |
 
 ---
