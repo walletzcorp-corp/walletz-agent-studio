@@ -33,14 +33,18 @@ export class RbacGuard implements CanActivate {
       return true;
     }
 
-    const request = context.switchToHttp().getRequest<{ user?: JwtPayload; tenantId?: string }>();
+    const request = context.switchToHttp().getRequest<{
+      user?: JwtPayload;
+      tenantId?: string;
+      params?: Record<string, string>;
+    }>();
     const user = request.user;
 
     if (!user) {
       throw new UnauthorizedException();
     }
 
-    const tenantId = request.tenantId ?? user.tenantId;
+    const tenantId = request.tenantId ?? request.params?.['tenantId'] ?? user.tenantId;
     if (!tenantId) {
       throw new ForbiddenException('Tenant context required');
     }
