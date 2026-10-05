@@ -1,7 +1,7 @@
 # Status da Release — Walletz Agent Studio
 
 **Última atualização**: 2026-10-05  
-**Sprint atual**: 3 — Sprint 2 concluído, infraestrutura de dev validada
+**Sprint atual**: 6 — Identidade Neural + páginas Agendas/Resultados/Configurações + backend Calendar
 
 ---
 
@@ -37,7 +37,7 @@
 | **Módulo F — WhatsApp** | 🔴 Bloqueado | — | Sandbox oficial | Conta Meta Business | Aprovação Meta | — | Integrations | — |
 | **Módulo G — Contatos** | ⏳ | — | — | — | LGPD/consentimento | — | Backend | — |
 | **Módulo H — Campanhas** | ⏳ | — | — | — | Spam risk | — | Backend | — |
-| **Módulo I — Agenda** | 🔴 Bloqueado | — | Sandbox local | Google/Microsoft OAuth | Registro de app | — | Integrations | — |
+| **Módulo I — Agenda** | 🟡 Parcial | ⏳ | Backend pronto | Aguarda credenciais OAuth | Registro Google/Azure | Endpoints `/calendars/*` OK, página `/agendas` OK | Integrations | 2026-10-05 |
 | **Módulo J — Tools** | ⏳ | — | — | — | Tool abuse | — | AI/Backend | — |
 | **Módulo K — Learning** | ⏳ | — | — | — | Auto-learning risk | — | AI | — |
 | **Módulo L — Analytics** | ⏳ | — | — | — | — | — | Backend | — |
