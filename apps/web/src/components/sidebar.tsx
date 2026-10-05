@@ -15,6 +15,8 @@ import {
   BarChart3,
   Settings,
   ChevronRight,
+  Smartphone,
+  GraduationCap,
 } from 'lucide-react';
 
 interface NavItem {
@@ -28,8 +30,9 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/dashboard', label: 'Início', icon: Home },
   { href: '/agentes', label: 'Meus Agentes', icon: Bot },
   { href: '/conhecimento', label: 'Base de Conhecimento', icon: BookOpen },
-  { href: '/ensinar', label: 'Ensinar IA', icon: BookOpen },
+  { href: '/ensinar', label: 'Ensinar IA', icon: GraduationCap },
   { href: '/laboratorio', label: 'Laboratório', icon: FlaskConical },
+  { href: '/canais/whatsapp', label: 'WhatsApp', icon: Smartphone },
   { href: '/conversas', label: 'Conversas', icon: MessageSquare },
   { href: '/contatos', label: 'Contatos', icon: Users },
   { href: '/campanhas', label: 'Campanhas', icon: Megaphone },

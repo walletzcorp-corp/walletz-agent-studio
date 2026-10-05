@@ -6,3 +6,5 @@ export * from './conversations';
 export * from './contacts';
 export * from './audit';
 export * from './billing';
+export * from './whatsapp';
+export * from './campaigns';

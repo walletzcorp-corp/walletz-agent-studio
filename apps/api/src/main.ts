@@ -13,6 +13,7 @@ async function bootstrap() {
 
   const app = await NestFactory.create(AppModule, {
     bufferLogs: true,
+    rawBody: true,
   });
 
   const configService = app.get(ConfigService);
@@ -68,6 +69,7 @@ async function bootstrap() {
     .addTag('users', 'Usuários e convites')
     .addTag('agents', 'Agentes de IA')
     .addTag('knowledge', 'Base de conhecimento')
+    .addTag('lab', 'Laboratório de testes')
     .addTag('conversations', 'Conversas e inbox')
     .addTag('contacts', 'Contatos e leads')
     .addTag('campaigns', 'Campanhas e cadências')

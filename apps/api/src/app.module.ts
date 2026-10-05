@@ -12,9 +12,11 @@ import { UsersModule } from './modules/users/users.module';
 import { AgentsModule } from './modules/agents/agents.module';
 import { KnowledgeModule } from './modules/knowledge/knowledge.module';
 import { TeachModule } from './modules/teach/teach.module';
+import { LabModule } from './modules/lab/lab.module';
 import { ConversationModule } from './modules/conversations/conversations.module';
 import { ContactModule } from './modules/contacts/contacts.module';
 import { WhatsappModule } from './modules/whatsapp/whatsapp.module';
+import { CampaignsModule } from './modules/campaigns/campaigns.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { HealthModule } from './modules/health/health.module';
 import { AuditModule } from './shared/audit/audit.module';
@@ -83,9 +85,11 @@ import { anthropicConfig } from './config/anthropic.config';
     AgentsModule,
     KnowledgeModule,
     TeachModule,
+    LabModule,
     ConversationModule,
     ContactModule,
     WhatsappModule,
+    CampaignsModule,
     BillingModule,
   ],
 })

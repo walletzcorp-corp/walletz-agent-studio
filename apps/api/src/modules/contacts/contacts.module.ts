@@ -1,5 +1,12 @@
 import { Module } from '@nestjs/common';
+import { RbacModule } from '../../shared/rbac/rbac.module';
+import { ContactsController } from './contacts.controller';
+import { ContactsService } from './contacts.service';
 
-// Sprint 9: Implementation pending
-@Module({})
+@Module({
+  imports: [RbacModule],
+  controllers: [ContactsController],
+  providers: [ContactsService],
+  exports: [ContactsService],
+})
 export class ContactModule {}
