@@ -1,5 +1,12 @@
 import { Module } from '@nestjs/common';
+import { AgentsController } from './agents.controller';
+import { AgentsService } from './agents.service';
+import { RbacModule } from '../../shared/rbac/rbac.module';
 
-// Sprint 2: Implementation pending
-@Module({})
-export class AgentModule {}
+@Module({
+  imports: [RbacModule],
+  controllers: [AgentsController],
+  providers: [AgentsService],
+  exports: [AgentsService],
+})
+export class AgentsModule {}
