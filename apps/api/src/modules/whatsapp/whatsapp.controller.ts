@@ -10,7 +10,7 @@ import { RbacGuard } from '../../shared/rbac/rbac.guard';
 import { Roles } from '../../shared/rbac/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { WhatsappService } from './whatsapp.service';
-import { ConnectWhatsappDto, SendMessageDto } from './dto/connect-account.dto';
+import { ConnectWhatsappDto, EmbeddedSignupDto, SendMessageDto } from './dto/connect-account.dto';
 
 @ApiTags('whatsapp')
 @Controller()
@@ -71,11 +71,24 @@ export class WhatsappController {
     return this.whatsappService.getAccount(tenantId, accountId);
   }
 
+  @Post('tenants/:tenantId/whatsapp/embedded-signup')
+  @UseGuards(JwtAuthGuard, RbacGuard)
+  @ApiBearerAuth()
+  @Roles('admin', 'owner')
+  @ApiOperation({ summary: 'Complete WhatsApp connection via Meta Embedded Signup (code exchange on backend)' })
+  embeddedSignup(
+    @Param('tenantId') tenantId: string,
+    @Body() dto: EmbeddedSignupDto,
+    @CurrentUser('userId') userId: string,
+  ) {
+    return this.whatsappService.embeddedSignup(dto, tenantId, userId);
+  }
+
   @Post('tenants/:tenantId/whatsapp/accounts')
   @UseGuards(JwtAuthGuard, RbacGuard)
   @ApiBearerAuth()
   @Roles('admin', 'owner')
-  @ApiOperation({ summary: 'Connect a WhatsApp account' })
+  @ApiOperation({ summary: 'Connect a WhatsApp account (manual — for advanced/technical use)' })
   connectAccount(
     @Param('tenantId') tenantId: string,
     @Body() dto: ConnectWhatsappDto,

@@ -32,12 +32,22 @@ export interface ConnectAccountPayload {
   webhookUrl: string;
 }
 
+export interface EmbeddedSignupPayload {
+  code: string;
+  path?: 'existing' | 'new';
+  wabaId?: string;
+  phoneNumberId?: string;
+}
+
 export const whatsappApi = {
   listAccounts: (tenantId: string) =>
     api.get<WhatsappAccount[]>(`/tenants/${tenantId}/whatsapp/accounts`),
 
   getAccount: (tenantId: string, accountId: string) =>
     api.get<WhatsappAccount>(`/tenants/${tenantId}/whatsapp/accounts/${accountId}`),
+
+  embeddedSignup: (tenantId: string, payload: EmbeddedSignupPayload) =>
+    api.post<WhatsappAccount>(`/tenants/${tenantId}/whatsapp/embedded-signup`, payload),
 
   connectAccount: (tenantId: string, payload: ConnectAccountPayload) =>
     api.post<WhatsappAccount>(`/tenants/${tenantId}/whatsapp/accounts`, payload),

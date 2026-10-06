@@ -252,8 +252,38 @@ function NewTemplateDrawer({ onClose }: { onClose: () => void }) {
         <div className="flex flex-1 overflow-hidden">
           {/* Form */}
           <div className="flex-1 overflow-y-auto px-6 py-6 space-y-5">
-            {/* Base info */}
-            <div className="grid grid-cols-3 gap-4">
+            {/* Objective selection */}
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-muted-foreground">Qual é o objetivo desta mensagem? *</label>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {([
+                  { label: 'Iniciar conversa',      cat: 'MARKETING',      emoji: '👋', hint: 'Primeiro contato ou boas-vindas' },
+                  { label: 'Confirmar agendamento', cat: 'UTILITY',        emoji: '📅', hint: 'Reuniões, consultas, reservas' },
+                  { label: 'Reativar cliente',      cat: 'MARKETING',      emoji: '🔄', hint: 'Clientes sem contato recente' },
+                  { label: 'Enviar atualização',    cat: 'UTILITY',        emoji: '📢', hint: 'Pedidos, status, avisos' },
+                  { label: 'Verificação',           cat: 'AUTHENTICATION', emoji: '🔐', hint: 'Códigos de acesso' },
+                  { label: 'Outro',                 cat: 'MARKETING',      emoji: '💬', hint: 'Definir manualmente' },
+                ] as Array<{ label: string; cat: TemplateCategory; emoji: string; hint: string }>).map(obj => (
+                  <button
+                    key={obj.label}
+                    type="button"
+                    onClick={() => update({ category: obj.cat })}
+                    className={`flex flex-col items-start gap-1 rounded-xl border p-3 text-left transition-all ${
+                      form.category === obj.cat && form.name?.includes(obj.label.toLowerCase().split(' ')[0]!)
+                        ? 'border-primary/40 bg-primary/5'
+                        : 'border-border bg-surface-1 hover:border-primary/30'
+                    }`}
+                  >
+                    <span className="text-lg">{obj.emoji}</span>
+                    <p className="text-xs font-semibold text-foreground">{obj.label}</p>
+                    <p className="text-[10px] text-muted-foreground">{obj.hint}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Name and Language */}
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-muted-foreground">Nome do template *</label>
                 <input
@@ -263,18 +293,6 @@ function NewTemplateDrawer({ onClose }: { onClose: () => void }) {
                   className="w-full rounded-lg border border-border bg-surface-1 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50 font-mono"
                 />
                 <p className="text-[10px] text-muted-foreground/60">Apenas letras minúsculas, números e _</p>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Categoria *</label>
-                <select
-                  value={form.category}
-                  onChange={e => update({ category: e.target.value as TemplateCategory })}
-                  className="w-full rounded-lg border border-border bg-surface-1 px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50"
-                >
-                  <option value="MARKETING">Marketing</option>
-                  <option value="UTILITY">Utilidade</option>
-                  <option value="AUTHENTICATION">Autenticação</option>
-                </select>
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-muted-foreground">Idioma *</label>
@@ -642,6 +660,18 @@ export default function TemplatesPage() {
               </button>
             </div>
             <WhatsAppPreview template={preview} />
+            {preview.status === 'REJECTED' && preview.rejectionReason && (
+              <div className="rounded-xl border border-neural-danger/30 bg-neural-danger/5 p-4 space-y-2">
+                <p className="text-xs font-semibold text-neural-danger">Template rejeitado pela Meta</p>
+                <p className="text-xs text-foreground">{preview.rejectionReason}</p>
+                <p className="text-xs text-muted-foreground">Edite o template conforme a orientação acima e envie novamente para aprovação.</p>
+                <div className="flex gap-2 pt-1">
+                  <button onClick={() => setPreview(null)} className="btn-primary rounded-lg px-3 py-1.5 text-xs flex items-center gap-1.5">
+                    <Edit2 className="h-3 w-3" /> Editar template
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

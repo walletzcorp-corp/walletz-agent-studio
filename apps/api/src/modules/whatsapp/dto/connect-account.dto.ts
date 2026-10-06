@@ -34,6 +34,28 @@ export class ConnectWhatsappDto {
   webhookUrl!: string;
 }
 
+export class EmbeddedSignupDto {
+  @ApiProperty({ description: 'Authorization code returned by Meta Embedded Signup' })
+  @IsString()
+  @IsNotEmpty()
+  code!: string;
+
+  @ApiProperty({ description: 'Connection path: existing WhatsApp Business or new number', required: false })
+  @IsOptional()
+  @IsString()
+  path?: 'existing' | 'new';
+
+  @ApiProperty({ description: 'WABA ID from Embedded Signup session info (if provided by Meta)', required: false })
+  @IsOptional()
+  @IsString()
+  wabaId?: string;
+
+  @ApiProperty({ description: 'Phone Number ID from Embedded Signup session info (if provided by Meta)', required: false })
+  @IsOptional()
+  @IsString()
+  phoneNumberId?: string;
+}
+
 export class SendMessageDto {
   @ApiProperty()
   @IsString()
