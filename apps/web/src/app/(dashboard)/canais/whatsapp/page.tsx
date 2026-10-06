@@ -103,7 +103,7 @@ function loadFBSDK(appId: string): Promise<void> {
    MAIN PAGE
 ══════════════════════════════════════════════════════ */
 export default function WhatsAppPage() {
-  const { tenantId } = useAuth();
+  const { tenantId, isLoading: authLoading } = useAuth();
   const [accounts, setAccounts] = useState<WhatsappAccount[]>([]);
   const [loadingAccounts, setLoadingAccounts] = useState(true);
 
@@ -113,7 +113,10 @@ export default function WhatsAppPage() {
   const [errorMsg, setErrorMsg] = useState('');
 
   const load = useCallback(async () => {
-    if (!tenantId) return;
+    if (!tenantId) {
+      setLoadingAccounts(false);
+      return;
+    }
     try {
       const { data } = await whatsappApi.listAccounts(tenantId);
       setAccounts(data);
@@ -121,7 +124,9 @@ export default function WhatsAppPage() {
     finally { setLoadingAccounts(false); }
   }, [tenantId]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    if (!authLoading) void load();
+  }, [load, authLoading]);
 
   /* ── Launch Meta Embedded Signup v4 ── */
   const launchEmbeddedSignup = useCallback(async (path: ConnectionPath) => {
