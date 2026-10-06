@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useAuth } from '../../../hooks/use-auth';
 import { api } from '../../../lib/api';
-import { Button, Card, CardContent, Badge } from '@walletz/ui';
+import { Button, Badge } from '@walletz/ui';
 import {
-  MessageSquare, Bot, User, PhoneCall, Clock, CheckCheck,
-  Send, ArrowLeft, Pause, Play, XCircle,
+  MessageSquare, Bot, User, PhoneCall, CheckCheck,
+  Send, ArrowLeft, Pause, Play, XCircle, RefreshCw,
 } from 'lucide-react';
 
 interface Conversation {
@@ -40,6 +40,9 @@ const STATUS_COLORS: Record<string, string> = {
   resolved: 'bg-gray-100 text-gray-600',
 };
 
+const POLL_CONVERSATIONS_MS = 5000;
+const POLL_MESSAGES_MS = 3000;
+
 export default function ConversasPage() {
   const { tenantId, userId } = useAuth();
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -49,26 +52,49 @@ export default function ConversasPage() {
   const [reply, setReply] = useState('');
   const [sending, setSending] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const selectedRef = useRef<Conversation | null>(null);
+  selectedRef.current = selected;
 
-  const loadConversations = async () => {
+  const loadConversations = useCallback(async (silent = false) => {
     if (!tenantId) return;
     try {
       const { data } = await api.get<Conversation[]>(`/tenants/${tenantId}/conversations`);
       setConversations(data);
+      // Update selected if it changed server-side
+      if (selectedRef.current) {
+        const updated = data.find((c) => c.id === selectedRef.current!.id);
+        if (updated) setSelected(updated);
+      }
     } catch { /* silent */ }
-    finally { setLoading(false); }
-  };
+    finally { if (!silent) setLoading(false); }
+  }, [tenantId]);
 
-  const loadMessages = async (convId: string) => {
+  const loadMessages = useCallback(async (convId: string) => {
     if (!tenantId) return;
     try {
       const { data } = await api.get<Message[]>(`/tenants/${tenantId}/conversations/${convId}/messages`);
       setMessages(data.slice().reverse());
     } catch { /* silent */ }
-  };
+  }, [tenantId]);
 
-  useEffect(() => { void loadConversations(); }, [tenantId]);
+  // Initial load
+  useEffect(() => { void loadConversations(); }, [loadConversations]);
 
+  // Poll conversations every 5s
+  useEffect(() => {
+    if (!tenantId) return;
+    const interval = setInterval(() => void loadConversations(true), POLL_CONVERSATIONS_MS);
+    return () => clearInterval(interval);
+  }, [tenantId, loadConversations]);
+
+  // Poll messages every 3s when a conversation is selected
+  useEffect(() => {
+    if (!selected || !tenantId) return;
+    const interval = setInterval(() => void loadMessages(selected.id), POLL_MESSAGES_MS);
+    return () => clearInterval(interval);
+  }, [selected?.id, tenantId, loadMessages]);
+
+  // Scroll to bottom when messages change
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -136,9 +162,12 @@ export default function ConversasPage() {
             <MessageSquare className="h-4 w-4" />
             Conversas
           </h1>
-          <Badge variant="outline" className="text-xs">
-            {conversations.filter((c) => c.status === 'open').length} abertas
-          </Badge>
+          <div className="flex items-center gap-2">
+            <RefreshCw className="h-3 w-3 text-muted-foreground animate-spin opacity-40" title="Atualizando automaticamente" />
+            <Badge variant="outline" className="text-xs">
+              {conversations.filter((c) => c.status === 'open').length} abertas
+            </Badge>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto">

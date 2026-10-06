@@ -111,6 +111,7 @@ export default function WhatsAppPage() {
   const [connectPath, setConnectPath] = useState<ConnectionPath | null>(null);
   const [wizardStep, setWizardStep] = useState(0);
   const [errorMsg, setErrorMsg] = useState('');
+  const [reconnectingAccountId, setReconnectingAccountId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!tenantId) {
@@ -178,7 +179,6 @@ export default function WhatsAppPage() {
     setWizardStep(1);
 
     try {
-      // Simulate step progression while processing
       const stepTimer = setInterval(() => {
         setWizardStep(prev => {
           if (prev >= WIZARD_STEPS.length - 2) { clearInterval(stepTimer); return prev; }
@@ -186,13 +186,19 @@ export default function WhatsAppPage() {
         });
       }, 600);
 
-      const { data: account } = await (whatsappApi as unknown as {
-        embeddedSignup: (tenantId: string, payload: { code: string; path: ConnectionPath }) => Promise<{ data: WhatsappAccount }>;
-      }).embeddedSignup(tenantId, { code, path });
+      let account: WhatsappAccount;
+      if (reconnectingAccountId) {
+        const { data } = await whatsappApi.reconnectAccount(tenantId, reconnectingAccountId, { code, path });
+        account = data;
+      } else {
+        const { data } = await whatsappApi.embeddedSignup(tenantId, { code, path });
+        account = data;
+      }
 
       clearInterval(stepTimer);
       setWizardStep(WIZARD_STEPS.length - 1);
       setAccounts(prev => [...prev.filter(a => a.phoneNumberId !== account.phoneNumberId), account]);
+      setReconnectingAccountId(null);
       setConnectState('success');
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? (err instanceof Error ? err.message : 'Erro desconhecido');
@@ -210,8 +216,9 @@ export default function WhatsAppPage() {
     } catch { /* silent */ }
   };
 
-  /* ── Reconnect ── */
-  const handleReconnect = () => {
+  /* ── Reconnect (for error-state accounts) ── */
+  const handleReconnect = (accountId?: string) => {
+    if (accountId) setReconnectingAccountId(accountId);
     setConnectState('selecting_path');
     setErrorMsg('');
   };
@@ -231,7 +238,7 @@ export default function WhatsAppPage() {
      CONNECTED STATE
   ═══════════════════════════════════ */
   if (accounts.length > 0 && connectState === 'idle') {
-    return <ConnectedView accounts={accounts} onDisconnect={handleDisconnect} onReconnect={handleReconnect} />;
+    return <ConnectedView accounts={accounts} onDisconnect={handleDisconnect} onReconnect={(id) => handleReconnect(id)} />;
   }
 
   /* ═══════════════════════════════════
@@ -527,22 +534,45 @@ function ConnectedView({
 }: {
   accounts: WhatsappAccount[];
   onDisconnect: (id: string) => void;
-  onReconnect: () => void;
+  onReconnect: (accountId: string) => void;
 }) {
   const primary = accounts[0]!;
 
   const statusOk = primary.status === 'connected';
+  const isError = primary.status === 'error';
 
   return (
     <div className="page-container space-y-6">
+      {/* Token-expired error banner */}
+      {isError && (
+        <div className="rounded-xl border border-neural-danger/30 bg-neural-danger/8 p-4 flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="h-5 w-5 text-neural-danger shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-foreground">Autorização expirada</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                O acesso ao WhatsApp Business foi revogado ou expirou. Reconecte para retomar o atendimento.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => onReconnect(primary.id)}
+            className="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold text-white"
+            style={{ background: 'var(--neural-danger, #ef4444)' }}
+          >
+            <RefreshCw className="h-3.5 w-3.5" /> Reconectar agora
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-display font-bold text-foreground">WhatsApp Business</h1>
           <p className="text-sm text-muted-foreground mt-1">Gerencie sua conexão, templates e campanhas.</p>
         </div>
-        {primary.status !== 'connected' && (
-          <button onClick={onReconnect} className="btn-primary rounded-lg px-4 py-2 text-sm flex items-center gap-1.5">
+        {!statusOk && !isError && (
+          <button onClick={() => onReconnect(primary.id)} className="btn-primary rounded-lg px-4 py-2 text-sm flex items-center gap-1.5">
             <RefreshCw className="h-3.5 w-3.5" /> Reconectar
           </button>
         )}

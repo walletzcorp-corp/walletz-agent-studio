@@ -91,6 +91,20 @@ export class WhatsappController {
     return this.whatsappService.connectAccount(dto, tenantId, userId);
   }
 
+  @Post('tenants/:tenantId/whatsapp/accounts/:accountId/reconnect')
+  @UseGuards(JwtAuthGuard, RbacGuard)
+  @ApiBearerAuth()
+  @Roles('admin', 'owner')
+  @ApiOperation({ summary: 'Reconnect WhatsApp account (renew token via Embedded Signup)' })
+  reconnectAccount(
+    @Param('tenantId') tenantId: string,
+    @Param('accountId') accountId: string,
+    @Body() dto: EmbeddedSignupDto,
+    @CurrentUser('userId') userId: string,
+  ) {
+    return this.whatsappService.reconnectAccount(accountId, dto, tenantId, userId);
+  }
+
   @Delete('tenants/:tenantId/whatsapp/accounts/:accountId')
   @UseGuards(JwtAuthGuard, RbacGuard)
   @ApiBearerAuth()

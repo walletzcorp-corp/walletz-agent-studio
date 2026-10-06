@@ -284,6 +284,34 @@ export class WhatsappService {
     return account!;
   }
 
+  /**
+   * Reconnect an existing account after token expiry.
+   * Runs the same Embedded Signup flow but upserts the existing accountId.
+   */
+  async reconnectAccount(
+    accountId: string,
+    dto: EmbeddedSignupDto,
+    tenantId: string,
+    userId: string,
+  ): Promise<WhatsappAccount> {
+    const existing = await this.getAccount(tenantId, accountId);
+    // Reuse the embedded signup flow — it upserts on phoneNumberId conflict
+    dto.phoneNumberId = dto.phoneNumberId ?? existing.phoneNumberId;
+    dto.wabaId = dto.wabaId ?? existing.wabaId;
+    const account = await this.embeddedSignup(dto, tenantId, userId);
+
+    await this.auditService.log({
+      action: 'whatsapp.account_reconnected',
+      resourceType: 'whatsapp_account',
+      resourceId: accountId,
+      tenantId,
+      userId,
+      metadata: { phoneNumberId: account.phoneNumberId },
+    });
+
+    return account;
+  }
+
   async disconnectAccount(tenantId: string, accountId: string, userId: string): Promise<void> {
     await this.getAccount(tenantId, accountId);
     await this.db
@@ -298,6 +326,30 @@ export class WhatsappService {
       tenantId,
       userId,
     });
+  }
+
+  /**
+   * Detects Meta token expiry/revocation (error codes 190, 102, 463)
+   * and marks the account as needing reconnection.
+   */
+  private async handleApiError(err: unknown, accountId: string, tenantId: string): Promise<void> {
+    const body = (err as { response?: { data?: { error?: { code?: number } } } })
+      ?.response?.data?.error;
+    const tokenExpiryCodes = [190, 102, 463, 467];
+    if (body?.code && tokenExpiryCodes.includes(body.code)) {
+      this.logger.warn(`Token expired/invalid for account ${accountId} (code ${body.code}) — marking for reconnection`);
+      await this.db
+        .update(whatsappAccounts)
+        .set({ status: 'error', updatedAt: new Date() })
+        .where(and(eq(whatsappAccounts.id, accountId), eq(whatsappAccounts.tenantId, tenantId)));
+      await this.auditService.log({
+        action: 'whatsapp.token_expired',
+        resourceType: 'whatsapp_account',
+        resourceId: accountId,
+        tenantId,
+        metadata: { errorCode: body.code },
+      });
+    }
   }
 
   /** Returns plaintext access token from stored (encrypted) value. */
@@ -377,6 +429,8 @@ export class WhatsappService {
         .update(whatsappMessageLogs)
         .set({ status: 'failed', errorMessage: msg, failedAt: new Date() })
         .where(eq(whatsappMessageLogs.id, logId));
+      // Detect expired/invalid token and mark account for reconnection
+      await this.handleApiError(err, account.id, tenantId);
       throw new BadRequestException(`Falha ao enviar mensagem: ${msg}`);
     }
   }
