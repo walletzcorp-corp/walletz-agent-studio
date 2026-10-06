@@ -86,6 +86,10 @@ export const calendarMeetings = pgTable(
       .references(() => tenants.id),
     connectionId: text('connection_id').references(() => calendarConnections.id),
     agentId: text('agent_id').references(() => agents.id),
+    /** Conversa que originou o agendamento (rastreabilidade) */
+    conversationId: text('conversation_id'),
+    /** Contato/lead associado */
+    contactId: text('contact_id'),
     /** ID returned by the calendar provider — mandatory before confirming */
     externalEventId: text('external_event_id'),
     externalMeetUrl: text('external_meet_url'),

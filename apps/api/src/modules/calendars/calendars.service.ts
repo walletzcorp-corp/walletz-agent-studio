@@ -567,4 +567,61 @@ export class CalendarsService {
 
     return created;
   }
+
+  /* ── External event creation (used by SchedulingToolsService) ── */
+
+  async createExternalEvent(
+    tenantId: string,
+    connectionId: string,
+    params: {
+      summary: string;
+      description?: string;
+      start: string;
+      end: string;
+      timeZone?: string;
+      attendeeEmails?: string[];
+      addMeet?: boolean;
+      addTeams?: boolean;
+    },
+  ): Promise<{ id: string; meetUrl?: string }> {
+    const [conn] = await this.db
+      .select()
+      .from(calendarConnections)
+      .where(
+        and(
+          eq(calendarConnections.id, connectionId),
+          eq(calendarConnections.tenantId, tenantId),
+          isNull(calendarConnections.deletedAt),
+        ),
+      )
+      .limit(1);
+
+    if (!conn) throw new NotFoundException('Calendar connection not found');
+
+    const token = this.decrypt(conn.encryptedAccessToken);
+
+    if (conn.provider === 'google') {
+      const ev = await this.googleService.createEvent(token, {
+        summary: params.summary,
+        description: params.description,
+        start: params.start,
+        end: params.end,
+        timeZone: params.timeZone,
+        attendeeEmails: params.attendeeEmails ?? [],
+        addMeet: params.addMeet ?? false,
+      });
+      return { id: ev.id, meetUrl: ev.hangoutLink ?? ev.htmlLink ?? undefined };
+    } else {
+      const ev = await this.microsoftService.createEvent(token, {
+        subject: params.summary,
+        body: params.description,
+        start: params.start,
+        end: params.end,
+        timeZone: params.timeZone,
+        attendeeEmails: params.attendeeEmails ?? [],
+        addTeams: params.addTeams ?? false,
+      });
+      return { id: ev.id, meetUrl: (ev as { onlineMeeting?: { joinUrl?: string }; webLink?: string }).onlineMeeting?.joinUrl ?? (ev as { webLink?: string }).webLink ?? undefined };
+    }
+  }
 }

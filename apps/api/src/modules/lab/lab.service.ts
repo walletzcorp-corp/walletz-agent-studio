@@ -6,6 +6,7 @@ import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';
 import { agents } from '../../database/schema/agents';
 import { knowledgeChunks, knowledgeSources, knowledgeItems } from '../../database/schema/knowledge';
 import { createId } from '../../database/utils/id';
+import { SchedulingToolsService, type ToolContext } from '../calendars/scheduling-tools.service';
 import type { LabChatDto, ChatMessageDto } from './dto/chat.dto';
 
 export interface LabChatResult {
@@ -14,7 +15,106 @@ export interface LabChatResult {
   inputTokens: number;
   outputTokens: number;
   retrievedChunks: Array<{ content: string; source: string }>;
+  toolCallsExecuted?: string[];
 }
+
+/* ── Anthropic tool definitions for conversational scheduling ── */
+const SCHEDULING_TOOLS: Anthropic.Tool[] = [
+  {
+    name: 'get_availability',
+    description:
+      'Consulta os horários disponíveis para agendamento. Use quando o cliente demonstrar intenção de marcar, reagendar ou verificar disponibilidade para uma reunião. Retorna slots livres reais.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        days_ahead: {
+          type: 'number',
+          description: 'Quantos dias à frente consultar (padrão: 7)',
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'create_meeting',
+    description:
+      'Cria uma reunião REAL no calendário e gera o link (Google Meet ou Teams). Use SOMENTE após o cliente confirmar explicitamente o horário escolhido. Nunca crie sem confirmação.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        start_at: {
+          type: 'string',
+          description: 'Data/hora de início em ISO 8601 (ex: 2026-10-07T14:00:00-03:00)',
+        },
+        end_at: {
+          type: 'string',
+          description: 'Data/hora de término em ISO 8601',
+        },
+        title: {
+          type: 'string',
+          description: 'Título da reunião (ex: "Demonstração para João Silva")',
+        },
+        description: { type: 'string', description: 'Descrição opcional' },
+        contact_name: { type: 'string', description: 'Nome completo do cliente' },
+        contact_email: { type: 'string', description: 'E-mail do cliente para envio do convite' },
+        platform: {
+          type: 'string',
+          enum: ['google_meet', 'teams', 'presencial', 'phone'],
+          description: 'Plataforma da reunião',
+        },
+        timezone: {
+          type: 'string',
+          description: 'Fuso horário (ex: America/Sao_Paulo)',
+        },
+      },
+      required: ['start_at', 'end_at', 'title'],
+    },
+  },
+  {
+    name: 'find_meetings',
+    description:
+      'Busca reuniões existentes do contato ou da conversa. Use antes de reagendar ou cancelar para localizar a reunião correta.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        status: {
+          type: 'string',
+          enum: ['confirmed', 'pending', 'all'],
+          description: 'Filtrar por status (padrão: all)',
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'reschedule_meeting',
+    description:
+      'Reagenda uma reunião existente. Cancela o evento anterior e cria um novo no horário confirmado. Use após o cliente confirmar o novo horário.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        meeting_id: { type: 'string', description: 'ID da reunião a reagendar' },
+        new_start_at: { type: 'string', description: 'Novo início (ISO 8601)' },
+        new_end_at: { type: 'string', description: 'Novo término (ISO 8601)' },
+        reason: { type: 'string', description: 'Motivo do reagendamento' },
+      },
+      required: ['meeting_id', 'new_start_at', 'new_end_at'],
+    },
+  },
+  {
+    name: 'cancel_meeting',
+    description:
+      'Cancela uma reunião e remove o evento externo (Google Calendar / Teams). Confirme com o cliente antes de executar.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        meeting_id: { type: 'string', description: 'ID da reunião a cancelar' },
+        reason: { type: 'string', description: 'Motivo do cancelamento' },
+      },
+      required: ['meeting_id'],
+    },
+  },
+];
 
 @Injectable()
 export class LabService {
@@ -25,16 +125,21 @@ export class LabService {
   constructor(
     @Inject(DRIZZLE_TOKEN) private readonly db: DrizzleDB,
     private readonly config: ConfigService,
+    private readonly schedulingTools: SchedulingToolsService,
   ) {
     const apiKey = this.config.get<string>('ANTHROPIC_API_KEY') ?? '';
     this.client = new Anthropic({ apiKey });
     this.defaultModel = this.config.get<string>('ANTHROPIC_DEFAULT_MODEL') ?? 'claude-sonnet-4-6';
   }
 
-  async chat(dto: LabChatDto, tenantId: string): Promise<LabChatResult> {
+  async chat(
+    dto: LabChatDto,
+    tenantId: string,
+    options?: { conversationId?: string; contactId?: string },
+  ): Promise<LabChatResult> {
     const traceId = createId();
 
-    // Load agent
+    /* Load agent */
     const [agent] = await this.db
       .select()
       .from(agents)
@@ -43,10 +148,10 @@ export class LabService {
 
     if (!agent) throw new NotFoundException('Agent not found');
 
-    // Retrieve relevant knowledge chunks (keyword-based for dev; pgvector in prod)
+    /* Retrieve relevant knowledge chunks */
     const retrievedChunks = await this.retrieveRelevantChunks(dto.message, tenantId, dto.agentId);
 
-    // Load approved knowledge items (Teach AI)
+    /* Load approved knowledge items */
     const approvedItems = await this.db
       .select()
       .from(knowledgeItems)
@@ -59,25 +164,94 @@ export class LabService {
       )
       .limit(50);
 
-    // Build system prompt
-    const systemPrompt = this.buildSystemPrompt(agent, approvedItems, retrievedChunks);
+    /* Check if scheduling is enabled for this agent */
+    const agentSettings = await this.schedulingTools.loadSettings(dto.agentId, tenantId);
+    const schedulingEnabled = agentSettings?.canSchedule === true;
 
-    // Build message history
+    /* Build system prompt — includes scheduling context when enabled */
+    const systemPrompt = this.buildSystemPrompt(
+      agent,
+      approvedItems,
+      retrievedChunks,
+      schedulingEnabled ? agentSettings : null,
+    );
+
+    /* Message history */
     const messages: Anthropic.MessageParam[] = [
       ...(dto.history ?? []).map((m: ChatMessageDto) => ({
-        role: m.role,
+        role: m.role as 'user' | 'assistant',
         content: m.content,
       })),
       { role: 'user', content: dto.message },
     ];
 
+    const tools = schedulingEnabled ? SCHEDULING_TOOLS : [];
+    const toolCtx: ToolContext = {
+      tenantId,
+      agentId: dto.agentId,
+      conversationId: options?.conversationId,
+      contactId: options?.contactId,
+    };
+
+    const toolCallsExecuted: string[] = [];
+    let totalInputTokens = 0;
+    let totalOutputTokens = 0;
+
     try {
-      const response = await this.client.messages.create({
+      /* Agentic loop — keeps running while model requests tool calls */
+      let response = await this.client.messages.create({
         model: this.defaultModel,
-        max_tokens: 1024,
+        max_tokens: 2048,
         system: systemPrompt,
         messages,
+        tools: tools.length > 0 ? tools : undefined,
       });
+
+      totalInputTokens += response.usage.input_tokens;
+      totalOutputTokens += response.usage.output_tokens;
+
+      while (response.stop_reason === 'tool_use') {
+        const toolResults: Anthropic.ToolResultBlockParam[] = [];
+
+        for (const block of response.content) {
+          if (block.type !== 'tool_use') continue;
+
+          this.logger.debug(`Tool call: ${block.name} — ${JSON.stringify(block.input)}`);
+          toolCallsExecuted.push(block.name);
+
+          let toolOutput: unknown;
+          try {
+            toolOutput = await this.schedulingTools.dispatch(
+              block.name,
+              block.input as Record<string, unknown>,
+              toolCtx,
+            );
+          } catch (err) {
+            toolOutput = { error: err instanceof Error ? err.message : String(err) };
+          }
+
+          toolResults.push({
+            type: 'tool_result',
+            tool_use_id: block.id,
+            content: JSON.stringify(toolOutput),
+          });
+        }
+
+        /* Feed tool results back and continue the loop */
+        messages.push({ role: 'assistant', content: response.content });
+        messages.push({ role: 'user', content: toolResults });
+
+        response = await this.client.messages.create({
+          model: this.defaultModel,
+          max_tokens: 2048,
+          system: systemPrompt,
+          messages,
+          tools: tools.length > 0 ? tools : undefined,
+        });
+
+        totalInputTokens += response.usage.input_tokens;
+        totalOutputTokens += response.usage.output_tokens;
+      }
 
       const textBlock = response.content.find((b) => b.type === 'text');
       const reply = textBlock?.type === 'text' ? textBlock.text : '';
@@ -85,15 +259,15 @@ export class LabService {
       return {
         traceId,
         reply,
-        inputTokens: response.usage.input_tokens,
-        outputTokens: response.usage.output_tokens,
+        inputTokens: totalInputTokens,
+        outputTokens: totalOutputTokens,
         retrievedChunks: retrievedChunks.map((c) => ({ content: c.content, source: c.sourceName })),
+        toolCallsExecuted: toolCallsExecuted.length > 0 ? toolCallsExecuted : undefined,
       };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`LLM call failed: ${msg}`);
 
-      // Return graceful fallback if API key not configured
       if (msg.includes('authentication') || msg.includes('invalid') || msg.includes('placeholder')) {
         throw new BadRequestException(
           'ANTHROPIC_API_KEY não está configurada. Configure uma chave real no .env.local para usar o laboratório.',
@@ -117,7 +291,6 @@ export class LabService {
 
     if (words.length === 0) return [];
 
-    // Keyword search across chunks from processed sources
     const processedSources = await this.db
       .select({ id: knowledgeSources.id, name: knowledgeSources.name })
       .from(knowledgeSources)
@@ -126,10 +299,7 @@ export class LabService {
           eq(knowledgeSources.tenantId, tenantId),
           eq(knowledgeSources.status, 'processed'),
           isNull(knowledgeSources.deletedAt),
-          or(
-            eq(knowledgeSources.agentId, agentId),
-            isNull(knowledgeSources.agentId),
-          ),
+          or(eq(knowledgeSources.agentId, agentId), isNull(knowledgeSources.agentId)),
         ),
       );
 
@@ -137,14 +307,10 @@ export class LabService {
 
     const sourceMap = new Map(processedSources.map((s) => [s.id, s.name]));
     const sourceIds = processedSources.map((s) => s.id);
-
-    // Simple keyword match on first word for now (pgvector in prod)
     const firstWord = words[0]!;
+
     const chunks = await this.db
-      .select({
-        content: knowledgeChunks.content,
-        sourceId: knowledgeChunks.sourceId,
-      })
+      .select({ content: knowledgeChunks.content, sourceId: knowledgeChunks.sourceId })
       .from(knowledgeChunks)
       .where(
         and(
@@ -166,25 +332,46 @@ export class LabService {
     agent: { name: string; objective: string | null; tone: string | null; language: string | null; persona: unknown },
     knowledgeItemsList: Array<{ type: string; content: string; context: string | null }>,
     chunks: Array<{ content: string; sourceName: string }>,
+    schedulingSettings: { defaultDurationMinutes: number; defaultPlatform: string; timeZone: string } | null,
   ): string {
     const persona = typeof agent.persona === 'object' && agent.persona !== null
       ? (agent.persona as { name?: string; description?: string })
       : {};
 
-    const parts: string[] = [
-      `Você é ${persona.name ?? agent.name}, um assistente de IA.`,
-    ];
+    const parts: string[] = [`Você é ${persona.name ?? agent.name}, um assistente de IA.`];
 
-    if (agent.objective) {
-      parts.push(`\nSeu objetivo: ${agent.objective}`);
-    }
+    if (agent.objective) parts.push(`\nSeu objetivo: ${agent.objective}`);
+    if (agent.tone) parts.push(`\nTom de comunicação: ${agent.tone}`);
+    if (agent.language) parts.push(`\nIdioma principal: ${agent.language}`);
 
-    if (agent.tone) {
-      parts.push(`\nTom de comunicação: ${agent.tone}`);
-    }
+    if (schedulingSettings) {
+      parts.push(`
+## Capacidade de Agendamento
 
-    if (agent.language) {
-      parts.push(`\nIdioma principal: ${agent.language}`);
+Você pode agendar reuniões reais usando as ferramentas disponíveis. Siga SEMPRE estas regras:
+
+1. **Detectar intenção**: Reconheça intenção de agendamento mesmo sem uso da palavra "agenda". Exemplos: "quero marcar", "podemos conversar?", "tem horário?", "quero uma demonstração", "pode ser amanhã?".
+
+2. **Coletar informações**: Antes de agendar, certifique-se de ter nome do cliente e assunto. E-mail é necessário para enviar convite. Pergunte naturalmente, não como formulário.
+
+3. **Consultar disponibilidade REAL**: Use a ferramenta \`get_availability\` para obter horários reais. NUNCA invente horários.
+
+4. **Confirmar antes de criar**: Ofereça opções (máx. 4-5) e aguarde o cliente escolher. Só chame \`create_meeting\` após confirmação explícita.
+
+5. **Verificação de double-booking**: O sistema verifica automaticamente se o slot ainda está livre. Se ocupado, ofereça alternativa.
+
+6. **Configurações do agendamento**:
+   - Duração padrão: ${schedulingSettings.defaultDurationMinutes} minutos
+   - Plataforma padrão: ${schedulingSettings.defaultPlatform}
+   - Fuso horário: ${schedulingSettings.timeZone}
+
+7. **Reagendamento**: Use \`find_meetings\` para localizar a reunião, depois \`reschedule_meeting\`.
+
+8. **Cancelamento**: Use \`find_meetings\` para localizar, depois \`cancel_meeting\`.
+
+9. **Transparência**: Se a criação do evento externo falhar, informe o cliente honestamente. Nunca confirme uma reunião que não foi criada.
+
+10. **Formato da resposta**: Após criar a reunião, informe: data/hora, link da videoconferência (se gerado), e que o convite será enviado ao e-mail fornecido.`);
     }
 
     if (knowledgeItemsList.length > 0) {
@@ -194,18 +381,10 @@ export class LabService {
       const procedures = knowledgeItemsList.filter((i) => i.type === 'procedure');
       const permissions = knowledgeItemsList.filter((i) => i.type === 'permission');
 
-      if (facts.length > 0) {
-        parts.push('### Fatos\n' + facts.map((i) => `- ${i.content}${i.context ? ` (${i.context})` : ''}`).join('\n'));
-      }
-      if (guidance.length > 0) {
-        parts.push('### Diretrizes\n' + guidance.map((i) => `- ${i.content}`).join('\n'));
-      }
-      if (procedures.length > 0) {
-        parts.push('### Procedimentos\n' + procedures.map((i) => `- ${i.content}`).join('\n'));
-      }
-      if (permissions.length > 0) {
-        parts.push('### Permissões\n' + permissions.map((i) => `- ${i.content}`).join('\n'));
-      }
+      if (facts.length > 0) parts.push('### Fatos\n' + facts.map((i) => `- ${i.content}${i.context ? ` (${i.context})` : ''}`).join('\n'));
+      if (guidance.length > 0) parts.push('### Diretrizes\n' + guidance.map((i) => `- ${i.content}`).join('\n'));
+      if (procedures.length > 0) parts.push('### Procedimentos\n' + procedures.map((i) => `- ${i.content}`).join('\n'));
+      if (permissions.length > 0) parts.push('### Permissões\n' + permissions.map((i) => `- ${i.content}`).join('\n'));
     }
 
     if (chunks.length > 0) {

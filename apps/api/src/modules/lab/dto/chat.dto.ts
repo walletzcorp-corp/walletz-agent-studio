@@ -30,4 +30,14 @@ export class LabChatDto {
   @ValidateNested({ each: true })
   @Type(() => ChatMessageDto)
   history?: ChatMessageDto[];
+
+  @ApiProperty({ required: false, description: 'ID da conversa origem (para rastreabilidade)' })
+  @IsOptional()
+  @IsString()
+  conversationId?: string;
+
+  @ApiProperty({ required: false, description: 'ID do contato/lead (para atualizar status após agendar)' })
+  @IsOptional()
+  @IsString()
+  contactId?: string;
 }

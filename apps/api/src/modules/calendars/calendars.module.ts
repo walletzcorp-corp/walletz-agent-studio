@@ -11,6 +11,7 @@ import { CalendarsService } from './calendars.service';
 import { GoogleCalendarService } from './google.service';
 import { MicrosoftCalendarService } from './microsoft.service';
 import { AvailabilityService } from './availability.service';
+import { SchedulingToolsService } from './scheduling-tools.service';
 
 @Module({
   imports: [
@@ -28,7 +29,8 @@ import { AvailabilityService } from './availability.service';
     GoogleCalendarService,
     MicrosoftCalendarService,
     AvailabilityService,
+    SchedulingToolsService,
   ],
-  exports: [CalendarsService, AvailabilityService],
+  exports: [CalendarsService, AvailabilityService, SchedulingToolsService],
 })
 export class CalendarsModule {}
