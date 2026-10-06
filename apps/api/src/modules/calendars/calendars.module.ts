@@ -10,6 +10,7 @@ import {
 import { CalendarsService } from './calendars.service';
 import { GoogleCalendarService } from './google.service';
 import { MicrosoftCalendarService } from './microsoft.service';
+import { MicrosoftGraphAuthService } from './ms-graph-auth.service';
 import { AvailabilityService } from './availability.service';
 import { SchedulingToolsService } from './scheduling-tools.service';
 
@@ -28,9 +29,10 @@ import { SchedulingToolsService } from './scheduling-tools.service';
     CalendarsService,
     GoogleCalendarService,
     MicrosoftCalendarService,
+    MicrosoftGraphAuthService,
     AvailabilityService,
     SchedulingToolsService,
   ],
-  exports: [CalendarsService, AvailabilityService, SchedulingToolsService],
+  exports: [CalendarsService, AvailabilityService, SchedulingToolsService, MicrosoftGraphAuthService],
 })
 export class CalendarsModule {}

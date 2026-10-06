@@ -21,6 +21,16 @@ export interface GraphEvent {
   attendees?: Array<{ emailAddress: { address: string; name?: string } }>;
 }
 
+export interface GraphOnlineMeeting {
+  id: string;
+  joinUrl: string;
+  joinWebUrl?: string;
+  subject: string;
+  startDateTime: string;
+  endDateTime: string;
+  videoTeleconferenceId?: string;
+}
+
 @Injectable()
 export class MicrosoftCalendarService {
   private readonly logger = new Logger(MicrosoftCalendarService.name);
@@ -124,14 +134,14 @@ export class MicrosoftCalendarService {
       },
     );
     if (!res.ok) throw new Error('Failed to refresh Microsoft token');
-    const data = (await res.json()) as { access_token: string; expires_in: number };
+    const data = (await res.json()) as { access_token: string; refresh_token?: string; expires_in: number };
     return {
       accessToken: data.access_token,
       expiresAt: new Date(Date.now() + data.expires_in * 1000),
     };
   }
 
-  private async getUserInfo(
+  async getUserInfo(
     accessToken: string,
   ): Promise<{ mail?: string; userPrincipalName?: string; displayName?: string }> {
     const res = await fetch('https://graph.microsoft.com/v1.0/me', {
@@ -141,23 +151,60 @@ export class MicrosoftCalendarService {
     return res.json() as Promise<{ mail?: string; userPrincipalName?: string; displayName?: string }>;
   }
 
+  /* ── Delegated: /me/... endpoints ── */
+
   async listEvents(accessToken: string, startDateTime: Date, endDateTime: Date): Promise<GraphEvent[]> {
+    return this.listEventsForUser('me', accessToken, startDateTime, endDateTime);
+  }
+
+  async createEvent(
+    accessToken: string,
+    event: {
+      subject: string;
+      body?: string;
+      start: string;
+      end: string;
+      timeZone?: string;
+      attendeeEmails?: string[];
+      addTeams?: boolean;
+    },
+  ): Promise<GraphEvent> {
+    return this.createEventForUser('me', accessToken, event);
+  }
+
+  async deleteEvent(accessToken: string, eventId: string): Promise<void> {
+    return this.deleteEventForUser('me', accessToken, eventId);
+  }
+
+  /* ── Shared: works for both /me and /users/{userId} ── */
+
+  async listEventsForUser(
+    userId: string,
+    accessToken: string,
+    startDateTime: Date,
+    endDateTime: Date,
+  ): Promise<GraphEvent[]> {
     const params = new URLSearchParams({
       startDateTime: startDateTime.toISOString(),
       endDateTime: endDateTime.toISOString(),
       $orderby: 'start/dateTime',
       $top: '250',
     });
+    const base = userId === 'me' ? 'me' : `users/${encodeURIComponent(userId)}`;
     const res = await fetch(
-      `https://graph.microsoft.com/v1.0/me/calendarView?${params}`,
+      `https://graph.microsoft.com/v1.0/${base}/calendarView?${params}`,
       { headers: { Authorization: `Bearer ${accessToken}`, Prefer: 'outlook.timezone="UTC"' } },
     );
-    if (!res.ok) throw new Error('Failed to fetch Microsoft Graph events');
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Failed to fetch Microsoft Graph events: ${err}`);
+    }
     const data = (await res.json()) as { value?: GraphEvent[] };
     return data.value ?? [];
   }
 
-  async createEvent(
+  async createEventForUser(
+    userId: string,
     accessToken: string,
     event: {
       subject: string;
@@ -184,7 +231,8 @@ export class MicrosoftCalendarService {
       body.isOnlineMeeting = true;
       body.onlineMeetingProvider = 'teamsForBusiness';
     }
-    const res = await fetch('https://graph.microsoft.com/v1.0/me/events', {
+    const base = userId === 'me' ? 'me' : `users/${encodeURIComponent(userId)}`;
+    const res = await fetch(`https://graph.microsoft.com/v1.0/${base}/events`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -196,10 +244,99 @@ export class MicrosoftCalendarService {
     return res.json() as Promise<GraphEvent>;
   }
 
-  async deleteEvent(accessToken: string, eventId: string): Promise<void> {
-    await fetch(`https://graph.microsoft.com/v1.0/me/events/${eventId}`, {
+  async deleteEventForUser(userId: string, accessToken: string, eventId: string): Promise<void> {
+    const base = userId === 'me' ? 'me' : `users/${encodeURIComponent(userId)}`;
+    const res = await fetch(`https://graph.microsoft.com/v1.0/${base}/events/${eventId}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${accessToken}` },
     });
+    if (!res.ok && res.status !== 404) {
+      const err = await res.text();
+      this.logger.warn(`Failed to delete Graph event ${eventId}: ${err}`);
+    }
+  }
+
+  /* ── App-only Teams Meeting creation ── */
+
+  async createOnlineMeetingForUser(
+    userId: string,
+    accessToken: string,
+    params: {
+      subject: string;
+      startDateTime: string;
+      endDateTime: string;
+    },
+  ): Promise<GraphOnlineMeeting> {
+    const res = await fetch(
+      `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(userId)}/onlineMeetings`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subject: params.subject,
+          startDateTime: params.startDateTime,
+          endDateTime: params.endDateTime,
+        }),
+      },
+    );
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Failed to create Teams online meeting: ${err}`);
+    }
+    return res.json() as Promise<GraphOnlineMeeting>;
+  }
+
+  /* Delegated: create meeting via /me/onlineMeetings */
+  async createMyOnlineMeeting(
+    accessToken: string,
+    params: {
+      subject: string;
+      startDateTime: string;
+      endDateTime: string;
+    },
+  ): Promise<GraphOnlineMeeting> {
+    const res = await fetch('https://graph.microsoft.com/v1.0/me/onlineMeetings', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Failed to create Teams meeting via delegated token: ${err}`);
+    }
+    return res.json() as Promise<GraphOnlineMeeting>;
+  }
+
+  /* Free/busy query */
+  async getSchedule(
+    accessToken: string,
+    userEmails: string[],
+    startDateTime: Date,
+    endDateTime: Date,
+  ): Promise<Array<{ scheduleId: string; busySlots: Array<{ start: string; end: string }> }>> {
+    const res = await fetch('https://graph.microsoft.com/v1.0/me/calendar/getSchedule', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        schedules: userEmails,
+        startTime: { dateTime: startDateTime.toISOString(), timeZone: 'UTC' },
+        endTime: { dateTime: endDateTime.toISOString(), timeZone: 'UTC' },
+        availabilityViewInterval: 15,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Failed to fetch calendar schedule: ${err}`);
+    }
+    const data = (await res.json()) as {
+      value: Array<{
+        scheduleId: string;
+        scheduleItems?: Array<{ start: { dateTime: string }; end: { dateTime: string } }>;
+      }>;
+    };
+    return (data.value ?? []).map((v) => ({
+      scheduleId: v.scheduleId,
+      busySlots: (v.scheduleItems ?? []).map((s) => ({ start: s.start.dateTime, end: s.end.dateTime })),
+    }));
   }
 }

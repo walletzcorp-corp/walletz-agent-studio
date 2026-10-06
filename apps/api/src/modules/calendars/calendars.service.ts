@@ -20,6 +20,7 @@ import {
 import { AuditService } from '../../shared/audit/audit.service';
 import { GoogleCalendarService } from './google.service';
 import { MicrosoftCalendarService } from './microsoft.service';
+import { MicrosoftGraphAuthService } from './ms-graph-auth.service';
 import { AvailabilityService, type TimeSlot } from './availability.service';
 import type { CreateMeetingDto, RescheduleMeetingDto } from './dto/create-meeting.dto';
 import type { UpdateAgentCalendarSettingsDto } from './dto/update-agent-settings.dto';
@@ -37,6 +38,7 @@ export class CalendarsService {
     private readonly auditService: AuditService,
     private readonly googleService: GoogleCalendarService,
     private readonly microsoftService: MicrosoftCalendarService,
+    private readonly msGraphAuth: MicrosoftGraphAuthService,
     private readonly availabilityService: AvailabilityService,
   ) {
     const raw = this.config.get<string>('CALENDAR_ENCRYPTION_KEY', '');
@@ -65,6 +67,48 @@ export class CalendarsService {
     return decipher.update(encrypted) + decipher.final('utf8');
   }
 
+  /* ── Token auto-refresh ── */
+
+  /**
+   * Returns a valid access token for a Microsoft connection.
+   * Automatically refreshes the token if it has expired or is about to expire,
+   * persisting the new tokens back to the DB.
+   * Throws ServiceUnavailableException if refresh fails.
+   */
+  async getValidMsToken(conn: CalendarConnection): Promise<string> {
+    const BUFFER_MS = 5 * 60 * 1000; // 5 minutes
+    const isExpired = !conn.tokenExpiresAt || conn.tokenExpiresAt.getTime() < Date.now() + BUFFER_MS;
+
+    if (!isExpired) {
+      return this.decrypt(conn.encryptedAccessToken);
+    }
+
+    if (!conn.encryptedRefreshToken) {
+      this.logger.warn(`MS token expired for connection ${conn.id} and no refresh token stored`);
+      return this.decrypt(conn.encryptedAccessToken); // return stale, let caller fail gracefully
+    }
+
+    this.logger.log(`Refreshing expired MS token for connection ${conn.id} (${conn.email})`);
+    const refreshToken = this.decrypt(conn.encryptedRefreshToken);
+    const refreshed = await this.msGraphAuth.refreshDelegatedToken(refreshToken);
+
+    // Persist refreshed tokens
+    await this.db
+      .update(calendarConnections)
+      .set({
+        encryptedAccessToken: this.encrypt(refreshed.accessToken),
+        ...(refreshed.refreshToken
+          ? { encryptedRefreshToken: this.encrypt(refreshed.refreshToken) }
+          : {}),
+        tokenExpiresAt: refreshed.expiresAt,
+        updatedAt: new Date(),
+      })
+      .where(eq(calendarConnections.id, conn.id));
+
+    this.logger.log(`MS token refreshed for ${conn.email}, expires ${refreshed.expiresAt.toISOString()}`);
+    return refreshed.accessToken;
+  }
+
   /* ── OAuth ── */
 
   buildAuthUrl(tenantId: string, provider: Provider): string {
@@ -78,7 +122,7 @@ export class CalendarsService {
   async handleCallback(
     code: string,
     state: string,
-    userId: string,
+    userId: string | null,
   ): Promise<{ tenantId: string; provider: Provider }> {
     const decoded = JSON.parse(Buffer.from(state, 'base64url').toString('utf8')) as {
       tenantId: string;
@@ -137,7 +181,7 @@ export class CalendarsService {
 
     await this.auditService.log({
       tenantId,
-      userId,
+      userId: userId ?? undefined,
       action: 'calendar.connect',
       resourceType: 'calendar_connection',
       metadata: { provider, email: tokens.email },
@@ -245,7 +289,9 @@ export class CalendarsService {
 
       if (conn) {
         try {
-          const token = this.decrypt(conn.encryptedAccessToken);
+          const token = conn.provider === 'microsoft'
+            ? await this.getValidMsToken(conn)
+            : this.decrypt(conn.encryptedAccessToken);
           const externalEvents =
             conn.provider === 'google'
               ? await this.googleService.listEvents(token, now, rangeEnd)
@@ -317,7 +363,9 @@ export class CalendarsService {
         .limit(1);
 
       if (conn) {
-        const token = this.decrypt(conn.encryptedAccessToken);
+        const token = conn.provider === 'microsoft'
+          ? await this.getValidMsToken(conn)
+          : this.decrypt(conn.encryptedAccessToken);
         const attendeeEmails = dto.contactEmail ? [dto.contactEmail] : [];
         if (conn.provider === 'google') {
           const ev = await this.googleService.createEvent(token, {
@@ -470,7 +518,9 @@ export class CalendarsService {
 
       if (conn) {
         try {
-          const token = this.decrypt(conn.encryptedAccessToken);
+          const token = conn.provider === 'microsoft'
+            ? await this.getValidMsToken(conn)
+            : this.decrypt(conn.encryptedAccessToken);
           if (conn.provider === 'google') {
             await this.googleService.deleteEvent(token, meeting.externalEventId);
           } else {
@@ -598,7 +648,9 @@ export class CalendarsService {
 
     if (!conn) throw new NotFoundException('Calendar connection not found');
 
-    const token = this.decrypt(conn.encryptedAccessToken);
+    const token = conn.provider === 'microsoft'
+      ? await this.getValidMsToken(conn)
+      : this.decrypt(conn.encryptedAccessToken);
 
     if (conn.provider === 'google') {
       const ev = await this.googleService.createEvent(token, {

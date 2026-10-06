@@ -89,7 +89,7 @@ export class CalendarsCallbackController {
       await this.svc.handleCallback(
         code,
         state,
-        req.user?.sub ?? 'system',
+        req.user?.sub ?? null,
       );
       const appUrl = process.env['APP_URL'] ?? 'http://localhost:3000';
       return res.redirect(`${appUrl}/agendas?connected=${provider}`);

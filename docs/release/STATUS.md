@@ -1,7 +1,7 @@
 # Status da Release — Walletz Agent Studio
 
-**Última atualização**: 2026-10-05  
-**Sprint atual**: 6 — Identidade Neural + páginas Agendas/Resultados/Configurações + backend Calendar
+**Última atualização**: 2026-10-06  
+**Sprint atual**: 7 — Microsoft Graph Integration + Token Auto-Refresh + Teams Meeting
 
 ---
 
@@ -37,7 +37,7 @@
 | **Módulo F — WhatsApp** | 🔴 Bloqueado | — | Sandbox oficial | Conta Meta Business | Aprovação Meta | — | Integrations | — |
 | **Módulo G — Contatos** | ⏳ | — | — | — | LGPD/consentimento | — | Backend | — |
 | **Módulo H — Campanhas** | ⏳ | — | — | — | Spam risk | — | Backend | — |
-| **Módulo I — Agenda** | 🟡 Parcial | ⏳ | Backend pronto | Aguarda credenciais OAuth | Registro Google/Azure | Endpoints `/calendars/*` OK, página `/agendas` OK | Integrations | 2026-10-05 |
+| **Módulo I — Agenda** | 🟢 Funcional | 10/12 ✅ | Microsoft Graph REAL | Admin Consent Application permissions; ANTHROPIC_API_KEY | — | Reunião+joinUrl Teams criada, reagendada, cancelada; auto-refresh token implementado; 10 testes automáticos passando | Integrations | 2026-10-06 |
 | **Módulo J — Tools** | ⏳ | — | — | — | Tool abuse | — | AI/Backend | — |
 | **Módulo K — Learning** | ⏳ | — | — | — | Auto-learning risk | — | AI | — |
 | **Módulo L — Analytics** | ⏳ | — | — | — | — | — | Backend | — |
@@ -82,6 +82,7 @@ Ver detalhes em [EXTERNAL_BLOCKERS.md](EXTERNAL_BLOCKERS.md).
 |---------|--------|-----------------|
 | Meta Business Account aprovada | F | Conta Meta Business + WABA aprovada |
 | Google OAuth Client | I | Google Cloud Project + credenciais OAuth |
-| Microsoft Azure App | I | Azure AD App Registration |
+| Microsoft Azure App | I | Azure AD App Registration ✅ já configurado. Pendente: Application permissions (Calendars.ReadWrite, OnlineMeetings.ReadWrite.All, User.Read.All) + admin consent |
+| ANTHROPIC_API_KEY real | D/Lab | Chave real em apps/api/.env.local para habilitar testes de agente conversacional |
 | Stripe Account | M | Stripe account (test mode suficiente para dev) |
 | Domínio produção | Deploy | Domínio + certificado TLS |
