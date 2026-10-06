@@ -7,7 +7,7 @@ import {
   Home, Bot, BookOpen, FlaskConical, MessageSquare,
   Users, Megaphone, Calendar, BarChart3, Settings,
   Smartphone, GraduationCap, Puzzle, DollarSign,
-  CreditCard, Brain, ChevronRight,
+  CreditCard, Brain, ChevronRight, Sparkles, HelpCircle,
 } from 'lucide-react';
 import { WalletzLogo, WalletzMark } from './walletz-logo';
 
@@ -66,8 +66,10 @@ const NAV_SECTIONS: NavSection[] = [
 ];
 
 const FOOTER_ITEMS: NavItem[] = [
-  { href: '/configuracoes/ia',   label: 'Config. IA',      icon: Brain },
-  { href: '/configuracoes',      label: 'Configurações',   icon: Settings, exact: false },
+  { href: '/onboarding',         label: 'Primeiros passos', icon: Sparkles },
+  { href: '/ajuda',              label: 'Ajuda',            icon: HelpCircle },
+  { href: '/configuracoes/ia',   label: 'Config. IA',       icon: Brain },
+  { href: '/configuracoes',      label: 'Configurações',    icon: Settings, exact: false },
 ];
 
 interface SidebarProps {
