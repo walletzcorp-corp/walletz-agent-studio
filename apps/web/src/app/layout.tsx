@@ -21,13 +21,30 @@ export const metadata: Metadata = {
     template: '%s | Walletz Agent Studio',
     default: 'Walletz Agent Studio',
   },
-  description: 'Crie, ensine e opere agentes de IA sem programação',
+  description: 'Crie, ensine, conecte e automatize agentes de inteligência artificial.',
   robots: { index: false, follow: false },
+  icons: {
+    icon:       [{ url: '/favicon.svg',    type: 'image/svg+xml' }],
+    apple:      [{ url: '/apple-icon.svg', type: 'image/svg+xml', sizes: '180x180' }],
+    shortcut:   [{ url: '/favicon.svg',    type: 'image/svg+xml' }],
+  },
+  openGraph: {
+    type: 'website',
+    siteName: 'Walletz Agent Studio',
+    title: 'Walletz Agent Studio',
+    description: 'Crie, ensine, conecte e automatize agentes de inteligência artificial.',
+  },
+  twitter: {
+    card: 'summary',
+    title: 'Walletz Agent Studio',
+    description: 'Crie, ensine, conecte e automatize agentes de inteligência artificial.',
+  },
 };
 
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
+  themeColor: '#070B14',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -1,21 +1,43 @@
 import type { Metadata } from 'next';
+import { WalletzLogo } from '../../components/walletz-logo';
 
-export const metadata: Metadata = { title: { template: '%s — Walletz Agent Studio', default: 'Walletz Agent Studio' } };
+export const metadata: Metadata = {
+  title: { absolute: 'Walletz Agent Studio' },
+};
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 dark:from-gray-950 dark:via-gray-900 dark:to-indigo-950 flex items-center justify-center p-4">
-      <div className="w-full max-w-[440px]">
-        <div className="mb-8 text-center">
-          <div className="inline-flex items-center gap-2 mb-3">
-            <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-              <svg className="h-5 w-5 text-primary-foreground" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </div>
-            <span className="text-lg font-bold text-foreground">Walletz Agent Studio</span>
-          </div>
+    <div
+      className="min-h-screen flex items-center justify-center p-4"
+      style={{ background: 'hsl(var(--background))' }}
+    >
+      {/* Background neural glow */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none fixed inset-0 overflow-hidden"
+      >
+        <div
+          className="absolute -top-40 left-1/2 -translate-x-1/2 h-[600px] w-[600px] rounded-full opacity-10 blur-3xl"
+          style={{ background: 'radial-gradient(circle, #6D4AFF 0%, transparent 70%)' }}
+        />
+        <div
+          className="absolute top-1/3 right-0 h-[400px] w-[400px] rounded-full opacity-5 blur-3xl"
+          style={{ background: 'radial-gradient(circle, #22D3EE 0%, transparent 70%)' }}
+        />
+      </div>
+
+      <div className="relative w-full max-w-[420px]">
+        {/* Brand mark */}
+        <div className="mb-8 flex flex-col items-center gap-4">
+          <WalletzLogo variant="full" size="lg" />
+          <p
+            className="text-xs tracking-[0.2em] uppercase font-medium"
+            style={{ color: 'hsl(var(--muted-foreground))' }}
+          >
+            Crie. Ensine. Conecte. Automatize.
+          </p>
         </div>
+
         {children}
       </div>
     </div>

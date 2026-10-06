@@ -7,8 +7,9 @@ import {
   Home, Bot, BookOpen, FlaskConical, MessageSquare,
   Users, Megaphone, Calendar, BarChart3, Settings,
   Smartphone, GraduationCap, Puzzle, DollarSign,
-  CreditCard, Brain, Facebook, ChevronRight,
+  CreditCard, Brain, ChevronRight,
 } from 'lucide-react';
+import { WalletzLogo, WalletzMark } from './walletz-logo';
 
 interface NavItem {
   href: string;
@@ -86,16 +87,22 @@ export function Sidebar({ tenantName }: SidebarProps) {
   return (
     <aside className="flex h-screen w-60 flex-col border-r border-border" style={{ background: 'hsl(var(--surface-1))' }}>
       {/* Logo */}
-      <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-border px-4">
-        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary shrink-0">
-          <svg className="h-3.5 w-3.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </div>
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-foreground font-display leading-tight">Walletz</p>
+      <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-border px-3">
+        <WalletzMark size={30} className="shrink-0" />
+        <div className="min-w-0 flex flex-col leading-none">
+          <span className="text-sm font-display font-bold text-foreground leading-tight">Walletz</span>
+          <span
+            className="text-[9px] font-display font-semibold tracking-[0.14em] uppercase leading-tight"
+            style={{
+              background: 'linear-gradient(90deg, #6D4AFF, #22D3EE)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+            }}
+          >
+            Agent Studio
+          </span>
           {tenantName && (
-            <p className="truncate text-[10px] text-muted-foreground leading-tight">{tenantName}</p>
+            <p className="truncate text-[9px] text-muted-foreground/70 leading-tight mt-0.5">{tenantName}</p>
           )}
         </div>
       </div>
