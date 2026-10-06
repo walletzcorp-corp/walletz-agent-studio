@@ -1,7 +1,6 @@
 import {
   Controller, Get, Post, Delete, Param, Body, Query,
-  UseGuards, Headers, RawBodyRequest, Req, HttpCode,
-  Logger, UnauthorizedException,
+  UseGuards, Headers, RawBodyRequest, Req, HttpCode, Logger,
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
@@ -24,18 +23,13 @@ export class WhatsappController {
   @Get('webhook/whatsapp')
   @HttpCode(200)
   @ApiOperation({ summary: 'Meta webhook verification (GET challenge)' })
-  async verifyWebhook(
+  verifyWebhook(
     @Query('hub.mode') mode: string,
     @Query('hub.verify_token') token: string,
     @Query('hub.challenge') challenge: string,
-  ): Promise<string> {
-    // Find account matching this verify token
-    if (mode !== 'subscribe') throw new UnauthorizedException('Invalid mode');
-
-    // Note: we return the challenge directly; the token is validated against stored accounts
-    // In production this should also verify the token matches a stored account
+  ): string {
     this.logger.log(`Webhook verification request: mode=${mode}`);
-    return challenge;
+    return this.whatsappService.verifyWebhook(mode, challenge, token);
   }
 
   @Post('webhook/whatsapp')

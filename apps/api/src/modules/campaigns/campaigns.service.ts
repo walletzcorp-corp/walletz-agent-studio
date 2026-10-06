@@ -1,7 +1,7 @@
 import {
   Injectable, Inject, NotFoundException, BadRequestException,
 } from '@nestjs/common';
-import { eq, and, isNull, desc, gte } from 'drizzle-orm';
+import { eq, and, isNull, desc, gte, or, lt, isNotNull } from 'drizzle-orm';
 import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';
 import { segments, campaigns, campaignRecipients } from '../../database/schema/campaigns';
 import { contacts, contactIdentities, consents, suppressions } from '../../database/schema/contacts';
@@ -255,7 +255,8 @@ export class CampaignsService {
     // 1. O número é válido? (E.164: starts with +, 8–15 digits total)
     if (!this.isValidE164(phone)) return 'invalid_phone';
 
-    // 2. Tem consentimento?
+    // 2. Tem consentimento válido (status granted e não expirado)?
+    const now = new Date();
     const [consent] = await this.db
       .select()
       .from(consents)
@@ -266,6 +267,7 @@ export class CampaignsService {
           eq(consents.channel, 'whatsapp'),
           eq(consents.purpose, 'marketing'),
           eq(consents.status, 'granted'),
+          or(isNull(consents.expiresAt), gte(consents.expiresAt, now)),
         ),
       )
       .limit(1);

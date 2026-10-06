@@ -19,8 +19,10 @@ import { WhatsappModule } from './modules/whatsapp/whatsapp.module';
 import { CampaignsModule } from './modules/campaigns/campaigns.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { CalendarsModule } from './modules/calendars/calendars.module';
+import { PrivacyModule } from './modules/privacy/privacy.module';
 import { HealthModule } from './modules/health/health.module';
 import { AuditModule } from './shared/audit/audit.module';
+import { CryptoModule } from './shared/crypto/crypto.module';
 import { OutboxModule } from './shared/outbox/outbox.module';
 import { TelemetryModule } from './shared/telemetry/telemetry.module';
 import { MailModule } from './shared/mail/mail.module';
@@ -77,6 +79,7 @@ import { anthropicConfig } from './config/anthropic.config';
     RedisModule,
     StorageModule,
     AuditModule,
+    CryptoModule,
     RbacModule,
     OutboxModule,
     HealthModule,
@@ -93,6 +96,7 @@ import { anthropicConfig } from './config/anthropic.config';
     CampaignsModule,
     BillingModule,
     CalendarsModule,
+    PrivacyModule,
   ],
 })
 export class AppModule {}
