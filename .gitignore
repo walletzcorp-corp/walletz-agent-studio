@@ -49,3 +49,6 @@ credentials/
 
 apps/api/uploads/
 dump.rdb
+
+# Dev seed credentials
+.dev-credentials.txt
