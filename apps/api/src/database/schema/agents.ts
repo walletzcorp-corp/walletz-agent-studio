@@ -30,6 +30,17 @@ export const agentTemplateEnum = pgEnum('agent_template', [
   'collection',
   'faq',
   'custom',
+  // Sprint 7 — Walletz Digital Team
+  'radar_editais',
+  'reception',
+  'sdr_inbound',
+  'sdr_outbound',
+  'pre_qualifier',
+  'commercial_consultant',
+  'followup_commercial',
+  'executive_assistant',
+  'agenda_ai',
+  'customer_success_cs',
 ]);
 
 export const agents = pgTable(
