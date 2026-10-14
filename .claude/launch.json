@@ -6,6 +6,12 @@
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--filter", "@walletz/web", "dev"],
       "port": 3000
+    },
+    {
+      "name": "walletz-api",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@walletz/api", "dev"],
+      "port": 3001
     }
   ]
 }
