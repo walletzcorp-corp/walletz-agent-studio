@@ -6,14 +6,14 @@ import {
   Clock, Loader2, ChevronRight, ExternalLink, RefreshCw,
   Smartphone, Calendar, Brain, Globe, Mail, Webhook,
   CreditCard, Users, Zap, MoreHorizontal, ShieldCheck,
-  Activity, Plus,
+  Activity, Plus, Monitor,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '../../../hooks/use-auth';
 
 /* ── Types ── */
 type IntegrationStatus = 'connected' | 'disconnected' | 'error' | 'warning' | 'pending' | 'reauth' | 'coming_soon';
-type IntegrationCategory = 'all' | 'messaging' | 'ai' | 'calendar' | 'meta' | 'social' | 'crm' | 'automation' | 'payments' | 'developer';
+type IntegrationCategory = 'all' | 'messaging' | 'ai' | 'calendar' | 'meta' | 'social' | 'crm' | 'automation' | 'payments' | 'developer' | 'devices';
 
 interface Integration {
   id: string;
@@ -34,6 +34,7 @@ interface Integration {
 /* ── Category config ── */
 const CATEGORIES: { id: IntegrationCategory; label: string }[] = [
   { id: 'all',         label: 'Todas' },
+  { id: 'devices',     label: 'Dispositivos' },
   { id: 'messaging',   label: 'Mensageria' },
   { id: 'ai',          label: 'IA' },
   { id: 'calendar',    label: 'Agendas' },
@@ -96,9 +97,14 @@ function useCalendarConnections(tenantId: string | null) {
 /* ── Build integration list from data ── */
 function buildIntegrations(
   calConnections: { id: string; provider: string; email: string; syncStatus: string; lastSyncAt: string | null }[],
+  pcDevices: { id: string; deviceName: string; pairedAt: string | null; lastSeenAt: string | null }[],
 ): Integration[] {
   const googleConn = calConnections.find(c => c.provider === 'google');
   const msConn     = calConnections.find(c => c.provider === 'microsoft');
+
+  const connectedPc = pcDevices.find(d => d.pairedAt && d.lastSeenAt && Date.now() - new Date(d.lastSeenAt).getTime() < 30_000);
+  const pairedPc    = pcDevices.find(d => d.pairedAt);
+  const pcStatus: IntegrationStatus = connectedPc ? 'connected' : pairedPc ? 'warning' : 'disconnected';
 
   function calStatus(conn: typeof googleConn): IntegrationStatus {
     if (!conn) return 'disconnected';
@@ -110,6 +116,22 @@ function buildIntegrations(
   }
 
   return [
+    /* ── DISPOSITIVOS ── */
+    {
+      id: 'meu-computador',
+      name: 'Meu Computador',
+      description: 'Permita que seus agentes executem tarefas autorizadas neste computador.',
+      category: ['devices'],
+      status: pcStatus,
+      provider: 'Walletz PC Connector',
+      icon: <Monitor className="h-6 w-6" />,
+      iconBg: 'bg-[#6366F1]/10 text-[#6366F1]',
+      href: '/integracoes/meu-computador',
+      featured: true,
+      meta: connectedPc ? { device: connectedPc.deviceName, status: 'Online' }
+           : pairedPc   ? { device: pairedPc.deviceName, status: 'Offline' }
+           : undefined,
+    },
     /* ── FEATURED ── */
     {
       id: 'whatsapp',
@@ -288,15 +310,39 @@ function buildIntegrations(
   ];
 }
 
+/* ── PC Devices hook ── */
+function usePcDevices(tenantId: string | null) {
+  const [devices, setDevices] = useState<{ id: string; deviceName: string; pairedAt: string | null; lastSeenAt: string | null }[]>([]);
+
+  const load = useCallback(async () => {
+    if (!tenantId) return;
+    const token = typeof window !== 'undefined' ? (localStorage.getItem('accessToken') ?? '') : '';
+    if (!token) return;
+    try {
+      const r = await fetch(`/api/v1/tenants/${tenantId}/pc-connector/devices`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (r.ok) {
+        const data = await r.json();
+        setDevices(Array.isArray(data) ? data : []);
+      }
+    } catch { /* ignore */ }
+  }, [tenantId]);
+
+  useEffect(() => { load(); }, [load]);
+  return { devices, reload: load };
+}
+
 /* ── Page ── */
 export default function IntegracoesPage() {
   const { tenantId } = useAuth();
   const { connections, loading } = useCalendarConnections(tenantId);
+  const { devices: pcDevicesList } = usePcDevices(tenantId);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<IntegrationCategory>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'connected' | 'disconnected' | 'error'>('all');
 
-  const integrations = buildIntegrations(connections);
+  const integrations = buildIntegrations(connections, pcDevicesList);
 
   const filtered = integrations.filter((i) => {
     const matchCat = category === 'all' || i.category.includes(category);

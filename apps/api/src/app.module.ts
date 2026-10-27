@@ -21,6 +21,7 @@ import { BillingModule } from './modules/billing/billing.module';
 import { CalendarsModule } from './modules/calendars/calendars.module';
 import { PrivacyModule } from './modules/privacy/privacy.module';
 import { HealthModule } from './modules/health/health.module';
+import { PcConnectorModule } from './modules/pc-connector/pc-connector.module';
 import { AuditModule } from './shared/audit/audit.module';
 import { CryptoModule } from './shared/crypto/crypto.module';
 import { OutboxModule } from './shared/outbox/outbox.module';
@@ -97,6 +98,7 @@ import { anthropicConfig } from './config/anthropic.config';
     BillingModule,
     CalendarsModule,
     PrivacyModule,
+    PcConnectorModule,
   ],
 })
 export class AppModule {}

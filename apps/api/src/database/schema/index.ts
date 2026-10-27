@@ -9,3 +9,4 @@ export * from './billing';
 export * from './whatsapp';
 export * from './campaigns';
 export * from './calendars';
+export * from './pc-devices';

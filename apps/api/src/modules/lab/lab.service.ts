@@ -7,6 +7,7 @@ import { agents } from '../../database/schema/agents';
 import { knowledgeChunks, knowledgeSources, knowledgeItems } from '../../database/schema/knowledge';
 import { createId } from '../../database/utils/id';
 import { SchedulingToolsService, type ToolContext } from '../calendars/scheduling-tools.service';
+import { PcConnectorService } from '../pc-connector/pc-connector.service';
 import type { LabChatDto, ChatMessageDto } from './dto/chat.dto';
 
 export interface LabChatResult {
@@ -126,6 +127,7 @@ export class LabService {
     @Inject(DRIZZLE_TOKEN) private readonly db: DrizzleDB,
     private readonly config: ConfigService,
     private readonly schedulingTools: SchedulingToolsService,
+    private readonly pcConnector: PcConnectorService,
   ) {
     const apiKey = this.config.get<string>('ANTHROPIC_API_KEY') ?? '';
     this.client = new Anthropic({ apiKey });
@@ -168,12 +170,20 @@ export class LabService {
     const agentSettings = await this.schedulingTools.loadSettings(dto.agentId, tenantId);
     const schedulingEnabled = agentSettings?.canSchedule === true;
 
+    /* Check for connected PC devices for this tenant */
+    const pcDevicesList = await this.pcConnector.listDevices(tenantId);
+    const onlineDevice = pcDevicesList.find(
+      (d: { pairedAt: Date | null; lastSeenAt: Date | null }) => d.pairedAt && d.lastSeenAt && Date.now() - d.lastSeenAt.getTime() < 30_000,
+    ) as (typeof pcDevicesList)[0] | undefined;
+    const pcEnabled = !!onlineDevice;
+
     /* Build system prompt — includes scheduling context when enabled */
     const systemPrompt = this.buildSystemPrompt(
       agent,
       approvedItems,
       retrievedChunks,
       schedulingEnabled ? agentSettings : null,
+      pcEnabled ? onlineDevice : null,
     );
 
     /* Message history */
@@ -185,7 +195,10 @@ export class LabService {
       { role: 'user', content: dto.message },
     ];
 
-    const tools = schedulingEnabled ? SCHEDULING_TOOLS : [];
+    const tools: Anthropic.Tool[] = [
+      ...(schedulingEnabled ? SCHEDULING_TOOLS : []),
+      ...(pcEnabled ? buildPcTools(onlineDevice!.id, onlineDevice!.capabilities as Record<string, unknown>) : []),
+    ];
     const toolCtx: ToolContext = {
       tenantId,
       agentId: dto.agentId,
@@ -221,11 +234,21 @@ export class LabService {
 
           let toolOutput: unknown;
           try {
-            toolOutput = await this.schedulingTools.dispatch(
-              block.name,
-              block.input as Record<string, unknown>,
-              toolCtx,
-            );
+            if (block.name.startsWith('pc.') && onlineDevice) {
+              toolOutput = await this.pcConnector.enqueueCommand(
+                tenantId,
+                onlineDevice.id,
+                block.name,
+                block.input as Record<string, unknown>,
+                dto.agentId,
+              );
+            } else {
+              toolOutput = await this.schedulingTools.dispatch(
+                block.name,
+                block.input as Record<string, unknown>,
+                toolCtx,
+              );
+            }
           } catch (err) {
             toolOutput = { error: err instanceof Error ? err.message : String(err) };
           }
@@ -333,6 +356,7 @@ export class LabService {
     knowledgeItemsList: Array<{ type: string; content: string; context: string | null }>,
     chunks: Array<{ content: string; sourceName: string }>,
     schedulingSettings: { defaultDurationMinutes: number; defaultPlatform: string; timeZone: string } | null,
+    pcDevice: { deviceName: string; authorizedPaths: unknown; authorizedApps: unknown } | null = null,
   ): string {
     const persona = typeof agent.persona === 'object' && agent.persona !== null
       ? (agent.persona as { name?: string; description?: string })
@@ -394,8 +418,170 @@ Você pode agendar reuniões reais usando as ferramentas disponíveis. Siga SEMP
       });
     }
 
+    if (pcDevice) {
+      const paths = Array.isArray(pcDevice.authorizedPaths) ? (pcDevice.authorizedPaths as string[]).join(', ') : '';
+      const apps = Array.isArray(pcDevice.authorizedApps) ? (pcDevice.authorizedApps as string[]).join(', ') : '';
+      parts.push(`
+## Acesso ao Computador
+
+Você está conectado ao computador "${pcDevice.deviceName}" e pode executar tarefas nele usando as ferramentas pc.* disponíveis.
+
+**Regras obrigatórias:**
+- SOMENTE opere dentro das pastas autorizadas: ${paths}
+- SOMENTE abra estes aplicativos: ${apps}
+- NUNCA acesse senhas, tokens, cookies ou dados fora das áreas permitidas
+- SEMPRE confirme antes de qualquer ação destrutiva (excluir, mover)
+- Informe o usuário de cada ação que você executar
+- Em caso de erro, relate o erro exatamente como recebido`);
+    }
+
     parts.push('\n\nSempre responda no idioma do usuário. Seja claro, objetivo e útil.');
 
     return parts.join('\n');
   }
+}
+
+// ── PC Tool Definitions (Anthropic API format) ─────────────────────────────
+
+function buildPcTools(deviceId: string, capabilities: Record<string, unknown>): Anthropic.Tool[] {
+  const tools: Anthropic.Tool[] = [];
+  const files = (capabilities.files ?? {}) as Record<string, boolean>;
+  const appsCapabilities = (capabilities.apps ?? {}) as Record<string, boolean>;
+  const browser = (capabilities.browser ?? {}) as Record<string, boolean>;
+  const system = (capabilities.system ?? {}) as Record<string, boolean>;
+
+  if (files.read !== false) {
+    tools.push({
+      name: 'pc.listFiles',
+      description: 'Lista arquivos e pastas em um diretório autorizado do computador conectado.',
+      input_schema: {
+        type: 'object' as const,
+        properties: {
+          path: { type: 'string', description: 'Caminho do diretório a listar (deve estar dentro das pastas autorizadas)' },
+          device_id: { type: 'string', description: 'ID do dispositivo', default: deviceId },
+        },
+        required: ['path'],
+      },
+    });
+
+    tools.push({
+      name: 'pc.readFile',
+      description: 'Lê o conteúdo de um arquivo de texto no computador conectado.',
+      input_schema: {
+        type: 'object' as const,
+        properties: {
+          path: { type: 'string', description: 'Caminho completo do arquivo' },
+          device_id: { type: 'string', description: 'ID do dispositivo', default: deviceId },
+        },
+        required: ['path'],
+      },
+    });
+  }
+
+  if (files.create !== false) {
+    tools.push({
+      name: 'pc.createFile',
+      description: 'Cria um arquivo de texto no computador conectado dentro de uma pasta autorizada.',
+      input_schema: {
+        type: 'object' as const,
+        properties: {
+          path: { type: 'string', description: 'Caminho completo do arquivo a criar' },
+          content: { type: 'string', description: 'Conteúdo do arquivo' },
+          device_id: { type: 'string', description: 'ID do dispositivo', default: deviceId },
+        },
+        required: ['path', 'content'],
+      },
+    });
+
+    tools.push({
+      name: 'pc.createFolder',
+      description: 'Cria uma pasta no computador conectado dentro de uma pasta autorizada.',
+      input_schema: {
+        type: 'object' as const,
+        properties: {
+          path: { type: 'string', description: 'Caminho completo da pasta a criar' },
+          device_id: { type: 'string', description: 'ID do dispositivo', default: deviceId },
+        },
+        required: ['path'],
+      },
+    });
+  }
+
+  if (files.rename) {
+    tools.push({
+      name: 'pc.renameFile',
+      description: 'Renomeia um arquivo ou pasta no computador conectado.',
+      input_schema: {
+        type: 'object' as const,
+        properties: {
+          path: { type: 'string', description: 'Caminho atual' },
+          new_name: { type: 'string', description: 'Novo nome (sem o caminho)' },
+          device_id: { type: 'string', description: 'ID do dispositivo', default: deviceId },
+        },
+        required: ['path', 'new_name'],
+      },
+    });
+  }
+
+  if (files.move) {
+    tools.push({
+      name: 'pc.moveFile',
+      description: 'Move um arquivo ou pasta para outro local autorizado.',
+      input_schema: {
+        type: 'object' as const,
+        properties: {
+          source: { type: 'string', description: 'Caminho de origem' },
+          destination: { type: 'string', description: 'Caminho de destino' },
+          device_id: { type: 'string', description: 'ID do dispositivo', default: deviceId },
+        },
+        required: ['source', 'destination'],
+      },
+    });
+  }
+
+  if (appsCapabilities.open) {
+    tools.push({
+      name: 'pc.openApplication',
+      description: 'Abre um aplicativo autorizado no computador conectado.',
+      input_schema: {
+        type: 'object' as const,
+        properties: {
+          app: { type: 'string', description: 'Nome do executável (ex: notepad.exe, calc.exe, msedge.exe)' },
+          device_id: { type: 'string', description: 'ID do dispositivo', default: deviceId },
+        },
+        required: ['app'],
+      },
+    });
+  }
+
+  if (browser.openUrl !== false) {
+    tools.push({
+      name: 'pc.openUrl',
+      description: 'Abre uma URL no navegador padrão do computador conectado.',
+      input_schema: {
+        type: 'object' as const,
+        properties: {
+          url: { type: 'string', description: 'URL a abrir' },
+          device_id: { type: 'string', description: 'ID do dispositivo', default: deviceId },
+        },
+        required: ['url'],
+      },
+    });
+  }
+
+  if (system.info !== false) {
+    tools.push({
+      name: 'pc.getDeviceInfo',
+      description: 'Obtém informações básicas do computador conectado (SO, hostname, etc).',
+      input_schema: {
+        type: 'object' as const,
+        properties: {
+          device_id: { type: 'string', description: 'ID do dispositivo', default: deviceId },
+        },
+        required: [],
+      },
+    });
+  }
+
+  return tools;
 }

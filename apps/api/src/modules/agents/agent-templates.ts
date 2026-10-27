@@ -204,4 +204,14 @@ export const AVAILABLE_TOOLS = [
   { name: 'check_order_status', label: 'Consultar status de pedido', category: 'ecommerce' },
   { name: 'generate_quote', label: 'Gerar proposta/orçamento', category: 'sales' },
   { name: 'transfer_to_human', label: 'Transferir para humano', category: 'handoff' },
+  // PC Connector tools
+  { name: 'pc.listFiles', label: 'Listar arquivos (PC)', category: 'pc' },
+  { name: 'pc.readFile', label: 'Ler arquivo (PC)', category: 'pc' },
+  { name: 'pc.createFile', label: 'Criar arquivo (PC)', category: 'pc' },
+  { name: 'pc.createFolder', label: 'Criar pasta (PC)', category: 'pc' },
+  { name: 'pc.renameFile', label: 'Renomear arquivo/pasta (PC)', category: 'pc' },
+  { name: 'pc.moveFile', label: 'Mover arquivo/pasta (PC)', category: 'pc' },
+  { name: 'pc.openApplication', label: 'Abrir aplicativo (PC)', category: 'pc' },
+  { name: 'pc.openUrl', label: 'Abrir URL no navegador (PC)', category: 'pc' },
+  { name: 'pc.getDeviceInfo', label: 'Informações do dispositivo (PC)', category: 'pc' },
 ] as const;
