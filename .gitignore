@@ -52,3 +52,7 @@ dump.rdb
 
 # Dev seed credentials
 .dev-credentials.txt
+
+# Seed script generated reports
+apps/api/.radar-editais-report.html
+apps/api/.seed-report.json
