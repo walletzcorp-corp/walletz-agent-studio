@@ -25,6 +25,25 @@ export class UsersService {
     return user ?? null;
   }
 
+  async findProfileById(id: string) {
+    const [user] = await this.db
+      .select({
+        id: users.id,
+        email: users.email,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        mfaEnabledAt: users.mfaEnabledAt,
+        emailVerifiedAt: users.emailVerifiedAt,
+        lastLoginAt: users.lastLoginAt,
+        createdAt: users.createdAt,
+        updatedAt: users.updatedAt,
+      })
+      .from(users)
+      .where(and(eq(users.id, id), isNull(users.deletedAt)))
+      .limit(1);
+    return user ?? null;
+  }
+
   async findByEmailVerificationToken(token: string): Promise<User | null> {
     const [user] = await this.db
       .select()

@@ -52,14 +52,44 @@ export class WhatsappService {
 
   // ─── Accounts ────────────────────────────────────────────────────────────────
 
-  async listAccounts(tenantId: string): Promise<WhatsappAccount[]> {
+  private readonly accountPublicColumns = {
+    id: whatsappAccounts.id,
+    tenantId: whatsappAccounts.tenantId,
+    displayName: whatsappAccounts.displayName,
+    phoneNumber: whatsappAccounts.phoneNumber,
+    phoneNumberId: whatsappAccounts.phoneNumberId,
+    wabaId: whatsappAccounts.wabaId,
+    webhookUrl: whatsappAccounts.webhookUrl,
+    status: whatsappAccounts.status,
+    qualityRating: whatsappAccounts.qualityRating,
+    messagingLimitTier: whatsappAccounts.messagingLimitTier,
+    lastSyncedAt: whatsappAccounts.lastSyncedAt,
+    connectedByUserId: whatsappAccounts.connectedByUserId,
+    createdAt: whatsappAccounts.createdAt,
+    updatedAt: whatsappAccounts.updatedAt,
+  };
+
+  async listAccounts(tenantId: string) {
     return this.db
-      .select()
+      .select(this.accountPublicColumns)
       .from(whatsappAccounts)
       .where(and(eq(whatsappAccounts.tenantId, tenantId), isNull(whatsappAccounts.deletedAt)));
   }
 
-  async getAccount(tenantId: string, accountId: string): Promise<WhatsappAccount> {
+  async getAccount(tenantId: string, accountId: string) {
+    const [account] = await this.db
+      .select(this.accountPublicColumns)
+      .from(whatsappAccounts)
+      .where(and(
+        eq(whatsappAccounts.id, accountId),
+        eq(whatsappAccounts.tenantId, tenantId),
+        isNull(whatsappAccounts.deletedAt),
+      ));
+    if (!account) throw new NotFoundException('WhatsApp account not found');
+    return account;
+  }
+
+  private async getAccountInternal(tenantId: string, accountId: string): Promise<WhatsappAccount> {
     const [account] = await this.db
       .select()
       .from(whatsappAccounts)
@@ -364,7 +394,7 @@ export class WhatsappService {
     accountId: string,
     dto: SendMessageDto,
   ): Promise<{ messageId: string; status: string }> {
-    const account = await this.getAccount(tenantId, accountId);
+    const account = await this.getAccountInternal(tenantId, accountId);
 
     if (account.status !== 'connected') {
       throw new BadRequestException('WhatsApp account is not connected');

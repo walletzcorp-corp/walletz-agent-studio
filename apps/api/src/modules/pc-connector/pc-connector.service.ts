@@ -1,5 +1,6 @@
-import { Injectable, Inject, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, BadRequestException, ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { eq, and, inArray } from 'drizzle-orm';
+import { createHash, randomBytes } from 'crypto';
 import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';
 import { pcDevices, pcCommands } from '../../database/schema';
 import { v4 as uuidv4 } from 'uuid';
@@ -28,7 +29,7 @@ export class PcConnectorService {
     return { token, expiresAt };
   }
 
-  async pairDevice(token: string, deviceName: string, platform: string): Promise<{ deviceId: string }> {
+  async pairDevice(token: string, deviceName: string, platform: string): Promise<{ deviceId: string; deviceSecret: string }> {
     const [device] = await this.db
       .select()
       .from(pcDevices)
@@ -40,6 +41,9 @@ export class PcConnectorService {
     }
     if (device.pairedAt) throw new BadRequestException('Already paired');
 
+    const deviceSecret = randomBytes(32).toString('hex');
+    const deviceSecretHash = createHash('sha256').update(deviceSecret).digest('hex');
+
     const now = new Date();
     await this.db
       .update(pcDevices)
@@ -47,25 +51,40 @@ export class PcConnectorService {
         deviceName,
         platform,
         pairingToken: null,
+        deviceSecretHash,
         pairedAt: now,
         lastSeenAt: now,
         updatedAt: now,
       })
       .where(eq(pcDevices.id, device.id));
 
-    return { deviceId: device.id };
+    return { deviceId: device.id, deviceSecret };
   }
+
+  private readonly devicePublicColumns = {
+    id: pcDevices.id,
+    tenantId: pcDevices.tenantId,
+    deviceName: pcDevices.deviceName,
+    platform: pcDevices.platform,
+    pairedAt: pcDevices.pairedAt,
+    lastSeenAt: pcDevices.lastSeenAt,
+    capabilities: pcDevices.capabilities,
+    authorizedPaths: pcDevices.authorizedPaths,
+    authorizedApps: pcDevices.authorizedApps,
+    createdAt: pcDevices.createdAt,
+    updatedAt: pcDevices.updatedAt,
+  };
 
   async listDevices(tenantId: string) {
     return this.db
-      .select()
+      .select(this.devicePublicColumns)
       .from(pcDevices)
       .where(eq(pcDevices.tenantId, tenantId));
   }
 
   async getDevice(tenantId: string, deviceId: string) {
     const [device] = await this.db
-      .select()
+      .select(this.devicePublicColumns)
       .from(pcDevices)
       .where(and(eq(pcDevices.id, deviceId), eq(pcDevices.tenantId, tenantId)));
 
@@ -159,7 +178,20 @@ export class PcConnectorService {
     return { success: false, error: 'Command timed out — PC Connector did not respond in 30s' };
   }
 
-  async getPendingCommands(deviceId: string) {
+  private async verifyDeviceSecret(deviceId: string, secret: string | undefined): Promise<void> {
+    if (!secret) throw new UnauthorizedException('X-Device-Secret header is required');
+    const [device] = await this.db
+      .select({ deviceSecretHash: pcDevices.deviceSecretHash })
+      .from(pcDevices)
+      .where(eq(pcDevices.id, deviceId));
+    if (!device?.deviceSecretHash) throw new UnauthorizedException('Device not paired');
+    const incoming = createHash('sha256').update(secret).digest('hex');
+    if (incoming !== device.deviceSecretHash) throw new UnauthorizedException('Invalid device secret');
+  }
+
+  async getPendingCommands(deviceId: string, deviceSecret: string | undefined) {
+    await this.verifyDeviceSecret(deviceId, deviceSecret);
+
     await this.db
       .update(pcDevices)
       .set({ lastSeenAt: new Date() })
@@ -177,7 +209,9 @@ export class PcConnectorService {
     success: boolean,
     result?: Record<string, unknown>,
     error?: string,
+    deviceSecret?: string,
   ) {
+    await this.verifyDeviceSecret(deviceId, deviceSecret);
     const [cmd] = await this.db
       .select({ id: pcCommands.id, deviceId: pcCommands.deviceId })
       .from(pcCommands)

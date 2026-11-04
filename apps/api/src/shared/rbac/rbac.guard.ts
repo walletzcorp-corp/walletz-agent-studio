@@ -28,9 +28,9 @@ export class RbacGuard implements CanActivate {
       context.getClass(),
     ]);
 
-    // No @Roles decorator = allow any authenticated user
+    // No @Roles decorator = DENY (deny by default policy)
     if (!requiredRoles || requiredRoles.length === 0) {
-      return true;
+      throw new ForbiddenException('Access denied: no role policy defined for this route');
     }
 
     const request = context.switchToHttp().getRequest<{

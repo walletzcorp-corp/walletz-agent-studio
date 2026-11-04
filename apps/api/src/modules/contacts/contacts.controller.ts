@@ -6,6 +6,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RbacGuard } from '../../shared/rbac/rbac.guard';
+import { Roles } from '../../shared/rbac/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { ContactsService, type ImportContactDto } from './contacts.service';
 import { parse as parseCsvSync } from 'csv-parse/sync';
@@ -18,6 +19,7 @@ export class ContactsController {
   constructor(private readonly contactsService: ContactsService) {}
 
   @Get()
+  @Roles('viewer')
   @ApiOperation({ summary: 'List contacts' })
   list(
     @Param('tenantId') tenantId: string,
@@ -33,6 +35,7 @@ export class ContactsController {
   }
 
   @Get(':contactId')
+  @Roles('viewer')
   @ApiOperation({ summary: 'Get contact' })
   get(
     @Param('tenantId') tenantId: string,
@@ -42,6 +45,7 @@ export class ContactsController {
   }
 
   @Post('import/json')
+  @Roles('manager')
   @ApiOperation({ summary: 'Import contacts from JSON array' })
   importJson(
     @Param('tenantId') tenantId: string,
@@ -52,6 +56,7 @@ export class ContactsController {
   }
 
   @Post('import/csv')
+  @Roles('manager')
   @UseInterceptors(FileInterceptor('file'))
   @ApiConsumes('multipart/form-data')
   @ApiBody({ schema: { type: 'object', properties: { file: { type: 'string', format: 'binary' } } } })
@@ -97,6 +102,7 @@ export class ContactsController {
   }
 
   @Delete(':contactId')
+  @Roles('admin')
   @HttpCode(204)
   @ApiOperation({ summary: 'Delete contact' })
   delete(

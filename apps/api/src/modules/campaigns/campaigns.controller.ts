@@ -5,6 +5,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { IsString, IsOptional, IsNotEmpty, IsArray, IsDateString } from 'class-validator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RbacGuard } from '../../shared/rbac/rbac.guard';
+import { Roles } from '../../shared/rbac/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { CampaignsService } from './campaigns.service';
 
@@ -36,11 +37,13 @@ export class CampaignsController {
   // ─── Segments ────────────────────────────────────────────────────────────────
 
   @Get('tenants/:tenantId/segments')
+  @Roles('viewer')
   listSegments(@Param('tenantId') tenantId: string) {
     return this.campaignsService.listSegments(tenantId);
   }
 
   @Post('tenants/:tenantId/segments')
+  @Roles('manager')
   createSegment(
     @Param('tenantId') tenantId: string,
     @Body() body: CreateSegmentBody,
@@ -50,6 +53,7 @@ export class CampaignsController {
   }
 
   @Delete('tenants/:tenantId/segments/:segmentId')
+  @Roles('admin')
   @HttpCode(204)
   deleteSegment(
     @Param('tenantId') tenantId: string,
@@ -61,11 +65,13 @@ export class CampaignsController {
   // ─── Campaigns ───────────────────────────────────────────────────────────────
 
   @Get('tenants/:tenantId/campaigns')
+  @Roles('viewer')
   listCampaigns(@Param('tenantId') tenantId: string) {
     return this.campaignsService.listCampaigns(tenantId);
   }
 
   @Get('tenants/:tenantId/campaigns/:campaignId')
+  @Roles('viewer')
   getCampaign(
     @Param('tenantId') tenantId: string,
     @Param('campaignId') campaignId: string,
@@ -74,6 +80,7 @@ export class CampaignsController {
   }
 
   @Post('tenants/:tenantId/campaigns')
+  @Roles('manager')
   createCampaign(
     @Param('tenantId') tenantId: string,
     @Body() body: CreateCampaignBody,
@@ -83,6 +90,7 @@ export class CampaignsController {
   }
 
   @Get('tenants/:tenantId/campaigns/:campaignId/eligibility')
+  @Roles('manager')
   @ApiOperation({ summary: 'Send Policy Gateway — check eligible recipients' })
   checkEligibility(
     @Param('tenantId') tenantId: string,
@@ -92,6 +100,7 @@ export class CampaignsController {
   }
 
   @Post('tenants/:tenantId/campaigns/:campaignId/launch')
+  @Roles('admin')
   @HttpCode(200)
   @ApiOperation({ summary: 'Launch campaign after policy check' })
   launchCampaign(

@@ -14,6 +14,6 @@ export class UsersController {
 
   @Get('profile')
   async getProfile(@CurrentUser() user: JwtPayload) {
-    return this.usersService.findById(user.sub);
+    return this.usersService.findProfileById(user.sub);
   }
 }

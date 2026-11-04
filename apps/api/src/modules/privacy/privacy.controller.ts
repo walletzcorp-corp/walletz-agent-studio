@@ -30,6 +30,7 @@ export class PrivacyController {
   // ─── LGPD Art. 18 I — Portabilidade / Acesso ──────────────────────────────
 
   @Get('tenants/:tenantId/privacy/contacts/:contactId/export')
+  @Roles('admin', 'owner')
   @ApiOperation({ summary: 'LGPD Art. 18 I — Export all data for a data subject' })
   exportContactData(
     @Param('tenantId') tenantId: string,
@@ -57,6 +58,7 @@ export class PrivacyController {
   // ─── LGPD — Consentimentos ────────────────────────────────────────────────
 
   @Get('tenants/:tenantId/privacy/consents')
+  @Roles('viewer')
   @ApiOperation({ summary: 'List all consent records for tenant' })
   listConsents(
     @Param('tenantId') tenantId: string,

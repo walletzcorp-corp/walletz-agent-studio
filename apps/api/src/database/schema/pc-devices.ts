@@ -8,6 +8,7 @@ export const pcDevices = pgTable('pc_devices', {
   platform: text('platform').notNull().default('windows'),
   pairingToken: text('pairing_token'),
   pairingExpiresAt: timestamp('pairing_expires_at', { withTimezone: true }),
+  deviceSecretHash: text('device_secret_hash'),
   pairedAt: timestamp('paired_at', { withTimezone: true }),
   lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
   capabilities: jsonb('capabilities').notNull().default({

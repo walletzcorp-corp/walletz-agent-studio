@@ -5,6 +5,7 @@ import {
   Delete,
   Body,
   Param,
+  Headers,
   UseGuards,
   HttpCode,
   HttpStatus,
@@ -83,9 +84,9 @@ export class PcConnectorPublicController {
   @ApiOperation({ summary: 'Buscar comandos pendentes (polling do connector)' })
   getPendingCommands(
     @Param('deviceId') deviceId: string,
+    @Headers('x-device-secret') deviceSecret: string | undefined,
   ) {
-    // Secret validation via header is handled in service
-    return this.svc.getPendingCommands(deviceId);
+    return this.svc.getPendingCommands(deviceId, deviceSecret);
   }
 
   @Post('devices/:deviceId/commands/:commandId/result')
@@ -94,8 +95,9 @@ export class PcConnectorPublicController {
   postResult(
     @Param('deviceId') deviceId: string,
     @Param('commandId') commandId: string,
+    @Headers('x-device-secret') deviceSecret: string | undefined,
     @Body() body: { success: boolean; result?: Record<string, unknown>; error?: string },
   ) {
-    return this.svc.postCommandResult(deviceId, commandId, body.success, body.result, body.error);
+    return this.svc.postCommandResult(deviceId, commandId, body.success, body.result, body.error, deviceSecret);
   }
 }
