@@ -65,6 +65,17 @@ export class PcConnectorTenantController {
   disconnect(@Param('tenantId') tenantId: string, @Param('deviceId') deviceId: string) {
     return this.svc.disconnectDevice(tenantId, deviceId);
   }
+
+  @Patch('commands/:commandId/approve')
+  @Roles('admin')
+  @ApiOperation({ summary: 'Aprovar ou rejeitar comando de alto risco' })
+  approveCommand(
+    @Param('tenantId') tenantId: string,
+    @Param('commandId') commandId: string,
+    @Body() body: { approved: boolean },
+  ) {
+    return this.svc.approveCommand(tenantId, commandId, body.approved);
+  }
 }
 
 // ── Public routes used by the PC Connector script ────────────────────────────

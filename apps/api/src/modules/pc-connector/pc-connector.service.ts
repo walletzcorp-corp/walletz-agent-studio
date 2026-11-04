@@ -135,11 +135,24 @@ export class PcConnectorService {
     }
 
     const riskLevel = this.getRiskLevel(toolName);
+    const commandId = uuidv4();
+
     if (riskLevel === 'high') {
-      throw new ForbiddenException('HIGH risk action requires human approval');
+      await this.db.insert(pcCommands).values({
+        id: commandId,
+        deviceId,
+        tenantId,
+        agentId: agentId ?? null,
+        toolName,
+        params: params as never,
+        status: 'awaiting_approval',
+        riskLevel,
+        requiresApproval: true,
+      });
+      // Return immediately — the command awaits human approval via PATCH /commands/:id/approve
+      return { success: false, error: 'AWAITING_APPROVAL', commandId };
     }
 
-    const commandId = uuidv4();
     await this.db.insert(pcCommands).values({
       id: commandId,
       deviceId,
@@ -176,6 +189,34 @@ export class PcConnectorService {
       .where(eq(pcCommands.id, commandId));
 
     return { success: false, error: 'Command timed out — PC Connector did not respond in 30s' };
+  }
+
+  async approveCommand(tenantId: string, commandId: string, approved: boolean): Promise<{ commandId: string; status: string }> {
+    const [cmd] = await this.db
+      .select()
+      .from(pcCommands)
+      .where(and(eq(pcCommands.id, commandId), eq(pcCommands.tenantId, tenantId)));
+
+    if (!cmd) throw new NotFoundException('Command not found');
+    if (cmd.status !== 'awaiting_approval') {
+      throw new BadRequestException(`Command is in '${cmd.status}' state — only awaiting_approval commands can be reviewed`);
+    }
+
+    if (!approved) {
+      await this.db
+        .update(pcCommands)
+        .set({ status: 'rejected', completedAt: new Date() })
+        .where(eq(pcCommands.id, commandId));
+      return { commandId, status: 'rejected' };
+    }
+
+    // Approved: move to pending so the device picks it up
+    await this.db
+      .update(pcCommands)
+      .set({ status: 'pending', requiresApproval: false })
+      .where(eq(pcCommands.id, commandId));
+
+    return { commandId, status: 'pending' };
   }
 
   private async verifyDeviceSecret(deviceId: string, secret: string | undefined): Promise<void> {
@@ -247,4 +288,5 @@ export interface PcCommandResult {
   success: boolean;
   result?: Record<string, unknown>;
   error?: string;
+  commandId?: string;
 }
