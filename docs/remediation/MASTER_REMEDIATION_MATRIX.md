@@ -1,5 +1,7 @@
 # MASTER REMEDIATION MATRIX — Walletz Agent Studio
-> Baseline commit: `53e5f08` | Branch: `fix/production-readiness` | Data: 2026-11-04
+> Baseline commit: `53e5f08` | Branch: `fix/production-readiness` | Data: 2026-11-04  
+> Commits: `8494c7c` (P0 hardening) · `34f4de8` (P1-SEC-001/002 PC Connector)  
+> **P0 open: 0** | **P1 open: 5** | **P2 open: 11**
 
 Legenda — Origem: **[T]** = demonstrado em teste isolado · **[C]** = conclusão por leitura de código (requer confirmação dinâmica)
 
@@ -29,10 +31,10 @@ Legenda — Origem: **[T]** = demonstrado em teste isolado · **[C]** = conclus�
 | GET /conversations | ConversationsController | viewer | FIXED |
 | GET /conversations/:id | ConversationsController | viewer | FIXED |
 | GET /conversations/:id/messages | ConversationsController | viewer | FIXED |
-| POST /conversations/:id/messages | ConversationsController | operator | FIXED |
-| POST /conversations/:id/assume | ConversationsController | operator | FIXED |
-| POST /conversations/:id/return-to-ai | ConversationsController | operator | FIXED |
-| POST /conversations/:id/resolve | ConversationsController | operator | FIXED |
+| POST /conversations/:id/messages | ConversationsController | agent_operator | FIXED |
+| POST /conversations/:id/assume | ConversationsController | agent_operator | FIXED |
+| POST /conversations/:id/return-to-ai | ConversationsController | agent_operator | FIXED |
+| POST /conversations/:id/resolve | ConversationsController | agent_operator | FIXED |
 | GET /segments | CampaignsController | viewer | FIXED |
 | POST /segments | CampaignsController | manager | FIXED |
 | DELETE /segments/:id | CampaignsController | admin | FIXED |
