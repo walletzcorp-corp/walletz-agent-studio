@@ -111,9 +111,16 @@ export class CalendarsService {
 
   /* ── OAuth ── */
 
+  private signOAuthState(payload: string): string {
+    const secret = this.config.get<string>('CALENDAR_OAUTH_STATE_SECRET', 'dev-state-secret-change-in-prod');
+    return crypto.createHmac('sha256', secret).update(payload).digest('hex');
+  }
+
   buildAuthUrl(tenantId: string, provider: Provider): string {
-    /* state encodes tenantId + provider for the callback */
-    const state = Buffer.from(JSON.stringify({ tenantId, provider, ts: Date.now() })).toString('base64url');
+    const payload = JSON.stringify({ tenantId, provider, ts: Date.now() });
+    const encoded = Buffer.from(payload).toString('base64url');
+    const sig = this.signOAuthState(encoded);
+    const state = `${encoded}.${sig}`;
     return provider === 'google'
       ? this.googleService.buildAuthUrl(state)
       : this.microsoftService.buildAuthUrl(state);
@@ -124,11 +131,24 @@ export class CalendarsService {
     state: string,
     userId: string | null,
   ): Promise<{ tenantId: string; provider: Provider }> {
-    const decoded = JSON.parse(Buffer.from(state, 'base64url').toString('utf8')) as {
+    const parts = state.split('.');
+    if (parts.length !== 2) throw new BadRequestException('Invalid OAuth state');
+    const [encoded, sig] = parts as [string, string];
+
+    const expectedSig = this.signOAuthState(encoded);
+    if (!crypto.timingSafeEqual(Buffer.from(sig, 'hex'), Buffer.from(expectedSig, 'hex'))) {
+      throw new BadRequestException('OAuth state signature invalid — possible CSRF');
+    }
+
+    const decoded = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8')) as {
       tenantId: string;
       provider: Provider;
       ts: number;
     };
+
+    if (Date.now() - decoded.ts > 10 * 60 * 1000) {
+      throw new BadRequestException('OAuth state expired — please try again');
+    }
 
     const { tenantId, provider } = decoded;
 

@@ -10,6 +10,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
+import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
@@ -24,10 +25,12 @@ import type { JwtPayload } from './auth.service';
 
 @ApiTags('auth')
 @Controller('auth')
+// Default: 10 req/s short, 50/10s medium, 100/min long (from ThrottlerModule global)
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('register')
+  @Throttle({ short: { limit: 3, ttl: 60000 }, medium: { limit: 5, ttl: 3600000 } })
   @ApiOperation({ summary: 'Cadastrar novo usuário' })
   @ApiResponse({ status: 201 })
   @ApiResponse({ status: 409, description: 'Email já cadastrado' })
@@ -36,6 +39,7 @@ export class AuthController {
   }
 
   @Get('verify-email')
+  @SkipThrottle()
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Confirmar email' })
   async verifyEmail(@Query('token') token: string) {
@@ -43,6 +47,7 @@ export class AuthController {
   }
 
   @Post('login')
+  @Throttle({ short: { limit: 5, ttl: 60000 }, medium: { limit: 10, ttl: 3600000 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Login' })
   async login(@Body() dto: LoginDto, @Req() req: Request) {
@@ -50,6 +55,7 @@ export class AuthController {
   }
 
   @Post('refresh')
+  @Throttle({ short: { limit: 10, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Renovar tokens' })
   async refresh(@Body() body: { refreshToken: string; sessionId: string }) {
@@ -59,6 +65,7 @@ export class AuthController {
   @Post('logout')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
+  @SkipThrottle()
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Logout' })
   async logout(@CurrentUser() user: JwtPayload) {
@@ -66,6 +73,7 @@ export class AuthController {
   }
 
   @Post('forgot-password')
+  @Throttle({ short: { limit: 3, ttl: 60000 }, medium: { limit: 5, ttl: 3600000 } })
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Solicitar redefinição de senha' })
   async forgotPassword(@Body() dto: ForgotPasswordDto, @Req() req: Request) {
@@ -73,6 +81,7 @@ export class AuthController {
   }
 
   @Post('reset-password')
+  @Throttle({ short: { limit: 3, ttl: 60000 }, medium: { limit: 5, ttl: 3600000 } })
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Redefinir senha' })
   async resetPassword(@Body() dto: ResetPasswordDto, @Req() req: Request) {
@@ -82,6 +91,7 @@ export class AuthController {
   @Post('change-password')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
+  @Throttle({ short: { limit: 5, ttl: 60000 } })
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Alterar senha' })
   async changePassword(@CurrentUser() user: JwtPayload, @Body() dto: ChangePasswordDto, @Req() req: Request) {
@@ -91,6 +101,7 @@ export class AuthController {
   @Get('mfa/setup')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
+  @Throttle({ short: { limit: 3, ttl: 60000 } })
   @ApiOperation({ summary: 'Iniciar configuração de MFA' })
   async setupMfa(@CurrentUser() user: JwtPayload) {
     return this.authService.setupMfa(user.sub);
@@ -99,6 +110,7 @@ export class AuthController {
   @Post('mfa/confirm')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
+  @Throttle({ short: { limit: 5, ttl: 60000 } })
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Confirmar configuração de MFA' })
   async confirmMfa(@CurrentUser() user: JwtPayload, @Body() dto: VerifyMfaSetupDto, @Req() req: Request) {
@@ -108,6 +120,7 @@ export class AuthController {
   @Post('mfa/disable')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
+  @Throttle({ short: { limit: 3, ttl: 60000 } })
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Desativar MFA' })
   async disableMfa(@CurrentUser() user: JwtPayload, @Body() dto: DisableMfaDto, @Req() req: Request) {
@@ -117,6 +130,7 @@ export class AuthController {
   @Get('me')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
+  @SkipThrottle()
   @ApiOperation({ summary: 'Dados do usuário autenticado' })
   async me(@CurrentUser() user: JwtPayload) {
     return { userId: user.sub, email: user.email, sessionId: user.sessionId };

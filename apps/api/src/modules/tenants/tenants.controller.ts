@@ -112,8 +112,9 @@ export class TenantsController {
     @Param('tenantId') tenantId: string,
     @Param('membershipId') membershipId: string,
     @Body() body: { role: string },
+    @CurrentUser() user: JwtPayload,
   ) {
-    return this.tenantsService.updateMemberRole(tenantId, membershipId, body.role);
+    return this.tenantsService.updateMemberRole(tenantId, membershipId, body.role, user.sub);
   }
 
   @Delete(':tenantId/members/:membershipId')

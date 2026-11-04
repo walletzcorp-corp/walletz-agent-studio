@@ -3,6 +3,8 @@ import {
   Inject,
   ConflictException,
   NotFoundException,
+  BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { eq, and, isNull } from 'drizzle-orm';
 import { randomBytes } from 'crypto';
@@ -145,15 +147,47 @@ export class TenantsService {
     return membership!;
   }
 
-  async updateMemberRole(tenantId: string, membershipId: string, role: string): Promise<Membership> {
-    const [membership] = await this.db
+  async updateMemberRole(
+    tenantId: string,
+    membershipId: string,
+    role: string,
+    requestingUserId: string,
+  ): Promise<Membership> {
+    const validRoles: Membership['role'][] = ['viewer', 'analyst', 'agent_operator', 'manager', 'admin'];
+    if (!validRoles.includes(role as Membership['role'])) {
+      throw new BadRequestException(`Invalid role. Allowed: ${validRoles.join(', ')}`);
+    }
+
+    const [target] = await this.db
+      .select()
+      .from(memberships)
+      .where(and(eq(memberships.id, membershipId), eq(memberships.tenantId, tenantId)))
+      .limit(1);
+
+    if (!target) throw new NotFoundException('Membership not found');
+    if (target.role === 'owner') throw new ForbiddenException('Cannot change the owner\'s role');
+
+    const [requester] = await this.db
+      .select()
+      .from(memberships)
+      .where(and(eq(memberships.userId, requestingUserId), eq(memberships.tenantId, tenantId)))
+      .limit(1);
+
+    if (target.userId === requestingUserId) {
+      throw new ForbiddenException('Cannot change your own role');
+    }
+    if (requester?.role !== 'owner' && role === 'admin') {
+      // Only owners can assign admin; admins can assign up to manager
+      throw new ForbiddenException('Only owners can assign the admin role');
+    }
+
+    const [updated] = await this.db
       .update(memberships)
       .set({ role: role as Membership['role'], updatedAt: new Date() })
-      .where(and(eq(memberships.id, membershipId), eq(memberships.tenantId, tenantId)))
+      .where(eq(memberships.id, membershipId))
       .returning();
 
-    if (!membership) throw new NotFoundException('Membership not found');
-    return membership;
+    return updated!;
   }
 
   async removeMember(tenantId: string, membershipId: string): Promise<void> {
