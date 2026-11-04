@@ -61,6 +61,7 @@ export const api = createApiClient();
 export interface LoginResponse {
   accessToken: string;
   refreshToken: string;
+  sessionId: string;
   requiresMfa?: boolean;
   mfaToken?: string;
 }

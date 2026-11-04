@@ -44,7 +44,8 @@ export class RbacGuard implements CanActivate {
       throw new UnauthorizedException();
     }
 
-    const tenantId = request.tenantId ?? request.params?.['tenantId'] ?? user.tenantId;
+    // URL param always wins over x-tenant-slug header to prevent header-based bypass (sec 3.2)
+    const tenantId = request.params?.['tenantId'] ?? request.tenantId ?? user.tenantId;
     if (!tenantId) {
       throw new ForbiddenException('Tenant context required');
     }

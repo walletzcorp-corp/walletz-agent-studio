@@ -91,7 +91,7 @@ export function useAuth() {
     if (data.requiresMfa) {
       return { requiresMfa: true, mfaToken: data.mfaToken };
     }
-    storeTokens(data);
+    storeTokens(data, data.sessionId);
     await loadUser();
     router.push('/');
     return { requiresMfa: false };
