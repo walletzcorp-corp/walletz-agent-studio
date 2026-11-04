@@ -5,7 +5,9 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { eq, and, isNull } from 'drizzle-orm';
 import { randomBytes } from 'crypto';
 import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';
@@ -15,10 +17,17 @@ import type { UpdateTenantSettingsDto } from './dto/update-settings.dto';
 import type { CreateTenantDto } from './dto/create-tenant.dto';
 import type { InviteMemberDto } from './dto/invite-member.dto';
 import { createId } from '../../database/utils/id';
+import { MailService } from '../../shared/mail/mail.service';
 
 @Injectable()
 export class TenantsService {
-  constructor(@Inject(DRIZZLE_TOKEN) private readonly db: DrizzleDB) {}
+  private readonly logger = new Logger(TenantsService.name);
+
+  constructor(
+    @Inject(DRIZZLE_TOKEN) private readonly db: DrizzleDB,
+    private readonly mailService: MailService,
+    private readonly config: ConfigService,
+  ) {}
 
   async findById(id: string): Promise<Tenant | null> {
     const [tenant] = await this.db
@@ -143,6 +152,13 @@ export class TenantsService {
         inviteExpiresAt,
       })
       .returning();
+
+    // Send invite email (best-effort — don't fail the invite if mail fails)
+    const [tenant] = await this.db.select({ name: tenants.name }).from(tenants).where(eq(tenants.id, tenantId)).limit(1);
+    const appUrl = this.config.get<string>('APP_URL', 'http://localhost:3000');
+    this.mailService
+      .sendInvite(dto.email.toLowerCase(), tenant?.name ?? 'Walletz', inviteToken, appUrl)
+      .catch((err: unknown) => this.logger.error(`Failed to send invite email to ${dto.email}: ${String(err)}`));
 
     return membership!;
   }
