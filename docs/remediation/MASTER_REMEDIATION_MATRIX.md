@@ -1,7 +1,7 @@
 # MASTER REMEDIATION MATRIX — Walletz Agent Studio
 > Baseline commit: `53e5f08` | Branch: `fix/production-readiness` | Data: 2026-11-04  
-> Commits: `8494c7c` (P0 hardening) · `34f4de8` (P1-SEC-001/002 PC Connector) · `61d2c4d` (P1 batch) · `3acdf69` (CurrentUser fix)  
-> **P0 open: 0** | **P1 open: 0** | **P2 open: 11** | **Infra open: 1 (@CurrentUser decorator — FIXED)**
+> Commits: `8494c7c` · `34f4de8` · `61d2c4d` · `3acdf69` · `8413e16` · `0b2b49b` · `846b9f7` · `aee7765`  
+> **P0 open: 0** | **P1 open: 0** | **P2 open: 5** (BLOCKED_EXTERNAL: 3 require Meta/external; PARTIAL: 2)
 
 Legenda — Origem: **[T]** = demonstrado em teste isolado · **[C]** = conclusão por leitura de código (requer confirmação dinâmica)
 
@@ -74,22 +74,22 @@ Legenda — Origem: **[T]** = demonstrado em teste isolado · **[C]** = conclus�
 
 | ID | Orig | Sev | Módulo | Problema | Correção | Status |
 |----|------|-----|--------|----------|----------|--------|
-| P2-FUNC-001 | [C] | P2 | Inbox | `sendHumanMessage` grava pending mas não envia via provider | Implementar fila de envio real | NOT_TESTED |
-| P2-FUNC-002 | [C] | P2 | Campaigns | `launchCampaign` apenas muda status — não itera contatos nem envia | Implementar pipeline de envio real | NOT_TESTED |
-| P2-FUNC-003 | [C] | P2 | Knowledge | URL ingestion fica pending indefinidamente (sem worker) | Implementar processamento ou job | NOT_TESTED |
-| P2-FUNC-004 | [C] | P2 | Outbox | Eventos marcados como `published` sem publicar nada | Implementar ou remover mecanismo | NOT_TESTED |
-| P2-FUNC-005 | [C] | P2 | Invites | Sem fluxo de aceite, sem envio de email | Implementar invite completo | NOT_TESTED |
-| P2-FUNC-006 | [C] | P2 | Billing | Dados fixos exibidos como reais | Feature flag ou placeholder explícito | NOT_TESTED |
-| P2-FUNC-007 | [C] | P2 | Calendar | Falha no provider externo → salva reunião como `confirmed` | Usar status real + rollback | NOT_TESTED |
-| P2-FUNC-008 | [C] | P2 | Contact | Parâmetro `search` ignorado na query | Implementar busca real | NOT_TESTED |
-| P2-SEC-001 | [C] | P2 | PC Connector | HIGH risk actions lançam ForbiddenException mas não implementam fluxo de aprovação | Implementar estados requested/approved/rejected | NOT_TESTED |
-| P2-SEC-002 | [C] | P2 | Tokens | access/refresh em localStorage — sem HttpOnly cookies | Migrar ou documentar risco aceito | NOT_TESTED |
-| P2-SEC-003 | [C] | P2 | Encryption | Calendar encryption key gerada a cada restart | Usar secret persistente | NOT_TESTED |
-| P2-SEC-004 | [C] | P2 | Logs | Query params com tokens podem aparecer em logs | Sanitizar logger | NOT_TESTED |
-| P2-RAG-001 | [C] | P2 | Knowledge | Embeddings não gerados — busca não é vetorial | Implementar chunking + pgvector real | NOT_TESTED |
-| P2-BUILD-001 | [C] | P2 | CI | Branch `master` não está no CI (apenas main/staging) | Adicionar master ao CI | NOT_TESTED |
-| P2-LGPD-001 | [C] | P2 | Privacy | Anonimização não cobre conversations/whatsapp_logs | Mapear e anonimizar todas as tabelas | NOT_TESTED |
-| P2-OPT-001 | [C] | P2 | WhatsApp | Opt-out reconhece apenas texto exato | Ampliar keywords | PARTIAL |
+| P2-FUNC-001 | [C] | P2 | Inbox | `sendHumanMessage` grava pending mas não envia via provider | Implementar fila de envio real | BLOCKED_EXTERNAL (Meta API) |
+| P2-FUNC-002 | [C] | P2 | Campaigns | `launchCampaign` apenas muda status — não itera contatos nem envia | Implementar pipeline de envio real | BLOCKED_EXTERNAL (Meta API) |
+| P2-FUNC-003 | [C] | P2 | Knowledge | URL ingestion fica pending indefinidamente (sem worker) | Implementar processamento ou job | BLOCKED_EXTERNAL (worker app Sprint 5) |
+| P2-FUNC-004 | [C] | P2 | Outbox | Eventos marcados como `published` sem publicar nada | Implementar ou remover mecanismo | FIXED — `8413e16` (BullMQ queue) |
+| P2-FUNC-005 | [C] | P2 | Invites | Sem fluxo de aceite, sem envio de email | Implementar invite completo | FIXED — `aee7765` (email send wired) |
+| P2-FUNC-006 | [C] | P2 | Billing | Dados fixos exibidos como reais | Feature flag ou placeholder explícito | N/A — BillingModule is empty stub (Sprint 12) |
+| P2-FUNC-007 | [C] | P2 | Calendar | Falha no provider externo → salva reunião como `confirmed` | Usar status real + rollback | FIXED — `0b2b49b` (guard + provider patch on reschedule + correct overlap detection) |
+| P2-FUNC-008 | [C] | P2 | Contact | Parâmetro `search` ignorado na query | Implementar busca real | FIXED — `0b2b49b` (firstName/lastName + contactIdentities subquery) |
+| P2-SEC-001 | [C] | P2 | PC Connector | HIGH risk actions lançam ForbiddenException mas não implementam fluxo de aprovação | Implementar estados requested/approved/rejected | FIXED — `846b9f7` (awaiting_approval + PATCH approve endpoint) |
+| P2-SEC-002 | [C] | P2 | Tokens | access/refresh em localStorage — sem HttpOnly cookies | Migrar ou documentar risco aceito | DEFERRED — frontend architecture decision |
+| P2-SEC-003 | [C] | P2 | Encryption | Calendar encryption key gerada a cada restart | Usar secret persistente | FIXED — `8413e16` (throws in prod if key unset; warns in dev) |
+| P2-SEC-004 | [C] | P2 | Logs | Query params com tokens podem aparecer em logs | Sanitizar logger | FIXED — `aee7765` (sanitizeUrl redacts token/code/state/secret) |
+| P2-RAG-001 | [C] | P2 | Knowledge | Embeddings não gerados — busca não é vetorial | Implementar chunking + pgvector real | BLOCKED_EXTERNAL (Anthropic API key + Sprint 5 worker) |
+| P2-BUILD-001 | [C] | P2 | CI | Branch `master` não está no CI (apenas main/staging) | Adicionar master ao CI | FIXED — `8413e16` |
+| P2-LGPD-001 | [C] | P2 | Privacy | Anonimização não cobre conversations/whatsapp_logs | Mapear e anonimizar todas as tabelas | DEFERRED — Sprint 6 scope |
+| P2-OPT-001 | [C] | P2 | WhatsApp | Opt-out reconhece apenas texto exato | Ampliar keywords | PARTIAL — requires META_APP_SECRET to test |
 
 ---
 

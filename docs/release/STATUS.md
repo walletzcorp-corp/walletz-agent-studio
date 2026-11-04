@@ -1,7 +1,7 @@
 # Status da Release — Walletz Agent Studio
 
-**Última atualização**: 2026-10-06  
-**Sprint atual**: 7 — Microsoft Graph Integration + Token Auto-Refresh + Teams Meeting
+**Última atualização**: 2026-11-04  
+**Sprint atual**: fix/production-readiness — Hardening de segurança P0/P1/P2
 
 ---
 
@@ -9,10 +9,11 @@
 
 | Estado | Módulos |
 |--------|---------|
-| ✅ Pronto | Sprint 0–2 — Fundação, Auth/RBAC/Tenancy, Agent Builder |
-| ✅ Validado em dev | Auth flow, Agents, Knowledge Ingestion (Sprint 3), Teach AI + Approval (Sprint 4) |
-| ⏳ Pendente | RAG (E), Lab (F), Conversations (G), Contacts (H), Calendar (J), Campaigns (K), Analytics (M), Billing (N) |
-| 🔴 Bloqueado externamente | WhatsApp Cloud API, Google OAuth, Microsoft OAuth, Stripe |
+| ✅ Segurança P0 | Zero P0 open — RBAC deny-by-default, secrets scrubbing, device auth, session SHA-256 (commit `8494c7c`) |
+| ✅ Segurança P1 | Zero P1 open — webhook rejection, role escalation, OAuth CSRF, rate limiting (commits `61d2c4d`+) |
+| ✅ P2 corrigido | Contact search, outbox queue, calendar conflict, reschedule sync, approval flow, invite email, log sanitization |
+| ⏳ Pendente | RAG (E), Lab (F), Conversations real send (G), Campaigns pipeline (H), Analytics (L), Billing (M) |
+| 🔴 Bloqueado externamente | WhatsApp Cloud API, Google OAuth, Microsoft OAuth, Stripe, Anthropic API key |
 
 ---
 
