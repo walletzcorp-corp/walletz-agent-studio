@@ -42,9 +42,13 @@ export class CalendarsService {
     private readonly availabilityService: AvailabilityService,
   ) {
     const raw = this.config.get<string>('CALENDAR_ENCRYPTION_KEY', '');
-    this.encKey = raw
-      ? Buffer.from(raw, 'hex')
-      : crypto.randomBytes(32); /* dev fallback — not persistent across restarts */
+    if (!raw && this.config.get('NODE_ENV') === 'production') {
+      throw new Error('CALENDAR_ENCRYPTION_KEY must be set in production — stored OAuth tokens cannot be decrypted without it');
+    }
+    if (!raw) {
+      this.logger.warn('CALENDAR_ENCRYPTION_KEY not set — using ephemeral key (tokens will be lost on restart). Set CALENDAR_ENCRYPTION_KEY in .env.local for persistent tokens.');
+    }
+    this.encKey = raw ? Buffer.from(raw, 'hex') : crypto.randomBytes(32);
   }
 
   /* ── Token encryption (AES-256-GCM) ── */

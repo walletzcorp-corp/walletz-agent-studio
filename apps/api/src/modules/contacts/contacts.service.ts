@@ -44,10 +44,18 @@ export class ContactsService {
     const limit = params?.limit ?? 50;
     const offset = params?.offset ?? 0;
 
+    const searchFilter = params?.search
+      ? or(
+          ilike(contacts.name, `%${params.search}%`),
+          ilike(contacts.email, `%${params.search}%`),
+          ilike(contacts.phone, `%${params.search}%`),
+        )
+      : undefined;
+
     const rows = await this.db
       .select()
       .from(contacts)
-      .where(and(eq(contacts.tenantId, tenantId), isNull(contacts.deletedAt)))
+      .where(and(eq(contacts.tenantId, tenantId), isNull(contacts.deletedAt), searchFilter))
       .orderBy(desc(contacts.createdAt))
       .limit(limit)
       .offset(offset);

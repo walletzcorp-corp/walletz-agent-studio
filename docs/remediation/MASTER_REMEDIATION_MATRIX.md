@@ -1,7 +1,7 @@
 # MASTER REMEDIATION MATRIX — Walletz Agent Studio
 > Baseline commit: `53e5f08` | Branch: `fix/production-readiness` | Data: 2026-11-04  
-> Commits: `8494c7c` (P0 hardening) · `34f4de8` (P1-SEC-001/002 PC Connector)  
-> **P0 open: 0** | **P1 open: 5** | **P2 open: 11**
+> Commits: `8494c7c` (P0 hardening) · `34f4de8` (P1-SEC-001/002 PC Connector) · `61d2c4d` (P1 batch) · `3acdf69` (CurrentUser fix)  
+> **P0 open: 0** | **P1 open: 0** | **P2 open: 11** | **Infra open: 1 (@CurrentUser decorator — FIXED)**
 
 Legenda — Origem: **[T]** = demonstrado em teste isolado · **[C]** = conclusão por leitura de código (requer confirmação dinâmica)
 
@@ -59,13 +59,13 @@ Legenda — Origem: **[T]** = demonstrado em teste isolado · **[C]** = conclus�
 | ID | Orig | Sev | Módulo | Problema | Exploit/Impacto | Arquivo | Correção | Teste | Resultado | Evidência | Commit |
 |----|------|-----|--------|----------|-----------------|---------|----------|-------|-----------|-----------|--------|
 | P1-AUTH-001 | [C] | P1 | Auth | `bcrypt.hash(refreshToken, 10)` trunca em 72 bytes — dois JWTs com mesmo prefixo de 72 bytes produzem o mesmo hash | Falsificação de refresh com token alternativo de mesmo prefixo | `modules/auth/session.service.ts:47` | Substituir por `createHash('sha256').update(refreshToken).digest('hex')` | Testar refresh com token de outro usuário → 401 | FIXED | — | — |
-| P1-AUTH-002 | [C] | P1 | Auth | OAuth callback `GET /tenants/callback/:provider` sem autenticação e state = base64(json) sem assinatura | CSRF no fluxo OAuth calendar | `modules/calendars/calendars.controller.ts:71-102` | Implementar state com HMAC assinado + expiração | Testar callback com state forjado → erro | NOT_TESTED | — | — |
+| P1-AUTH-002 | [C] | P1 | Auth | OAuth callback `GET /tenants/callback/:provider` sem autenticação e state = base64(json) sem assinatura | CSRF no fluxo OAuth calendar | `modules/calendars/calendars.controller.ts:71-102` | Implementar state com HMAC assinado + expiração | Testar callback com state forjado → erro | FIXED | — | `61d2c4d` |
 | P1-SEC-001 | [C] | P1 | PC Connector | `guardPath()` no script connector usa `startsWith` — sujeito a prefixo collision (`Teste PC-secret`) | Path escape da sandbox | `scripts/walletz-pc-connector.mjs:184` | Usar `path.relative()` e verificar se não começa com `..` | Testar path `Walletz Agent Studio - Teste PC-secret` → BLOCKED | FIXED | — | — |
 | P1-SEC-002 | [C] | P1 | PC Connector | `openUrl` usa `cmd /c start '' url` com URL do usuário — injection se protocolo não validado | Shell injection via URL customizada | `scripts/walletz-pc-connector.mjs:287` | Usar `child_process.execFile('cmd', ['/c', 'start', '', url])` somente após validar http/https com URL parser | Testar `javascript:alert(1)` → BLOCKED | FIXED | — | — |
-| P1-SEC-003 | [C] | P1 | WhatsApp | Webhook aceita payload sem assinatura válida (apenas warning) | Injeção de mensagens falsas via webhook | `modules/whatsapp/whatsapp.service.ts` | Rejeitar com 403 se assinatura ausente ou inválida | Testar POST webhook sem `X-Hub-Signature-256` → 403 | NOT_TESTED | — | — |
-| P1-SEC-004 | [C] | P1 | WhatsApp | `embeddedSignup` não valida ownership do `phoneNumberId` — um tenant pode registrar number de outro | Roubo de conta WhatsApp de outro tenant | `modules/whatsapp/whatsapp.service.ts:75-83` | Verificar unicidade cross-tenant no pair | Testar phoneNumberId de tenant alheio → 409 | NOT_TESTED | — | — |
-| P1-SEC-005 | [C] | P1 | Calendar | OAuth `state` não é assinado nem server-side | CSRF attack no authorize flow | `modules/calendars/calendars.service.ts` | HMAC-SHA256 com secret + nonce Redis | Forjar state → callback rejeita | NOT_TESTED | — | — |
-| P1-RBAC-001 | [C] | P1 | Tenants | `PATCH /members/:id/role` não valida body — admin pode atribuir role arbitrária ou promover-se a owner | Escalonamento de privilégios | `modules/tenants/tenants.controller.ts:111-117` | Validar role com enum MembershipRole; impedir rebaixar owner; impedir auto-promoção | Tentar auto-promover → 403 | NOT_TESTED | — | — |
+| P1-SEC-003 | [C] | P1 | WhatsApp | Webhook aceita payload sem assinatura válida (apenas warning) | Injeção de mensagens falsas via webhook | `modules/whatsapp/whatsapp.service.ts` | Rejeitar com 403 se assinatura ausente ou inválida | Testar POST webhook sem `X-Hub-Signature-256` → 403 | FIXED | — | `61d2c4d` |
+| P1-SEC-004 | [C] | P1 | WhatsApp | `embeddedSignup` não valida ownership do `phoneNumberId` — um tenant pode registrar number de outro | Roubo de conta WhatsApp de outro tenant | `modules/whatsapp/whatsapp.service.ts:75-83` | Verificar unicidade cross-tenant no pair | Testar phoneNumberId de tenant alheio → 409 | FIXED | — | `61d2c4d` |
+| P1-SEC-005 | [C] | P1 | Calendar | OAuth `state` não é assinado nem server-side | CSRF attack no authorize flow | `modules/calendars/calendars.service.ts` | HMAC-SHA256 com secret + nonce Redis | Forjar state → callback rejeita | FIXED | — | `61d2c4d` |
+| P1-RBAC-001 | [C] | P1 | Tenants | `PATCH /members/:id/role` não valida body — admin pode atribuir role arbitrária ou promover-se a owner | Escalonamento de privilégios | `modules/tenants/tenants.controller.ts:111-117` | Validar role com enum MembershipRole; impedir rebaixar owner; impedir auto-promoção | Tentar auto-promover → 403 | FIXED | — | `61d2c4d` |
 | P1-EXPO-001 | [C] | P1 | PC Connector | `listDevices()` retorna linha completa incluindo `authorizedAgentIds` e todos os campos internos | Over-exposure de config interna de device | `modules/pc-connector/pc-connector.service.ts:59` | SELECT apenas campos necessários | Verificar resposta | FIXED | — | — |
 
 ---

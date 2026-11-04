@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, staging, develop]
+    branches: [main, master, staging, develop]
   pull_request:
-    branches: [main, staging, develop]
+    branches: [main, master, staging, develop]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -202,7 +202,7 @@ jobs:
     name: Tenant Isolation
     needs: test
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging'
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/staging'
     services:
       postgres:
         image: pgvector/pgvector:pg16
