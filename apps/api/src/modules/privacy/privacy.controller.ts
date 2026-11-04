@@ -1,8 +1,7 @@
 import {
   Controller, Get, Post, Delete, Param, Body, Query,
-  UseGuards, Req, HttpCode,
+  UseGuards, HttpCode,
 } from '@nestjs/common';
-import type { Request } from 'express';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { IsString, IsNotEmpty, IsOptional } from 'class-validator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';

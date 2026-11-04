@@ -39,7 +39,7 @@ export class AvailabilityService {
     bufferMinutes: number,
     rangeStart: Date,
     rangeEnd: Date,
-    timeZoneOffset = -3, /* UTC-3 default for BRT */
+    _timeZoneOffset = -3, /* UTC-3 default for BRT */
   ): TimeSlot[] {
     const slotMs = durationMinutes * 60_000;
     const bufferMs = bufferMinutes * 60_000;
@@ -50,7 +50,7 @@ export class AvailabilityService {
     current.setHours(0, 0, 0, 0);
 
     while (current <= rangeEnd) {
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+       
       const dayKey = DAY_KEYS[current.getDay() as 0|1|2|3|4|5|6]!;
       const window = availableHours[dayKey];
 

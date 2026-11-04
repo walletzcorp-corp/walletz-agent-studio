@@ -1,5 +1,5 @@
 import {
-  Injectable, Inject, NotFoundException, BadRequestException,
+  Injectable, Inject, NotFoundException,
 } from '@nestjs/common';
 import { eq, and, isNull, desc, ilike, or, inArray } from 'drizzle-orm';
 import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';

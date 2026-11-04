@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsEnum, IsArray, IsInt, Min, Max } from 'class-validator';
+import { IsString, IsOptional, IsArray, IsInt, Min, Max } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export type KnowledgeSourceType = 'pdf' | 'docx' | 'xlsx' | 'csv' | 'txt' | 'html' | 'url' | 'faq' | 'typed';

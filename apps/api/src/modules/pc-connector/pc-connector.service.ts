@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException, BadRequestException, ForbiddenException, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { eq, and, inArray } from 'drizzle-orm';
 import { createHash, randomBytes } from 'crypto';
 import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';

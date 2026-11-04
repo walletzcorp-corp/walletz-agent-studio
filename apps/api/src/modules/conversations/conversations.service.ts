@@ -1,8 +1,7 @@
 import { Injectable, Inject, NotFoundException } from '@nestjs/common';
-import { eq, and, desc, isNull, or } from 'drizzle-orm';
+import { eq, and, desc } from 'drizzle-orm';
 import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';
 import { conversations, messages } from '../../database/schema/conversations';
-import { createId } from '../../database/utils/id';
 
 @Injectable()
 export class ConversationsService {
@@ -51,7 +50,7 @@ export class ConversationsService {
     text: string,
     userId: string,
   ) {
-    const conv = await this.getConversation(tenantId, conversationId);
+    await this.getConversation(tenantId, conversationId);
 
     const [msg] = await this.db
       .insert(messages)

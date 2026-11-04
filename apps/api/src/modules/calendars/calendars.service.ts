@@ -222,7 +222,7 @@ export class CalendarsService {
       .from(calendarConnections)
       .where(and(eq(calendarConnections.tenantId, tenantId), isNull(calendarConnections.deletedAt)));
 
-    return rows.map(({ encryptedAccessToken, encryptedRefreshToken, ...rest }) => rest);
+    return rows.map(({ encryptedAccessToken: _a, encryptedRefreshToken: _b, ...rest }) => rest);
   }
 
   async disconnect(tenantId: string, connectionId: string, userId: string): Promise<void> {

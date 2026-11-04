@@ -48,7 +48,7 @@ function splitIntoChunks(text: string, source: string): ParsedChunk[] {
 
 export async function parsePdf(buffer: Buffer, filename: string): Promise<ParsedChunk[]> {
   const mod = await import('pdf-parse');
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const pdfParse = (mod.default ?? mod) as unknown as (buf: Buffer) => Promise<{ text: string }>;
   const data = await pdfParse(buffer);
   return splitIntoChunks(data.text, filename);

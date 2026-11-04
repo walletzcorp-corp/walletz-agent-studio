@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsISO8601, IsOptional, IsEnum, IsInt, Min, Max } from 'class-validator';
+import { IsString, IsNotEmpty, IsISO8601, IsOptional, IsEnum } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export enum MeetingPlatformDto {

@@ -2,7 +2,6 @@ import {
   pgTable,
   text,
   timestamp,
-  boolean,
   jsonb,
   pgEnum,
   uniqueIndex,

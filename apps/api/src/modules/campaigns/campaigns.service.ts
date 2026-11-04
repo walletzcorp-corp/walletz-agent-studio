@@ -1,9 +1,9 @@
 import {
   Injectable, Inject, NotFoundException, BadRequestException,
 } from '@nestjs/common';
-import { eq, and, isNull, desc, gte, or, lt, isNotNull } from 'drizzle-orm';
+import { eq, and, isNull, desc, gte, or } from 'drizzle-orm';
 import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';
-import { segments, campaigns, campaignRecipients } from '../../database/schema/campaigns';
+import { segments, campaigns } from '../../database/schema/campaigns';
 import { contacts, contactIdentities, consents, suppressions } from '../../database/schema/contacts';
 import { whatsappAccounts, whatsappTemplates, whatsappMessageLogs } from '../../database/schema/whatsapp';
 import { AuditService } from '../../shared/audit/audit.service';

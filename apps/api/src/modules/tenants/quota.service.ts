@@ -1,7 +1,7 @@
 import { Injectable, ForbiddenException, Inject } from '@nestjs/common';
 import { eq, count, and, isNull } from 'drizzle-orm';
 import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';
-import { memberships, users } from '../../database/schema/users';
+import { memberships } from '../../database/schema/users';
 import { agents } from '../../database/schema/agents';
 
 export interface PlanLimits {

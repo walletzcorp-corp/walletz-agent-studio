@@ -1,8 +1,7 @@
 import { Injectable, Inject, NotFoundException } from '@nestjs/common';
-import { eq, and, isNull } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';
 import { contacts, contactIdentities, consents, suppressions } from '../../database/schema/contacts';
-import { whatsappMessageLogs } from '../../database/schema/whatsapp';
 import { conversations, messages } from '../../database/schema/conversations';
 import { AuditService } from '../../shared/audit/audit.service';
 
@@ -49,7 +48,7 @@ export class PrivacyService {
         .where(and(eq(conversations.contactId, contactId), eq(conversations.tenantId, tenantId))),
     ]);
 
-    const [msgCount] = await this.db
+    await this.db
       .select({ count: messages.id })
       .from(messages)
       .innerJoin(conversations, eq(messages.conversationId, conversations.id))

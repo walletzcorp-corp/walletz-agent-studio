@@ -1,6 +1,6 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';
-import { outboxEvents, type NewAuditLog } from '../../database/schema/audit';
+import { outboxEvents } from '../../database/schema/audit';
 
 export const OUTBOX_EVENTS = {
   AGENT_CREATED: 'agent.created.v1',

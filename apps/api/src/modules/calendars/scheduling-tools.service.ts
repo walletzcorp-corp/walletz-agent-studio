@@ -1,10 +1,9 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
-import { eq, and, isNull, or, inArray } from 'drizzle-orm';
+import { eq, and, isNull, inArray } from 'drizzle-orm';
 import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';
 import {
   calendarMeetings,
   agentCalendarSettings,
-  calendarConnections,
   type CalendarMeeting,
   type AgentCalendarSettings,
 } from '../../database/schema/calendars';
@@ -12,8 +11,6 @@ import { contacts } from '../../database/schema/contacts';
 import { CalendarsService } from './calendars.service';
 import { AvailabilityService, type TimeSlot } from './availability.service';
 import type { AvailabilityHours } from './availability.service';
-import { createId } from '../../database/utils/id';
-
 export interface ToolContext {
   tenantId: string;
   agentId: string;
@@ -128,23 +125,6 @@ export class SchedulingToolsService {
     if (endAt <= startAt) {
       throw new Error('Horário de término deve ser após o início.');
     }
-
-    /* Double-booking check */
-    const conflicts = await this.db
-      .select({ id: calendarMeetings.id })
-      .from(calendarMeetings)
-      .where(
-        and(
-          eq(calendarMeetings.tenantId, ctx.tenantId),
-          inArray(calendarMeetings.status, ['confirmed', 'pending']),
-          isNull(calendarMeetings.deletedAt),
-        ),
-      );
-
-    const busy: TimeSlot[] = conflicts.map((m) => ({
-      start: new Date(startAt),
-      end: new Date(endAt),
-    }));
 
     /* Re-query conflicts with actual times */
     const conflictingMeetings = await this.db

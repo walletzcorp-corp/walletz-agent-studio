@@ -11,7 +11,7 @@ import { ConfigService } from '@nestjs/config';
 import { eq, and, isNull } from 'drizzle-orm';
 import { randomBytes } from 'crypto';
 import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';
-import { tenants, type Tenant, type NewTenant } from '../../database/schema/tenants';
+import { tenants, type Tenant } from '../../database/schema/tenants';
 import { memberships, users, type Membership } from '../../database/schema/users';
 import type { UpdateTenantSettingsDto } from './dto/update-settings.dto';
 import type { CreateTenantDto } from './dto/create-tenant.dto';

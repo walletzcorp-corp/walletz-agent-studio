@@ -9,10 +9,8 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
-  Req,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import type { Request } from 'express';
 import { TenantsService } from './tenants.service';
 import { FeatureFlagsService } from './feature-flags.service';
 import { QuotaService } from './quota.service';
@@ -23,9 +21,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RbacGuard } from '../../shared/rbac/rbac.guard';
 import { Roles } from '../../shared/rbac/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import { CurrentTenant } from './decorators/current-tenant.decorator';
 import type { JwtPayload } from '../auth/auth.service';
-import type { TenantContext } from './decorators/current-tenant.decorator';
 
 @ApiTags('tenants')
 @Controller('tenants')
@@ -95,7 +91,6 @@ export class TenantsController {
     @Param('tenantId') tenantId: string,
     @Body() dto: InviteMemberDto,
     @CurrentUser() user: JwtPayload,
-    @Req() req: Request,
   ) {
     const tenant = await this.tenantsService.findById(tenantId);
     if (tenant) {
