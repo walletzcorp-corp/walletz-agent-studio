@@ -49,23 +49,18 @@ import { anthropicConfig } from './config/anthropic.config';
       load: [appConfig, databaseConfig, redisConfig, jwtConfig, storageConfig, anthropicConfig],
       envFilePath: ['.env.local', '.env'],
     }),
-    ThrottlerModule.forRoot([
-      {
-        name: 'short',
-        ttl: 1000,
-        limit: 10,
+    ThrottlerModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => {
+        const isDev = config.get<string>('NODE_ENV') !== 'production';
+        const mult = isDev ? 1000 : 1;
+        return [
+          { name: 'short',  ttl: 1000,  limit: 10  * mult },
+          { name: 'medium', ttl: 10000, limit: 50  * mult },
+          { name: 'long',   ttl: 60000, limit: 100 * mult },
+        ];
       },
-      {
-        name: 'medium',
-        ttl: 10000,
-        limit: 50,
-      },
-      {
-        name: 'long',
-        ttl: 60000,
-        limit: 100,
-      },
-    ]),
+    }),
     ScheduleModule.forRoot(),
     BullModule.forRootAsync({
       inject: [ConfigService],
