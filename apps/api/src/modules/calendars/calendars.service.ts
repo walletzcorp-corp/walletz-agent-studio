@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
-import { eq, and, isNull, gte, lte } from 'drizzle-orm';
+import { eq, and, isNull, gte, lte, lt } from 'drizzle-orm';
 import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';
 import {
   calendarConnections,
@@ -357,7 +357,7 @@ export class CalendarsService {
 
     if (endAt <= startAt) throw new BadRequestException('endAt must be after startAt');
 
-    /* Double-booking check */
+    /* Double-booking check: any meeting that overlaps [startAt, endAt) */
     const conflicts = await this.db
       .select()
       .from(calendarMeetings)
@@ -365,8 +365,8 @@ export class CalendarsService {
         and(
           eq(calendarMeetings.tenantId, tenantId),
           isNull(calendarMeetings.deletedAt),
-          gte(calendarMeetings.startAt, startAt),
-          lte(calendarMeetings.endAt, endAt),
+          lt(calendarMeetings.startAt, endAt),   // existing starts before new ends
+          gte(calendarMeetings.endAt, startAt),  // existing ends after new starts
         ),
       )
       .limit(1);
@@ -477,6 +477,56 @@ export class CalendarsService {
     const startAt = new Date(dto.startAt);
     const endAt = new Date(dto.endAt);
 
+    if (endAt <= startAt) throw new BadRequestException('endAt must be after startAt');
+
+    /* Overlap check for new slot (exclude the meeting being rescheduled) */
+    const conflictingMeetings = await this.db
+      .select({ id: calendarMeetings.id })
+      .from(calendarMeetings)
+      .where(
+        and(
+          eq(calendarMeetings.tenantId, tenantId),
+          isNull(calendarMeetings.deletedAt),
+          lt(calendarMeetings.startAt, endAt),
+          gte(calendarMeetings.endAt, startAt),
+        ),
+      )
+      .limit(2);
+
+    const realConflicts = conflictingMeetings.filter((m) => m.id !== meetingId);
+    if (realConflicts.length > 0) {
+      throw new ConflictException('New time slot conflicts with an existing meeting');
+    }
+
+    /* Update the external calendar event if connected */
+    if (meeting.connectionId && meeting.externalEventId) {
+      const [conn] = await this.db
+        .select()
+        .from(calendarConnections)
+        .where(and(eq(calendarConnections.id, meeting.connectionId), eq(calendarConnections.tenantId, tenantId), isNull(calendarConnections.deletedAt)))
+        .limit(1);
+
+      if (conn) {
+        const token = conn.provider === 'microsoft'
+          ? await this.getValidMsToken(conn)
+          : this.decrypt(conn.encryptedAccessToken);
+
+        if (conn.provider === 'google') {
+          await this.googleService.updateEvent(token, meeting.externalEventId, {
+            start: dto.startAt,
+            end: dto.endAt,
+            timeZone: dto.timeZone ?? meeting.timeZone,
+          });
+        } else {
+          await this.microsoftService.updateEvent(token, meeting.externalEventId, {
+            start: dto.startAt,
+            end: dto.endAt,
+            timeZone: dto.timeZone ?? meeting.timeZone,
+          });
+        }
+      }
+    }
+
     /* Cancel old, create new (preserves audit trail) */
     await this.db
       .update(calendarMeetings)
@@ -489,6 +539,8 @@ export class CalendarsService {
         tenantId,
         connectionId: meeting.connectionId,
         agentId: meeting.agentId,
+        externalEventId: meeting.externalEventId ?? null,
+        externalMeetUrl: meeting.externalMeetUrl ?? null,
         title: meeting.title,
         description: meeting.description,
         contactName: meeting.contactName,
@@ -499,7 +551,7 @@ export class CalendarsService {
         startAt,
         endAt,
         durationMinutes: Math.round((endAt.getTime() - startAt.getTime()) / 60_000),
-        timeZone: meeting.timeZone,
+        timeZone: dto.timeZone ?? meeting.timeZone,
         rescheduledFromId: meetingId,
       })
       .returning();

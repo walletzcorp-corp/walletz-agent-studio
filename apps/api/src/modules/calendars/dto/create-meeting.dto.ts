@@ -24,6 +24,7 @@ export class CreateMeetingDto {
 export class RescheduleMeetingDto {
   @ApiProperty() @IsISO8601() startAt!: string;
   @ApiProperty() @IsISO8601() endAt!: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() timeZone?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() reason?: string;
 }
 

@@ -194,6 +194,31 @@ export class GoogleCalendarService {
     return res.json() as Promise<GoogleEvent>;
   }
 
+  async updateEvent(
+    accessToken: string,
+    eventId: string,
+    patch: { start: string; end: string; timeZone?: string },
+    calendarId = 'primary',
+  ): Promise<GoogleEvent> {
+    const body = {
+      start: { dateTime: patch.start, timeZone: patch.timeZone ?? 'America/Sao_Paulo' },
+      end: { dateTime: patch.end, timeZone: patch.timeZone ?? 'America/Sao_Paulo' },
+    };
+    const res = await fetch(
+      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${eventId}`,
+      {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      },
+    );
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Failed to update Google Calendar event: ${err}`);
+    }
+    return res.json() as Promise<GoogleEvent>;
+  }
+
   async deleteEvent(accessToken: string, eventId: string, calendarId = 'primary'): Promise<void> {
     await fetch(
       `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${eventId}`,

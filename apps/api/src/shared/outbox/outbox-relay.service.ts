@@ -32,8 +32,6 @@ export class OutboxRelayService {
           id: event.id,
           tenantId: event.tenantId,
           eventType: event.eventType,
-          aggregateType: event.aggregateType,
-          aggregateId: event.aggregateId,
           payload: event.payload,
           createdAt: event.createdAt,
         });

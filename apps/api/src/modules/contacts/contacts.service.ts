@@ -46,9 +46,20 @@ export class ContactsService {
 
     const searchFilter = params?.search
       ? or(
-          ilike(contacts.name, `%${params.search}%`),
-          ilike(contacts.email, `%${params.search}%`),
-          ilike(contacts.phone, `%${params.search}%`),
+          ilike(contacts.firstName, `%${params.search}%`),
+          ilike(contacts.lastName, `%${params.search}%`),
+          inArray(
+            contacts.id,
+            this.db
+              .select({ contactId: contactIdentities.contactId })
+              .from(contactIdentities)
+              .where(
+                and(
+                  eq(contactIdentities.tenantId, tenantId),
+                  ilike(contactIdentities.value, `%${params.search}%`),
+                ),
+              ),
+          ),
         )
       : undefined;
 

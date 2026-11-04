@@ -172,6 +172,31 @@ export class MicrosoftCalendarService {
     return this.createEventForUser('me', accessToken, event);
   }
 
+  async updateEvent(
+    accessToken: string,
+    eventId: string,
+    patch: { start: string; end: string; timeZone?: string },
+  ): Promise<GraphEvent> {
+    const tz = patch.timeZone ?? 'E. South America Standard Time';
+    const body = {
+      start: { dateTime: patch.start, timeZone: tz },
+      end: { dateTime: patch.end, timeZone: tz },
+    };
+    const res = await fetch(
+      `https://graph.microsoft.com/v1.0/me/events/${eventId}`,
+      {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      },
+    );
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Failed to update Microsoft Graph event: ${err}`);
+    }
+    return res.json() as Promise<GraphEvent>;
+  }
+
   async deleteEvent(accessToken: string, eventId: string): Promise<void> {
     return this.deleteEventForUser('me', accessToken, eventId);
   }
