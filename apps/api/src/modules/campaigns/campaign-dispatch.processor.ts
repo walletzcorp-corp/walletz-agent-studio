@@ -46,29 +46,51 @@ export class CampaignDispatchProcessor extends WorkerHost {
         templateComponents,
         idempotencyKey: `campaign-${campaignId}-${recipientId}`,
       });
-
-      await this.db.update(campaignRecipients)
-        .set({ status: 'sent', sentAt: new Date() })
-        .where(eq(campaignRecipients.id, recipientId));
-
-      await this.db.update(campaigns)
-        .set({ totalSent: sql`${campaigns.totalSent} + 1`, updatedAt: new Date() })
-        .where(and(eq(campaigns.id, campaignId), eq(campaigns.tenantId, tenantId)));
-
-      this.logger.log(`Sent campaign ${campaignId} message to ${phone}`);
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
-      this.logger.error(`Campaign dispatch failed for recipient ${recipientId}: ${reason}`);
+      const isFinalAttempt = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
+      this.logger.error(
+        `Campaign dispatch failed for recipient ${recipientId} ` +
+        `(attempt ${job.attemptsMade + 1}/${job.opts.attempts ?? 1}): ${reason}`,
+      );
+
+      // Only the last attempt is a real failure; earlier ones are retried by BullMQ.
+      if (!isFinalAttempt) throw err;
 
       await this.db.update(campaignRecipients)
         .set({ status: 'failed', failedAt: new Date() })
         .where(eq(campaignRecipients.id, recipientId));
-
       await this.db.update(campaigns)
         .set({ totalFailed: sql`${campaigns.totalFailed} + 1`, updatedAt: new Date() })
         .where(and(eq(campaigns.id, campaignId), eq(campaigns.tenantId, tenantId)));
-
+      await this.closeCampaignIfDone(campaignId, tenantId);
       throw err;
     }
+
+    await this.db.update(campaignRecipients)
+      .set({ status: 'sent', sentAt: new Date() })
+      .where(eq(campaignRecipients.id, recipientId));
+    await this.db.update(campaigns)
+      .set({ totalSent: sql`${campaigns.totalSent} + 1`, updatedAt: new Date() })
+      .where(and(eq(campaigns.id, campaignId), eq(campaigns.tenantId, tenantId)));
+    await this.closeCampaignIfDone(campaignId, tenantId);
+
+    this.logger.log(`Sent campaign ${campaignId} message to ${phone}`);
+  }
+
+  // Single atomic statement: concurrent workers cannot close the campaign twice.
+  private async closeCampaignIfDone(campaignId: string, tenantId: string): Promise<void> {
+    await this.db.update(campaigns)
+      .set({
+        status: sql`CASE WHEN ${campaigns.totalSent} = 0 THEN 'failed'::campaign_status ELSE 'completed'::campaign_status END`,
+        completedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(and(
+        eq(campaigns.id, campaignId),
+        eq(campaigns.tenantId, tenantId),
+        eq(campaigns.status, 'running'),
+        sql`${campaigns.totalSent} + ${campaigns.totalFailed} >= ${campaigns.totalEligible}`,
+      ));
   }
 }

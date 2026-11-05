@@ -413,32 +413,11 @@ export class WhatsappService {
       throw new BadRequestException('WhatsApp account is not connected');
     }
 
-    if (dto.idempotencyKey) {
-      const [dup] = await this.db
-        .select({ id: whatsappMessageLogs.id })
-        .from(whatsappMessageLogs)
-        .where(and(
-          eq(whatsappMessageLogs.tenantId, tenantId),
-          eq(whatsappMessageLogs.idempotencyKey, dto.idempotencyKey),
-        ))
-        .limit(1);
-      if (dup) return { messageId: dup.id, status: 'deduplicated' };
-    }
-
-    const logId = createId();
-    const idempotencyKey = dto.idempotencyKey ?? logId;
-
-    await this.db.insert(whatsappMessageLogs).values({
-      id: logId,
-      tenantId,
-      accountId,
-      direction: 'outbound',
-      status: 'pending',
-      to: dto.to,
-      messageType: 'text',
-      content: { text: dto.text },
-      idempotencyKey,
-    });
+    const reservation = await this.reserveOutboundLog(
+      tenantId, accountId, dto.to, 'text', { text: dto.text }, dto.idempotencyKey,
+    );
+    if (reservation.deduplicated) return { messageId: reservation.logId, status: 'deduplicated' };
+    const logId = reservation.logId;
 
     const bearerToken = this.decryptToken(account);
 
@@ -478,6 +457,53 @@ export class WhatsappService {
     }
   }
 
+  // Idempotent outbound log. Only a previous non-failed log short-circuits; a failed one is
+  // re-armed so queue retries actually resend instead of reporting a phantom success.
+  private async reserveOutboundLog(
+    tenantId: string,
+    accountId: string,
+    to: string,
+    messageType: 'text' | 'template',
+    content: Record<string, unknown>,
+    idempotencyKey?: string,
+  ): Promise<{ logId: string; deduplicated: boolean }> {
+    if (idempotencyKey) {
+      const [existing] = await this.db
+        .select({ id: whatsappMessageLogs.id, status: whatsappMessageLogs.status })
+        .from(whatsappMessageLogs)
+        .where(and(
+          eq(whatsappMessageLogs.tenantId, tenantId),
+          eq(whatsappMessageLogs.idempotencyKey, idempotencyKey),
+        ))
+        .limit(1);
+
+      if (existing && existing.status !== 'failed') {
+        return { logId: existing.id, deduplicated: true };
+      }
+      if (existing) {
+        await this.db
+          .update(whatsappMessageLogs)
+          .set({ status: 'pending', errorMessage: null, failedAt: null })
+          .where(eq(whatsappMessageLogs.id, existing.id));
+        return { logId: existing.id, deduplicated: false };
+      }
+    }
+
+    const logId = createId();
+    await this.db.insert(whatsappMessageLogs).values({
+      id: logId,
+      tenantId,
+      accountId,
+      direction: 'outbound',
+      status: 'pending',
+      to,
+      messageType,
+      content,
+      idempotencyKey: idempotencyKey ?? logId,
+    });
+    return { logId, deduplicated: false };
+  }
+
   async sendTemplateMessage(
     tenantId: string,
     accountId: string,
@@ -495,32 +521,13 @@ export class WhatsappService {
       throw new BadRequestException('WhatsApp account is not connected');
     }
 
-    if (dto.idempotencyKey) {
-      const [dup] = await this.db
-        .select({ id: whatsappMessageLogs.id })
-        .from(whatsappMessageLogs)
-        .where(and(
-          eq(whatsappMessageLogs.tenantId, tenantId),
-          eq(whatsappMessageLogs.idempotencyKey, dto.idempotencyKey),
-        ))
-        .limit(1);
-      if (dup) return { messageId: dup.id, status: 'deduplicated' };
-    }
-
-    const logId = createId();
-    const idempotencyKey = dto.idempotencyKey ?? logId;
-
-    await this.db.insert(whatsappMessageLogs).values({
-      id: logId,
-      tenantId,
-      accountId,
-      direction: 'outbound',
-      status: 'pending',
-      to: dto.to,
-      messageType: 'template',
-      content: { templateName: dto.templateName, components: dto.templateComponents },
-      idempotencyKey,
-    });
+    const reservation = await this.reserveOutboundLog(
+      tenantId, accountId, dto.to, 'template',
+      { templateName: dto.templateName, components: dto.templateComponents },
+      dto.idempotencyKey,
+    );
+    if (reservation.deduplicated) return { messageId: reservation.logId, status: 'deduplicated' };
+    const logId = reservation.logId;
 
     const bearerToken = this.decryptToken(account);
 
