@@ -190,7 +190,12 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - name: Build all apps
-        run: pnpm build
+        run: set -o pipefail; pnpm build 2>&1 | tee build.log
+
+      - name: Surface failure details (Build failures)
+        if: failure()
+        run: |
+          grep -iE "error|failed|not found|cannot|warn.*lint" -B1 -A2 build.log | head -n 40 | sed -e 's/%/%25/g' -e ':a;N;$!ba;s/\n/%0A/g' | xargs -0 -I{} echo "::error title=Build failures::{}"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
