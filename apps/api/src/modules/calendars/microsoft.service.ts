@@ -53,7 +53,7 @@ export class MicrosoftCalendarService {
     this.tenantIdMs = this.config.get<string>('MICROSOFT_OAUTH_TENANT_ID', 'common');
     this.redirectUri = this.config.get<string>(
       'MICROSOFT_OAUTH_REDIRECT_URI',
-      'http://localhost:3001/v1/tenants/callback/microsoft',
+      'http://localhost:3001/api/v1/tenants/callback/microsoft',
     );
   }
 

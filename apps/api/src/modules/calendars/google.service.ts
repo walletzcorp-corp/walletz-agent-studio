@@ -42,7 +42,7 @@ export class GoogleCalendarService {
     this.clientSecret = this.config.get<string>('GOOGLE_OAUTH_CLIENT_SECRET');
     this.redirectUri = this.config.get<string>(
       'GOOGLE_OAUTH_REDIRECT_URI',
-      'http://localhost:3001/v1/tenants/callback/google',
+      'http://localhost:3001/api/v1/tenants/callback/google',
     );
   }
 

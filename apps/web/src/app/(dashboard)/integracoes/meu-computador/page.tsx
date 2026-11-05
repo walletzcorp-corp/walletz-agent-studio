@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@walletz/ui';
 import { useAuth } from '../../../../hooks/use-auth';
+import { API_BASE } from '../../../../lib/config';
 
 type PairState = 'idle' | 'generating' | 'waiting' | 'paired' | 'error';
 
@@ -22,8 +23,6 @@ interface PcDevice {
   authorizedPaths: string[];
   authorizedApps: string[];
 }
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api';
 
 async function apiCall(path: string, opts: RequestInit = {}) {
   const token = localStorage.getItem('accessToken') ?? '';

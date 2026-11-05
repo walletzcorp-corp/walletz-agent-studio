@@ -1,6 +1,5 @@
 import axios, { type AxiosInstance, type AxiosError } from 'axios';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+import { API_BASE } from './config';
 
 function createApiClient(): AxiosInstance {
   const client = axios.create({
