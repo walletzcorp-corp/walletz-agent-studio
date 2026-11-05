@@ -102,7 +102,7 @@ export default function AgentDetailPage() {
     }
   };
 
-  useEffect(() => { load(); }, [tenantId, agentId]);
+  useEffect(() => { void load(); }, [tenantId, agentId]);
 
   const handleSave = async (values: EditForm) => {
     if (!tenantId || !agentId) return;

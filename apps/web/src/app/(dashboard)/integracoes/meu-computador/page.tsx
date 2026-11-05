@@ -55,7 +55,7 @@ export default function MeuComputadorPage() {
   }, [tenantId]);
 
   useEffect(() => {
-    loadDevices().then(d => { if (d) setState('paired'); });
+    void loadDevices().then(d => { if (d) setState('paired'); });
   }, [loadDevices]);
 
   const generateToken = async () => {
@@ -88,7 +88,7 @@ export default function MeuComputadorPage() {
   const copyCommand = () => {
     if (!token) return;
     const cmd = `node walletz-pc-connector.mjs --token=${token} --api=${API_BASE}`;
-    navigator.clipboard.writeText(cmd).then(() => {
+    void navigator.clipboard.writeText(cmd).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });

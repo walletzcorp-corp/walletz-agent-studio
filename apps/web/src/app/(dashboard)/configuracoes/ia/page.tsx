@@ -5,7 +5,7 @@ import {
   Brain, CheckCircle2, XCircle, AlertTriangle,
   Eye, EyeOff, Save, Zap, DollarSign,
   BarChart3, Shield, ChevronDown, Info,
-  Activity, Clock, ArrowLeft,
+  Activity, ArrowLeft,
 } from 'lucide-react';
 import Link from 'next/link';
 

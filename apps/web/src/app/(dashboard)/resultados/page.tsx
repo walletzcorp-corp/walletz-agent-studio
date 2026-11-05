@@ -257,7 +257,7 @@ export default function ResultadosPage() {
             <span className="text-xs text-muted-foreground">{PERIOD_LABELS[period]}</span>
           </div>
           <div className="space-y-2.5">
-            {funnelData.map((item, i) => {
+            {funnelData.map((item) => {
               const pct = Math.round((item.value / (funnelData[0]?.value ?? 1)) * 100);
               return (
                 <div key={item.label}>

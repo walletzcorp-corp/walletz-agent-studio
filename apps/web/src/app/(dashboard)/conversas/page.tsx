@@ -66,7 +66,7 @@ const POLL_CONVERSATIONS_MS = 5000;
 const POLL_MESSAGES_MS = 3000;
 
 export default function ConversasPage() {
-  const { tenantId, userId } = useAuth();
+  const { tenantId } = useAuth();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selected, setSelected] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -173,7 +173,6 @@ export default function ConversasPage() {
   };
 
   const isAiPaused = !!selected?.aiPausedAt;
-  const isHumanAssigned = !!selected?.assignedToUserId;
 
   return (
     <div className="flex h-[calc(100vh-4rem)]">

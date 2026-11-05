@@ -62,7 +62,7 @@ export default function KnowledgePage() {
     }
   };
 
-  useEffect(() => { load(); }, [tenantId]);
+  useEffect(() => { void load(); }, [tenantId]);
 
   // Poll for processing sources every 5s
   useEffect(() => {

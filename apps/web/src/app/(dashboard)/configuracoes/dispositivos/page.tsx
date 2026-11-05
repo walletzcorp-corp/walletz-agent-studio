@@ -49,7 +49,7 @@ export default function DispositivosPage() {
     setLoading(false);
   }, [tenantId]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { void load(); }, [load]);
 
   const disconnect = async (deviceId: string) => {
     if (!tenantId) return;

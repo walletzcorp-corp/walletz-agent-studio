@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../../hooks/use-auth';
 import { api } from '../../../lib/api';
-import { Button, Card, CardContent, Badge } from '@walletz/ui';
+import { Button, Card, CardContent, } from '@walletz/ui';
 import {
   Megaphone, Plus, Play, ShieldCheck, AlertTriangle, CheckCircle2,
   Clock, XCircle, Users, ChevronRight,

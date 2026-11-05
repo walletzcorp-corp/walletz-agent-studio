@@ -6,7 +6,7 @@ import {
   Smartphone, CheckCircle2, ChevronRight, RefreshCw,
   MessageSquare, Megaphone, FileText, Settings,
   AlertTriangle, Users, Activity, Zap, ArrowRight,
-  Bot, Building2, LogOut, XCircle, Clock, ShieldAlert,
+  Bot, LogOut, XCircle, Clock, ShieldAlert,
 } from 'lucide-react';
 import { useAuth } from '../../../../hooks/use-auth';
 import { whatsappApi, type WhatsappAccount } from '../../../../lib/whatsapp-api';
@@ -228,7 +228,6 @@ export default function WhatsAppPage() {
       override_default_response_type: true,
       extras: { setup: {}, featureType: path === 'existing' ? 'coexistence' : '', sessionInfoVersion: '3' },
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId, addLog, startElapsed, clearTimers]);
 
   /* ── Handle auth code from Meta ── */

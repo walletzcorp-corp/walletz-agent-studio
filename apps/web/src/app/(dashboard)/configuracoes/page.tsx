@@ -5,8 +5,8 @@ import {
   Building2, Palette, Users, Bot, Smartphone, Calendar,
   Megaphone, Shield, CreditCard, FileText, Save,
   ChevronRight, Plus, Trash2, Eye, EyeOff, Check,
-  AlertTriangle, ExternalLink, RefreshCw, Zap, Globe,
-  Mail, Clock, Key, UserCheck, Activity,
+  AlertTriangle, RefreshCw, Globe,
+  Activity,
 } from 'lucide-react';
 import { useAuth } from '../../../hooks/use-auth';
 

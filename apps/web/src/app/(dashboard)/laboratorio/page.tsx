@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../../hooks/use-auth';
 import { labApi, type ChatMessage } from '../../../lib/lab-api';
-import { Button, Card, CardContent, CardHeader, CardTitle, Badge, Skeleton } from '@walletz/ui';
+import { Button, Card, CardContent, Badge, Skeleton } from '@walletz/ui';
 import { Bot, Send, User, FlaskConical, RefreshCw, ChevronDown, Info } from 'lucide-react';
 import { api } from '../../../lib/api';
 

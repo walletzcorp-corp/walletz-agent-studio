@@ -83,7 +83,7 @@ export function useAuth() {
   }, [clearTokens]);
 
   useEffect(() => {
-    loadUser();
+    void loadUser();
   }, [loadUser]);
 
   const login = useCallback(async (email: string, password: string, mfaCode?: string) => {

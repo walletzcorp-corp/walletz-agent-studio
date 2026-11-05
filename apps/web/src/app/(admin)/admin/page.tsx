@@ -2,7 +2,7 @@
 
 import {
   Users, TrendingUp, DollarSign, Bot, MessageSquare,
-  Smartphone, AlertTriangle, Activity, Calendar,
+  Smartphone, AlertTriangle, Activity, 
   UserCheck, UserX, Clock, Zap,
 } from 'lucide-react';
 

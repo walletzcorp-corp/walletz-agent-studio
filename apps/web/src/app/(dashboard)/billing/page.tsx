@@ -2,9 +2,9 @@
 
 import { useState } from 'react';
 import {
-  CreditCard, FileText, TrendingUp, Users, Bot,
-  MessageSquare, Database, Zap, Calendar, CheckCircle2,
-  AlertTriangle, ExternalLink, ChevronRight, Download,
+  CreditCard, 
+  MessageSquare, Calendar, CheckCircle2,
+  ChevronRight, Download,
   Shield, Clock, DollarSign,
 } from 'lucide-react';
 

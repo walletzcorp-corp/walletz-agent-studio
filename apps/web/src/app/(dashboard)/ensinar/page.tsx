@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../../../hooks/use-auth';
 import { teachApi, type KnowledgeItem, type KnowledgeItemType } from '../../../lib/teach-api';
 import {
-  Button, Card, CardContent, CardHeader, CardTitle, Badge, Skeleton,
+  Button, Card, CardContent, CardHeader, CardTitle, Skeleton,
 } from '@walletz/ui';
 import {
   Plus, CheckCircle2, Clock, Pencil, Trash2, ShieldCheck, ShieldX, ChevronDown, ChevronUp,
@@ -53,7 +53,7 @@ export default function TeachPage() {
     }
   };
 
-  useEffect(() => { load(); }, [tenantId, filter]);
+  useEffect(() => { void load(); }, [tenantId, filter]);
 
   const resetForm = () => {
     setFormType('fact');

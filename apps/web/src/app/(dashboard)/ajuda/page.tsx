@@ -2,11 +2,10 @@
 
 import { useState } from 'react';
 import {
-  Search, ChevronRight, Bot, BookOpen, Smartphone, Users,
+  Search, ChevronRight, Bot, Smartphone, Users,
   Megaphone, Calendar, BarChart3, CreditCard, Shield, HelpCircle,
   ExternalLink, MessageSquare, Zap, GraduationCap,
 } from 'lucide-react';
-import Link from 'next/link';
 
 interface HelpCategory {
   id: string;

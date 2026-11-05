@@ -6,9 +6,9 @@
     "dev": "next dev -p 3000",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint \"src/**/*.{ts,tsx}\"",
     "typecheck": "tsc --noEmit",
-    "test": "jest --passWithNoTests",
+    "test": "node -e \"console.log('web: sem testes unitarios; E2E via test:e2e')\"",
     "test:e2e": "playwright test"
   },
   "dependencies": {

@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import {
   ChevronRight, CheckCircle2, Clock, AlertTriangle, XCircle, Pause,
@@ -437,7 +436,6 @@ function TabErrors() {
 
 /* ── Main ── */
 export default function AdminClientDetailPage() {
-  const params = useParams();
   const [activeTab, setActiveTab] = useState('overview');
   const { label: statusLabel, className: statusClass, icon: StatusIcon } = STATUS_CONFIG[CLIENT.status];
 

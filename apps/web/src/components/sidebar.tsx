@@ -9,7 +9,7 @@ import {
   Smartphone, GraduationCap, Puzzle, DollarSign,
   CreditCard, Brain, ChevronRight, Sparkles, HelpCircle,
 } from 'lucide-react';
-import { WalletzLogo, WalletzMark } from './walletz-logo';
+import { WalletzMark } from './walletz-logo';
 
 interface NavItem {
   href: string;

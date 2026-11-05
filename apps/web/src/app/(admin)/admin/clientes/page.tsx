@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Search, Filter, Users, ChevronRight, CheckCircle2, Clock, AlertTriangle, XCircle, Pause } from 'lucide-react';
+import { Search, ChevronRight, CheckCircle2, Clock, AlertTriangle, XCircle, Pause } from 'lucide-react';
 
 type ClientStatus = 'active' | 'trial' | 'past_due' | 'suspended' | 'cancelled';
 

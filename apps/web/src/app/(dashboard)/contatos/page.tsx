@@ -3,10 +3,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../../hooks/use-auth';
 import { api } from '../../../lib/api';
-import { Button, Card, CardContent, Badge } from '@walletz/ui';
+import { Button, Card, CardContent, } from '@walletz/ui';
 import {
-  Users, Upload, Search, Trash2, Phone, Mail, Building2, Tag,
-  CheckCircle2, AlertCircle, X, Plus,
+  Users, Upload, Search, Trash2, 
+  CheckCircle2, AlertCircle, X, 
 } from 'lucide-react';
 
 interface Contact {

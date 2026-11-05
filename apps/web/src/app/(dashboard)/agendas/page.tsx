@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import {
-  Calendar, Plus, RefreshCw, Link2, Link2Off, Settings,
+  Calendar, Plus, RefreshCw, Link2, Link2Off, 
   CheckCircle2, AlertCircle, Clock, Zap, Video,
-  ChevronRight, ExternalLink, Users, CalendarDays,
+  ExternalLink, Users, CalendarDays,
   MoreHorizontal, Edit2, Trash2, PhoneCall,
 } from 'lucide-react';
 import { useAuth } from '../../../hooks/use-auth';

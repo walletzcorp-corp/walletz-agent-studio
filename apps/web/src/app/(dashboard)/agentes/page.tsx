@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useAuth } from '../../../hooks/use-auth';
 import { agentsApi, type Agent } from '../../../lib/agents-api';
-import { Button, Badge, Skeleton } from '@walletz/ui';
+import { Button, Skeleton } from '@walletz/ui';
 import {
   Plus, Bot, Settings, Play, Pause, ChevronRight,
   Radar, PhoneIncoming, PhoneOutgoing, Filter, Briefcase,
@@ -89,10 +89,6 @@ const STATUS_BADGE: Record<string, { label: string; className: string }> = {
   paused:    { label: 'Pausado',   className: 'bg-gray-100 text-gray-600' },
   archived:  { label: 'Arquivado', className: 'bg-red-100 text-red-700' },
 };
-
-function getCategoryForTemplate(template: string): Category {
-  return CATEGORIES.find(c => c.templates.includes(template)) ?? CATEGORIES[CATEGORIES.length - 1]!;
-}
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 

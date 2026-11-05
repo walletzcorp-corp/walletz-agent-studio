@@ -3,7 +3,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { LogOut, User, Settings } from 'lucide-react';
 import Link from 'next/link';
-import { cn } from '@walletz/ui';
 
 interface UserMenuProps {
   email?: string | null;

@@ -4,8 +4,8 @@ import { useState } from 'react';
 import {
   Plus, Search, FileText, CheckCircle2, XCircle,
   AlertTriangle, Clock, Pause, Ban, ChevronRight,
-  Edit2, Copy, Archive, MoreHorizontal, Eye,
-  Smartphone, ArrowLeft, Send, Trash2, RefreshCw,
+  Edit2, Copy, MoreHorizontal, Eye,
+  Smartphone, ArrowLeft, Send, Trash2, 
 } from 'lucide-react';
 import Link from 'next/link';
 

@@ -5,8 +5,8 @@ import {
   Facebook, Smartphone, FileText, DollarSign,
   Activity, Webhook, Settings, CheckCircle2,
   XCircle, AlertTriangle, ExternalLink, ChevronRight,
-  BarChart3, TrendingUp, MessageSquare, Users,
-  Clock, RefreshCw, Shield,
+  BarChart3, TrendingUp, MessageSquare, 
+  Shield,
 } from 'lucide-react';
 import Link from 'next/link';
 

@@ -2,9 +2,9 @@
 
 import { useState } from 'react';
 import {
-  DollarSign, TrendingUp, AlertTriangle, ExternalLink,
+  DollarSign, AlertTriangle, ExternalLink,
   Shield, Calendar, CreditCard, Zap, Smartphone,
-  ChevronRight, Info, BarChart3,
+  ChevronRight, Info, 
 } from 'lucide-react';
 import Link from 'next/link';
 

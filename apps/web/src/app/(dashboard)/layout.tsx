@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter, } from 'next/navigation';
 import { Sidebar } from '../../components/sidebar';
 import { UserMenu } from '../../components/user-menu';
 import { Topbar } from '../../components/topbar'; // loaded

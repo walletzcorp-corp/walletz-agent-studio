@@ -2,10 +2,10 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Search, Filter, CheckCircle2, XCircle, AlertTriangle,
-  Clock, Loader2, ChevronRight, ExternalLink, RefreshCw,
-  Smartphone, Calendar, Brain, Globe, Mail, Webhook,
-  CreditCard, Users, Zap, MoreHorizontal, ShieldCheck,
+  Search, CheckCircle2, XCircle, AlertTriangle,
+  Clock, Loader2, ChevronRight, ExternalLink, 
+  Smartphone, Brain, Mail, Webhook,
+  CreditCard, MoreHorizontal, ShieldCheck,
   Activity, Plus, Monitor, Puzzle,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -90,7 +90,7 @@ function useCalendarConnections(tenantId: string | null) {
     setLoading(false);
   }, [tenantId]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { void load(); }, [load]);
   return { connections, loading, reload: load };
 }
 
@@ -329,7 +329,7 @@ function usePcDevices(tenantId: string | null) {
     } catch { /* ignore */ }
   }, [tenantId]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { void load(); }, [load]);
   return { devices, reload: load };
 }
 
