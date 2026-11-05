@@ -3,20 +3,29 @@ import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 import type { Transporter } from 'nodemailer';
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 @Injectable()
 export class MailService {
   private transporter: Transporter;
 
   constructor(private readonly configService: ConfigService) {
-    const host = configService.get<string>('SMTP_HOST');
-    const isDev = configService.get<string>('NODE_ENV') !== 'production';
+    const isProd = configService.get<string>('NODE_ENV') === 'production';
 
-    if (isDev || !host) {
-      // In development, log emails to console (ethereal or null transport)
+    if (!isProd) {
+      // Outside production nothing leaves the process (jsonTransport).
       this.transporter = nodemailer.createTransport({ jsonTransport: true });
     } else {
+      // Production must never silently drop mail: SMTP is mandatory.
       this.transporter = nodemailer.createTransport({
-        host,
+        host: configService.getOrThrow<string>('SMTP_HOST'),
         port: configService.get<number>('SMTP_PORT', 587),
         secure: configService.get<boolean>('SMTP_SECURE', false),
         auth: {
@@ -57,12 +66,11 @@ export class MailService {
   private async send(to: string, subject: string, html: string): Promise<void> {
     const from = this.configService.get<string>('SMTP_FROM', 'noreply@walletz.com.br');
     const info = await this.transporter.sendMail({ from, to, subject, html });
-    // In dev (jsonTransport), log the serialized message
-    if (process.env.NODE_ENV !== 'production') {
+    // Links carry one-time tokens, so the body is only printed on explicit local opt-in.
+    if (process.env.NODE_ENV === 'development' && process.env.MAIL_DEV_PREVIEW === 'true') {
+      const message = (info as { message?: string }).message;
       process.stdout.write(`[MailService] ${subject} → ${to}\n`);
-      if ((info as { message?: string }).message) {
-        process.stdout.write(`[MailService] Preview: ${(info as { message: string }).message}\n`);
-      }
+      if (message) process.stdout.write(`[MailService] Preview: ${message}\n`);
     }
   }
 
@@ -86,7 +94,7 @@ export class MailService {
 
   private inviteTemplate(tenantName: string, url: string): string {
     return `
-      <h2>Você foi convidado para ${tenantName}</h2>
+      <h2>Você foi convidado para ${escapeHtml(tenantName)}</h2>
       <p>Clique no link abaixo para aceitar o convite:</p>
       <a href="${url}">${url}</a>
       <p>O link expira em 7 dias.</p>

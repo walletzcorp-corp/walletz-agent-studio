@@ -1,12 +1,12 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Inject, Logger } from '@nestjs/common';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { Job } from 'bullmq';
 import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';
 import { messages } from '../../database/schema/conversations';
 import { contactIdentities } from '../../database/schema/contacts';
-import { whatsappAccounts } from '../../database/schema/whatsapp';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
+import { pickOutboundAccount } from '../whatsapp/outbound-account';
 
 export const INBOX_DISPATCH_QUEUE = 'inbox-dispatch';
 
@@ -34,19 +34,9 @@ export class InboxDispatchProcessor extends WorkerHost {
 
     this.logger.log(`Dispatching inbox message ${messageId}`);
 
-    const [wa] = await this.db
-      .select({ id: whatsappAccounts.id })
-      .from(whatsappAccounts)
-      .where(
-        and(
-          eq(whatsappAccounts.tenantId, tenantId),
-          eq(whatsappAccounts.status, 'connected'),
-          isNull(whatsappAccounts.deletedAt),
-        ),
-      )
-      .limit(1);
+    const wa = await pickOutboundAccount(this.db, tenantId);
 
-    if (!wa) {
+    if (!wa || wa.status !== 'connected') {
       this.logger.warn(`No connected WhatsApp account for tenant ${tenantId}`);
       await this.db
         .update(messages)

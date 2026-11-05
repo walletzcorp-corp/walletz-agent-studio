@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../../../hooks/use-auth';
 import { whatsappApi, type WhatsappAccount } from '../../../../lib/whatsapp-api';
+import { agentsApi, type Agent } from '../../../../lib/agents-api';
 
 /* ─── Meta FB SDK types ─── */
 declare global {
@@ -954,6 +955,83 @@ function DisconnectedLanding({ onConnect }: { onConnect: () => void }) {
 /* ══════════════════════════════════════════════════════
    CONNECTED VIEW
 ══════════════════════════════════════════════════════ */
+/**
+ * The number only answers customers with the agent chosen here. Without an
+ * explicit assignment inbound messages are stored but never answered by AI.
+ */
+function AgentAssignment({ account }: { account: WhatsappAccount }) {
+  const { tenantId } = useAuth();
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [selected, setSelected] = useState<string>(account.agentId ?? '');
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+
+  useEffect(() => {
+    if (!tenantId) return;
+    agentsApi
+      .list(tenantId)
+      .then(({ data }) => setAgents(data.filter((a) => a.status === 'published')))
+      .catch(() => setAgents([]));
+  }, [tenantId]);
+
+  const save = async (agentId: string) => {
+    if (!tenantId) return;
+    setSelected(agentId);
+    setSaving(true);
+    setMessage(null);
+    try {
+      await whatsappApi.assignAgent(tenantId, account.id, agentId || null);
+      setMessage({
+        ok: true,
+        text: agentId ? 'Agente atribuído a este número.' : 'Atendimento por IA desativado.',
+      });
+    } catch {
+      setSelected(account.agentId ?? '');
+      setMessage({
+        ok: false,
+        text: 'Não foi possível atribuir o agente. Apenas agentes publicados do seu workspace são aceitos.',
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="neural-card p-6 space-y-3">
+      <div>
+        <h2 className="text-base font-semibold text-foreground">Agente de atendimento</h2>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          Somente o agente escolhido responde as mensagens recebidas neste número.
+        </p>
+      </div>
+      <select
+        value={selected}
+        disabled={saving}
+        onChange={(e) => void save(e.target.value)}
+        aria-label="Agente responsável por este número"
+        className="w-full sm:w-80 rounded-lg border border-border bg-background px-3 py-2 text-sm"
+      >
+        <option value="">Nenhum (não responder com IA)</option>
+        {agents.map((a) => (
+          <option key={a.id} value={a.id}>
+            {a.name}
+          </option>
+        ))}
+      </select>
+      {agents.length === 0 && (
+        <p className="text-xs text-muted-foreground">
+          Nenhum agente publicado. Publique um agente para habilitar o atendimento automático.
+        </p>
+      )}
+      {message && (
+        <p className={`text-xs ${message.ok ? 'text-neural-success' : 'text-neural-danger'}`}>
+          {message.text}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function ConnectedView({
   accounts,
   onDisconnect,
@@ -1060,6 +1138,8 @@ function ConnectedView({
           ))}
         </div>
       </div>
+
+      <AgentAssignment key={primary.id} account={primary} />
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[

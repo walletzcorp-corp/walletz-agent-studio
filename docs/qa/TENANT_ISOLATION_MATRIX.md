@@ -1,9 +1,9 @@
 # Tenant Isolation Matrix
 
-Gerado automaticamente por `tenant-isolation.e2e-spec.ts` em 2026-11-05T17:27:58.333Z.
+Gerado automaticamente por `tenant-isolation.e2e-spec.ts` em 2026-11-05T18:13:16.562Z.
 
-- Rotas descobertas: **111** (tenant-scoped: **88**, públicas: 14, autenticadas: 9)
-- Ataques executados: **1762** — PASS: **1762** — FAIL: **0**
+- Rotas descobertas: **112** (tenant-scoped: **88**, públicas: 15, autenticadas: 9)
+- Ataques executados: **1760** — PASS: **1760** — FAIL: **0**
 
 | METHOD | ROUTE | ROLE | TENANT | ATTACK | EXPECTED | ACTUAL | RESULT |
 |---|---|---|---|---|---|---|---|
@@ -47,8 +47,8 @@ Gerado automaticamente por `tenant-isolation.e2e-spec.ts` em 2026-11-05T17:27:58
 | GET | `/api/v1/tenants/:tenantId/agents` | - | A | garbage token | 401 | 401 | PASS |
 | POST | `/api/v1/tenants/:tenantId/agents` | - | A | no token | 401 | 401 | PASS |
 | POST | `/api/v1/tenants/:tenantId/agents` | - | A | garbage token | 401 | 401 | PASS |
-| GET | `/api/v1/tenants/:tenantId/calendars/:provider/authorize` | - | A | no token | 401 | 401 | PASS |
-| GET | `/api/v1/tenants/:tenantId/calendars/:provider/authorize` | - | A | garbage token | 401 | 401 | PASS |
+| POST | `/api/v1/tenants/:tenantId/calendars/:provider/authorize` | - | A | no token | 401 | 401 | PASS |
+| POST | `/api/v1/tenants/:tenantId/calendars/:provider/authorize` | - | A | garbage token | 401 | 401 | PASS |
 | GET | `/api/v1/tenants/:tenantId/calendars/agents/:agentId/settings` | - | A | no token | 401 | 401 | PASS |
 | GET | `/api/v1/tenants/:tenantId/calendars/agents/:agentId/settings` | - | A | garbage token | 401 | 401 | PASS |
 | PATCH | `/api/v1/tenants/:tenantId/calendars/agents/:agentId/settings` | - | A | no token | 401 | 401 | PASS |
@@ -215,7 +215,7 @@ Gerado automaticamente por `tenant-isolation.e2e-spec.ts` em 2026-11-05T17:27:58
 | GET | `/api/v1/tenants/:tenantId/agents/tools` | owner | A->B | URL tenant of other company | 403 | 403 | PASS |
 | GET | `/api/v1/tenants/:tenantId/agents` | owner | A->B | URL tenant of other company | 403 | 403 | PASS |
 | POST | `/api/v1/tenants/:tenantId/agents` | owner | A->B | URL tenant of other company | 403 | 403 | PASS |
-| GET | `/api/v1/tenants/:tenantId/calendars/:provider/authorize` | owner | A->B | URL tenant of other company | 403 | 403 | PASS |
+| POST | `/api/v1/tenants/:tenantId/calendars/:provider/authorize` | owner | A->B | URL tenant of other company | 403 | 403 | PASS |
 | GET | `/api/v1/tenants/:tenantId/calendars/agents/:agentId/settings` | owner | A->B | URL tenant of other company | 403 | 403 | PASS |
 | PATCH | `/api/v1/tenants/:tenantId/calendars/agents/:agentId/settings` | owner | A->B | URL tenant of other company | 403 | 403 | PASS |
 | GET | `/api/v1/tenants/:tenantId/calendars/availability` | owner | A->B | URL tenant of other company | 403 | 403 | PASS |
@@ -303,7 +303,7 @@ Gerado automaticamente por `tenant-isolation.e2e-spec.ts` em 2026-11-05T17:27:58
 | GET | `/api/v1/tenants/:tenantId/agents/tools` | owner | B->A | URL tenant of other company | 403 | 403 | PASS |
 | GET | `/api/v1/tenants/:tenantId/agents` | owner | B->A | URL tenant of other company | 403 | 403 | PASS |
 | POST | `/api/v1/tenants/:tenantId/agents` | owner | B->A | URL tenant of other company | 403 | 403 | PASS |
-| GET | `/api/v1/tenants/:tenantId/calendars/:provider/authorize` | owner | B->A | URL tenant of other company | 403 | 403 | PASS |
+| POST | `/api/v1/tenants/:tenantId/calendars/:provider/authorize` | owner | B->A | URL tenant of other company | 403 | 403 | PASS |
 | GET | `/api/v1/tenants/:tenantId/calendars/agents/:agentId/settings` | owner | B->A | URL tenant of other company | 403 | 403 | PASS |
 | PATCH | `/api/v1/tenants/:tenantId/calendars/agents/:agentId/settings` | owner | B->A | URL tenant of other company | 403 | 403 | PASS |
 | GET | `/api/v1/tenants/:tenantId/calendars/availability` | owner | B->A | URL tenant of other company | 403 | 403 | PASS |
@@ -391,7 +391,7 @@ Gerado automaticamente por `tenant-isolation.e2e-spec.ts` em 2026-11-05T17:27:58
 | GET | `/api/v1/tenants/:tenantId/agents/tools` | owner | A->B | own slug header + foreign URL | 403 | 403 | PASS |
 | GET | `/api/v1/tenants/:tenantId/agents` | owner | A->B | own slug header + foreign URL | 403 | 403 | PASS |
 | POST | `/api/v1/tenants/:tenantId/agents` | owner | A->B | own slug header + foreign URL | 403 | 403 | PASS |
-| GET | `/api/v1/tenants/:tenantId/calendars/:provider/authorize` | owner | A->B | own slug header + foreign URL | 403 | 403 | PASS |
+| POST | `/api/v1/tenants/:tenantId/calendars/:provider/authorize` | owner | A->B | own slug header + foreign URL | 403 | 403 | PASS |
 | GET | `/api/v1/tenants/:tenantId/calendars/agents/:agentId/settings` | owner | A->B | own slug header + foreign URL | 403 | 403 | PASS |
 | PATCH | `/api/v1/tenants/:tenantId/calendars/agents/:agentId/settings` | owner | A->B | own slug header + foreign URL | 403 | 403 | PASS |
 | GET | `/api/v1/tenants/:tenantId/calendars/availability` | owner | A->B | own slug header + foreign URL | 403 | 403 | PASS |
@@ -479,7 +479,7 @@ Gerado automaticamente por `tenant-isolation.e2e-spec.ts` em 2026-11-05T17:27:58
 | GET | `/api/v1/tenants/:tenantId/agents/tools` | owner | B->A | own slug header + foreign URL | 403 | 403 | PASS |
 | GET | `/api/v1/tenants/:tenantId/agents` | owner | B->A | own slug header + foreign URL | 403 | 403 | PASS |
 | POST | `/api/v1/tenants/:tenantId/agents` | owner | B->A | own slug header + foreign URL | 403 | 403 | PASS |
-| GET | `/api/v1/tenants/:tenantId/calendars/:provider/authorize` | owner | B->A | own slug header + foreign URL | 403 | 403 | PASS |
+| POST | `/api/v1/tenants/:tenantId/calendars/:provider/authorize` | owner | B->A | own slug header + foreign URL | 403 | 403 | PASS |
 | GET | `/api/v1/tenants/:tenantId/calendars/agents/:agentId/settings` | owner | B->A | own slug header + foreign URL | 403 | 403 | PASS |
 | PATCH | `/api/v1/tenants/:tenantId/calendars/agents/:agentId/settings` | owner | B->A | own slug header + foreign URL | 403 | 403 | PASS |
 | GET | `/api/v1/tenants/:tenantId/calendars/availability` | owner | B->A | own slug header + foreign URL | 403 | 403 | PASS |
@@ -567,7 +567,7 @@ Gerado automaticamente por `tenant-isolation.e2e-spec.ts` em 2026-11-05T17:27:58
 | GET | `/api/v1/tenants/:tenantId/agents/tools` | owner | A->B | foreign slug header + own URL | 403 | 403 | PASS |
 | GET | `/api/v1/tenants/:tenantId/agents` | owner | A->B | foreign slug header + own URL | 403 | 403 | PASS |
 | POST | `/api/v1/tenants/:tenantId/agents` | owner | A->B | foreign slug header + own URL | 403 | 403 | PASS |
-| GET | `/api/v1/tenants/:tenantId/calendars/:provider/authorize` | owner | A->B | foreign slug header + own URL | 403 | 403 | PASS |
+| POST | `/api/v1/tenants/:tenantId/calendars/:provider/authorize` | owner | A->B | foreign slug header + own URL | 403 | 403 | PASS |
 | GET | `/api/v1/tenants/:tenantId/calendars/agents/:agentId/settings` | owner | A->B | foreign slug header + own URL | 403 | 403 | PASS |
 | PATCH | `/api/v1/tenants/:tenantId/calendars/agents/:agentId/settings` | owner | A->B | foreign slug header + own URL | 403 | 403 | PASS |
 | GET | `/api/v1/tenants/:tenantId/calendars/availability` | owner | A->B | foreign slug header + own URL | 403 | 403 | PASS |
@@ -655,7 +655,7 @@ Gerado automaticamente por `tenant-isolation.e2e-spec.ts` em 2026-11-05T17:27:58
 | GET | `/api/v1/tenants/:tenantId/agents/tools` | owner | B->A | foreign slug header + own URL | 403 | 403 | PASS |
 | GET | `/api/v1/tenants/:tenantId/agents` | owner | B->A | foreign slug header + own URL | 403 | 403 | PASS |
 | POST | `/api/v1/tenants/:tenantId/agents` | owner | B->A | foreign slug header + own URL | 403 | 403 | PASS |
-| GET | `/api/v1/tenants/:tenantId/calendars/:provider/authorize` | owner | B->A | foreign slug header + own URL | 403 | 403 | PASS |
+| POST | `/api/v1/tenants/:tenantId/calendars/:provider/authorize` | owner | B->A | foreign slug header + own URL | 403 | 403 | PASS |
 | GET | `/api/v1/tenants/:tenantId/calendars/agents/:agentId/settings` | owner | B->A | foreign slug header + own URL | 403 | 403 | PASS |
 | PATCH | `/api/v1/tenants/:tenantId/calendars/agents/:agentId/settings` | owner | B->A | foreign slug header + own URL | 403 | 403 | PASS |
 | GET | `/api/v1/tenants/:tenantId/calendars/availability` | owner | B->A | foreign slug header + own URL | 403 | 403 | PASS |
@@ -743,7 +743,7 @@ Gerado automaticamente por `tenant-isolation.e2e-spec.ts` em 2026-11-05T17:27:58
 | GET | `/api/v1/tenants/:tenantId/agents/tools` | owner | A->B | query.tenantId of other company | 403 | 403 | PASS |
 | GET | `/api/v1/tenants/:tenantId/agents` | owner | A->B | query.tenantId of other company | 403 | 403 | PASS |
 | POST | `/api/v1/tenants/:tenantId/agents` | owner | A->B | body.tenantId of other company | 403 | 403 | PASS |
-| GET | `/api/v1/tenants/:tenantId/calendars/:provider/authorize` | owner | A->B | query.tenantId of other company | 403 | 403 | PASS |
+| POST | `/api/v1/tenants/:tenantId/calendars/:provider/authorize` | owner | A->B | body.tenantId of other company | 403 | 403 | PASS |
 | GET | `/api/v1/tenants/:tenantId/calendars/agents/:agentId/settings` | owner | A->B | query.tenantId of other company | 403 | 403 | PASS |
 | PATCH | `/api/v1/tenants/:tenantId/calendars/agents/:agentId/settings` | owner | A->B | body.tenantId of other company | 403 | 403 | PASS |
 | GET | `/api/v1/tenants/:tenantId/calendars/availability` | owner | A->B | query.tenantId of other company | 403 | 403 | PASS |
@@ -831,7 +831,7 @@ Gerado automaticamente por `tenant-isolation.e2e-spec.ts` em 2026-11-05T17:27:58
 | GET | `/api/v1/tenants/:tenantId/agents/tools` | owner | B->A | query.tenantId of other company | 403 | 403 | PASS |
 | GET | `/api/v1/tenants/:tenantId/agents` | owner | B->A | query.tenantId of other company | 403 | 403 | PASS |
 | POST | `/api/v1/tenants/:tenantId/agents` | owner | B->A | body.tenantId of other company | 403 | 403 | PASS |
-| GET | `/api/v1/tenants/:tenantId/calendars/:provider/authorize` | owner | B->A | query.tenantId of other company | 403 | 403 | PASS |
+| POST | `/api/v1/tenants/:tenantId/calendars/:provider/authorize` | owner | B->A | body.tenantId of other company | 403 | 403 | PASS |
 | GET | `/api/v1/tenants/:tenantId/calendars/agents/:agentId/settings` | owner | B->A | query.tenantId of other company | 403 | 403 | PASS |
 | PATCH | `/api/v1/tenants/:tenantId/calendars/agents/:agentId/settings` | owner | B->A | body.tenantId of other company | 403 | 403 | PASS |
 | GET | `/api/v1/tenants/:tenantId/calendars/availability` | owner | B->A | query.tenantId of other company | 403 | 403 | PASS |
@@ -1083,10 +1083,10 @@ Gerado automaticamente por `tenant-isolation.e2e-spec.ts` em 2026-11-05T17:27:58
 | POST | `/api/v1/tenants/:tenantId/agents` | operator | A | RBAC: role below requirement | 403 | 403 | PASS |
 | POST | `/api/v1/tenants/:tenantId/agents` | admin | A | RBAC: role allowed reaches handler | not 401/403 | 400 | PASS |
 | POST | `/api/v1/tenants/:tenantId/agents` | owner | A | RBAC: role allowed reaches handler | not 401/403 | 400 | PASS |
-| GET | `/api/v1/tenants/:tenantId/calendars/:provider/authorize` | viewer | A | RBAC: role below requirement | 403 | 403 | PASS |
-| GET | `/api/v1/tenants/:tenantId/calendars/:provider/authorize` | operator | A | RBAC: role below requirement | 403 | 403 | PASS |
-| GET | `/api/v1/tenants/:tenantId/calendars/:provider/authorize` | admin | A | RBAC: role allowed reaches handler | not 401/403 | 302 | PASS |
-| GET | `/api/v1/tenants/:tenantId/calendars/:provider/authorize` | owner | A | RBAC: role allowed reaches handler | not 401/403 | 302 | PASS |
+| POST | `/api/v1/tenants/:tenantId/calendars/:provider/authorize` | viewer | A | RBAC: role below requirement | 403 | 403 | PASS |
+| POST | `/api/v1/tenants/:tenantId/calendars/:provider/authorize` | operator | A | RBAC: role below requirement | 403 | 403 | PASS |
+| POST | `/api/v1/tenants/:tenantId/calendars/:provider/authorize` | admin | A | RBAC: role allowed reaches handler | not 401/403 | 200 | PASS |
+| POST | `/api/v1/tenants/:tenantId/calendars/:provider/authorize` | owner | A | RBAC: role allowed reaches handler | not 401/403 | 200 | PASS |
 | GET | `/api/v1/tenants/:tenantId/calendars/agents/:agentId/settings` | viewer | A | RBAC: role allowed reaches handler | not 401/403 | 404 | PASS |
 | GET | `/api/v1/tenants/:tenantId/calendars/agents/:agentId/settings` | operator | A | RBAC: role allowed reaches handler | not 401/403 | 404 | PASS |
 | GET | `/api/v1/tenants/:tenantId/calendars/agents/:agentId/settings` | admin | A | RBAC: role allowed reaches handler | not 401/403 | 404 | PASS |
@@ -1435,10 +1435,10 @@ Gerado automaticamente por `tenant-isolation.e2e-spec.ts` em 2026-11-05T17:27:58
 | POST | `/api/v1/tenants/:tenantId/agents` | operator | B | RBAC: role below requirement | 403 | 403 | PASS |
 | POST | `/api/v1/tenants/:tenantId/agents` | admin | B | RBAC: role allowed reaches handler | not 401/403 | 400 | PASS |
 | POST | `/api/v1/tenants/:tenantId/agents` | owner | B | RBAC: role allowed reaches handler | not 401/403 | 400 | PASS |
-| GET | `/api/v1/tenants/:tenantId/calendars/:provider/authorize` | viewer | B | RBAC: role below requirement | 403 | 403 | PASS |
-| GET | `/api/v1/tenants/:tenantId/calendars/:provider/authorize` | operator | B | RBAC: role below requirement | 403 | 403 | PASS |
-| GET | `/api/v1/tenants/:tenantId/calendars/:provider/authorize` | admin | B | RBAC: role allowed reaches handler | not 401/403 | 302 | PASS |
-| GET | `/api/v1/tenants/:tenantId/calendars/:provider/authorize` | owner | B | RBAC: role allowed reaches handler | not 401/403 | 302 | PASS |
+| POST | `/api/v1/tenants/:tenantId/calendars/:provider/authorize` | viewer | B | RBAC: role below requirement | 403 | 403 | PASS |
+| POST | `/api/v1/tenants/:tenantId/calendars/:provider/authorize` | operator | B | RBAC: role below requirement | 403 | 403 | PASS |
+| POST | `/api/v1/tenants/:tenantId/calendars/:provider/authorize` | admin | B | RBAC: role allowed reaches handler | not 401/403 | 200 | PASS |
+| POST | `/api/v1/tenants/:tenantId/calendars/:provider/authorize` | owner | B | RBAC: role allowed reaches handler | not 401/403 | 200 | PASS |
 | GET | `/api/v1/tenants/:tenantId/calendars/agents/:agentId/settings` | viewer | B | RBAC: role allowed reaches handler | not 401/403 | 404 | PASS |
 | GET | `/api/v1/tenants/:tenantId/calendars/agents/:agentId/settings` | operator | B | RBAC: role allowed reaches handler | not 401/403 | 404 | PASS |
 | GET | `/api/v1/tenants/:tenantId/calendars/agents/:agentId/settings` | admin | B | RBAC: role allowed reaches handler | not 401/403 | 404 | PASS |
@@ -1734,7 +1734,6 @@ Gerado automaticamente por `tenant-isolation.e2e-spec.ts` em 2026-11-05T17:27:58
 | GET | `/api/v1/tenants/:tenantId/agents/templates` | owner | A | own list contains no foreign data | 200, no foreign data | 200 | PASS |
 | GET | `/api/v1/tenants/:tenantId/agents/tools` | owner | A | own list contains no foreign data | 200, no foreign data | 200 | PASS |
 | GET | `/api/v1/tenants/:tenantId/agents` | owner | A | own list contains no foreign data | 200, no foreign data | 200 | PASS |
-| GET | `/api/v1/tenants/:tenantId/calendars/:provider/authorize` | owner | A | own list contains no foreign data | 200, no foreign data | 302 | PASS |
 | GET | `/api/v1/tenants/:tenantId/calendars/availability` | owner | A | own list contains no foreign data | 200, no foreign data | 200 | PASS |
 | GET | `/api/v1/tenants/:tenantId/calendars/connections` | owner | A | own list contains no foreign data | 200, no foreign data | 200 | PASS |
 | GET | `/api/v1/tenants/:tenantId/calendars/meetings` | owner | A | own list contains no foreign data | 200, no foreign data | 200 | PASS |
@@ -1753,7 +1752,6 @@ Gerado automaticamente por `tenant-isolation.e2e-spec.ts` em 2026-11-05T17:27:58
 | GET | `/api/v1/tenants/:tenantId/agents/templates` | owner | B | own list contains no foreign data | 200, no foreign data | 200 | PASS |
 | GET | `/api/v1/tenants/:tenantId/agents/tools` | owner | B | own list contains no foreign data | 200, no foreign data | 200 | PASS |
 | GET | `/api/v1/tenants/:tenantId/agents` | owner | B | own list contains no foreign data | 200, no foreign data | 200 | PASS |
-| GET | `/api/v1/tenants/:tenantId/calendars/:provider/authorize` | owner | B | own list contains no foreign data | 200, no foreign data | 302 | PASS |
 | GET | `/api/v1/tenants/:tenantId/calendars/availability` | owner | B | own list contains no foreign data | 200, no foreign data | 200 | PASS |
 | GET | `/api/v1/tenants/:tenantId/calendars/connections` | owner | B | own list contains no foreign data | 200, no foreign data | 200 | PASS |
 | GET | `/api/v1/tenants/:tenantId/calendars/meetings` | owner | B | own list contains no foreign data | 200, no foreign data | 200 | PASS |

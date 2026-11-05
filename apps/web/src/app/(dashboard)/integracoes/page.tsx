@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '../../../hooks/use-auth';
+import { calendarsApi } from '../../../lib/calendars-api';
 
 /* ── Types ── */
 type IntegrationStatus =
@@ -124,19 +125,9 @@ function useCalendarConnections(tenantId: string | null) {
       setLoading(false);
       return;
     }
-    const token = typeof window !== 'undefined' ? (localStorage.getItem('accessToken') ?? '') : '';
-    if (!token) {
-      setLoading(false);
-      return;
-    }
     try {
-      const r = await fetch(`/api/v1/tenants/${tenantId}/calendars/connections`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (r.ok) {
-        const data = await r.json();
-        setConnections(Array.isArray(data) ? data : []);
-      }
+      const { data } = await calendarsApi.listConnections(tenantId);
+      setConnections(Array.isArray(data) ? (data as typeof connections) : []);
     } catch {
       /* ignore */
     }
@@ -404,16 +395,9 @@ function usePcDevices(tenantId: string | null) {
 
   const load = useCallback(async () => {
     if (!tenantId) return;
-    const token = typeof window !== 'undefined' ? (localStorage.getItem('accessToken') ?? '') : '';
-    if (!token) return;
     try {
-      const r = await fetch(`/api/v1/tenants/${tenantId}/pc-connector/devices`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (r.ok) {
-        const data = await r.json();
-        setDevices(Array.isArray(data) ? data : []);
-      }
+      const { data } = await calendarsApi.listPcDevices(tenantId);
+      setDevices(Array.isArray(data) ? (data as typeof devices) : []);
     } catch {
       /* ignore */
     }

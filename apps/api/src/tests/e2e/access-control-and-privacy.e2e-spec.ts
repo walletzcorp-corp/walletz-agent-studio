@@ -22,6 +22,7 @@ import {
   calendarMeetings,
 } from '../../database/schema';
 import { createId } from '../../database/utils/id';
+import { MailService } from '../../shared/mail/mail.service';
 import {
   bootstrapE2E,
   leaks,
@@ -243,20 +244,185 @@ describe('Access control, privacy and outbound workers', () => {
       expect(row!.inviteToken).toMatch(/^[a-f0-9]{64}$/);
     });
 
+    describe('accepting an invite (public, token-authenticated)', () => {
+      /** Sends an invite and captures the raw token the way the mailbox would receive it. */
+      async function inviteAndCapture(t: TenantFixture, role: string, email: string) {
+        const spy = jest.spyOn(ctx.app.get(MailService), 'sendInvite').mockResolvedValue();
+        try {
+          const res = await auth(
+            api().post(`/api/v1/tenants/${t.id}/members/invite`),
+            t.users.owner.token,
+          ).send({ email, role });
+          expect(res.status).toBe(201);
+          return {
+            membershipId: (res.body as { id: string }).id,
+            token: spy.mock.calls[0]![2] as string,
+          };
+        } finally {
+          spy.mockRestore();
+        }
+      }
+      const accept = (body: Record<string, unknown>) =>
+        fresh(api().post('/api/v1/invites/accept')).send(body);
+
+      it('activates the membership once, creates the account, and the new user can log in', async () => {
+        const email = `new-${createId()}@e2e.test`;
+        const { membershipId, token } = await inviteAndCapture(B, 'viewer', email);
+
+        // A new account must set a password.
+        expect((await accept({ token })).status).toBe(400);
+
+        const ok = await accept({ token, password: 'Convite#2026', firstName: 'Nova' });
+        expect(ok.status).toBe(200);
+        expect(ok.body).toMatchObject({ tenantId: B.id, email, role: 'viewer' });
+
+        const [m] = await ctx.db.select().from(memberships).where(eq(memberships.id, membershipId));
+        expect(m).toMatchObject({ status: 'active', inviteToken: null, inviteExpiresAt: null });
+
+        // the token is single-use
+        expect((await accept({ token, password: 'Outra#2026x' })).status).toBe(400);
+
+        const login = await fresh(api().post('/api/v1/auth/login')).send({
+          email,
+          password: 'Convite#2026',
+        });
+        expect(login.status).toBe(200);
+        const me = await auth(
+          api().get(`/api/v1/tenants/${B.id}/agents`),
+          (login.body as { accessToken: string }).accessToken,
+        );
+        // viewer of B can read B…
+        expect(me.status).toBe(200);
+        // …and nothing of A.
+        expect(
+          (
+            await auth(
+              api().get(`/api/v1/tenants/${A.id}/agents`),
+              (login.body as { accessToken: string }).accessToken,
+            )
+          ).status,
+        ).toBe(403);
+      });
+
+      it('rejects unknown, tampered and expired tokens with the same generic 400', async () => {
+        const email = `exp-${createId()}@e2e.test`;
+        const { membershipId, token } = await inviteAndCapture(B, 'viewer', email);
+
+        expect((await accept({ token: 'a'.repeat(64), password: 'Convite#2026' })).status).toBe(
+          400,
+        );
+        expect(
+          (await accept({ token: `${token.slice(0, -1)}0`, password: 'Convite#2026' })).status,
+        ).toBe(400);
+
+        await ctx.db
+          .update(memberships)
+          .set({ inviteExpiresAt: new Date(Date.now() - 1000) })
+          .where(eq(memberships.id, membershipId));
+        const expired = await accept({ token, password: 'Convite#2026' });
+        expect(expired.status).toBe(400);
+        const [m] = await ctx.db.select().from(memberships).where(eq(memberships.id, membershipId));
+        expect(m!.status).toBe('invited');
+      });
+
+      it('never replaces the password of an account that already exists', async () => {
+        // an existing owner of A is invited to B
+        const [existing] = await ctx.db.select().from(users).where(eq(users.id, A.users.owner.id));
+        const before = existing!.passwordHash;
+        const { token } = await inviteAndCapture(B, 'analyst', existing!.email);
+
+        const res = await accept({ token, password: 'Takeover#2026' });
+        expect(res.status).toBe(200);
+
+        const [after] = await ctx.db.select().from(users).where(eq(users.id, A.users.owner.id));
+        expect(after!.passwordHash).toBe(before);
+      });
+
+      it('a redeemed token cannot be replayed to join a different tenant', async () => {
+        const { token } = await inviteAndCapture(B, 'viewer', `one-${createId()}@e2e.test`);
+        expect((await accept({ token, password: 'Convite#2026' })).status).toBe(200);
+        const rows = await ctx.db
+          .select()
+          .from(memberships)
+          .where(and(eq(memberships.tenantId, A.id), eq(memberships.status, 'invited')));
+        expect(rows.some((r) => r.inviteToken === token)).toBe(false);
+        expect((await accept({ token, password: 'Convite#2026' })).status).toBe(400);
+      });
+    });
+
+    describe('one-time tokens at rest', () => {
+      it('e-mail verification and password-reset tokens are stored hashed and still work', async () => {
+        const mail = ctx.app.get(MailService);
+        const verify = jest.spyOn(mail, 'sendEmailVerification').mockResolvedValue();
+        const reset = jest.spyOn(mail, 'sendPasswordReset').mockResolvedValue();
+        try {
+          const email = `tok-${createId()}@e2e.test`;
+          const reg = await fresh(api().post('/api/v1/auth/register')).send({
+            email,
+            password: 'Registro#2026',
+            firstName: 'Tok',
+            lastName: 'En',
+          });
+          expect(reg.status).toBe(201);
+          const verifyToken = verify.mock.calls[0]![1] as string;
+
+          const [row] = await ctx.db.select().from(users).where(eq(users.email, email));
+          expect(row!.emailVerificationToken).toMatch(/^[a-f0-9]{64}$/);
+          expect(row!.emailVerificationToken).not.toBe(verifyToken);
+          // the stored hash is not itself a valid token
+          expect(
+            (
+              await fresh(api().get('/api/v1/auth/verify-email')).query({
+                token: row!.emailVerificationToken,
+              })
+            ).status,
+          ).toBe(400);
+          expect(
+            (await fresh(api().get('/api/v1/auth/verify-email')).query({ token: verifyToken }))
+              .status,
+          ).toBe(204);
+
+          await fresh(api().post('/api/v1/auth/forgot-password')).send({ email });
+          const resetToken = reset.mock.calls[0]![1] as string;
+          const [withReset] = await ctx.db.select().from(users).where(eq(users.email, email));
+          expect(withReset!.passwordResetToken).toMatch(/^[a-f0-9]{64}$/);
+          expect(withReset!.passwordResetToken).not.toBe(resetToken);
+
+          expect(
+            (
+              await fresh(api().post('/api/v1/auth/reset-password')).send({
+                token: withReset!.passwordResetToken,
+                password: 'Roubada#2026',
+              })
+            ).status,
+          ).toBe(400);
+          expect(
+            (
+              await fresh(api().post('/api/v1/auth/reset-password')).send({
+                token: resetToken,
+                password: 'Nova#Senha2026',
+              })
+            ).status,
+          ).toBe(204);
+        } finally {
+          verify.mockRestore();
+          reset.mockRestore();
+        }
+      });
+    });
+
     it('an admin cannot promote, demote or remove another admin, nor change their own role; an owner can', async () => {
       // second admin inside B, created by the owner
       const peerUser = createId();
       const peerMembership = createId();
       await ctx.db.insert(users).values({ id: peerUser, email: `peer-${createId()}@e2e.test` });
-      await ctx.db
-        .insert(memberships)
-        .values({
-          id: peerMembership,
-          tenantId: B.id,
-          userId: peerUser,
-          role: 'admin',
-          status: 'active',
-        });
+      await ctx.db.insert(memberships).values({
+        id: peerMembership,
+        tenantId: B.id,
+        userId: peerUser,
+        role: 'admin',
+        status: 'active',
+      });
 
       expect((await setRole(B, B.users.admin.token, peerMembership, 'viewer')).status).toBe(403);
       expect(
@@ -399,60 +565,50 @@ describe('Access control, privacy and outbound workers', () => {
     async function makeSubject(t: TenantFixture) {
       const contactId = createId();
       const phone = `+55${Math.floor(1e10 + Math.random() * 9e10)}`;
-      await ctx.db
-        .insert(contacts)
-        .values({
-          id: contactId,
-          tenantId: t.id,
-          firstName: `${t.key}_SUBJECT`,
-          lastName: 'Titular',
-        });
-      await ctx.db
-        .insert(contactIdentities)
-        .values({
-          id: createId(),
-          contactId,
-          tenantId: t.id,
-          channel: 'whatsapp',
-          value: phone,
-          normalizedValue: phone,
-        });
+      await ctx.db.insert(contacts).values({
+        id: contactId,
+        tenantId: t.id,
+        firstName: `${t.key}_SUBJECT`,
+        lastName: 'Titular',
+      });
+      await ctx.db.insert(contactIdentities).values({
+        id: createId(),
+        contactId,
+        tenantId: t.id,
+        channel: 'whatsapp',
+        value: phone,
+        normalizedValue: phone,
+      });
       const conversationId = createId();
       await ctx.db
         .insert(conversations)
         .values({ id: conversationId, tenantId: t.id, contactId, channel: 'whatsapp' });
-      await ctx.db
-        .insert(messages)
-        .values({
-          id: createId(),
-          conversationId,
-          tenantId: t.id,
-          direction: 'inbound',
-          content: { text: `${t.key}_PII_MESSAGE` },
-        });
-      await ctx.db
-        .insert(whatsappMessageLogs)
-        .values({
-          id: createId(),
-          tenantId: t.id,
-          accountId: t.whatsappAccountId,
-          direction: 'inbound',
-          from: phone,
-          content: { text: `${t.key}_PII_LOG` },
-          contactId,
-        });
-      await ctx.db
-        .insert(calendarMeetings)
-        .values({
-          id: createId(),
-          tenantId: t.id,
-          contactId,
-          title: `${t.key}_SUBJECT_MEETING`,
-          contactName: 'Titular',
-          contactEmail: `titular-${t.key}@e2e.test`,
-          startAt: new Date(Date.now() + 9e8),
-          endAt: new Date(Date.now() + 9e8 + 1.8e6),
-        });
+      await ctx.db.insert(messages).values({
+        id: createId(),
+        conversationId,
+        tenantId: t.id,
+        direction: 'inbound',
+        content: { text: `${t.key}_PII_MESSAGE` },
+      });
+      await ctx.db.insert(whatsappMessageLogs).values({
+        id: createId(),
+        tenantId: t.id,
+        accountId: t.whatsappAccountId,
+        direction: 'inbound',
+        from: phone,
+        content: { text: `${t.key}_PII_LOG` },
+        contactId,
+      });
+      await ctx.db.insert(calendarMeetings).values({
+        id: createId(),
+        tenantId: t.id,
+        contactId,
+        title: `${t.key}_SUBJECT_MEETING`,
+        contactName: 'Titular',
+        contactEmail: `titular-${t.key}@e2e.test`,
+        startAt: new Date(Date.now() + 9e8),
+        endAt: new Date(Date.now() + 9e8 + 1.8e6),
+      });
       return { contactId, phone, conversationId };
     }
 
@@ -670,11 +826,11 @@ describe('Access control, privacy and outbound workers', () => {
 
     it('authorize embeds tenant and user in a signed state and rejects unknown providers', async () => {
       const res = await auth(
-        api().get(`/api/v1/tenants/${A.id}/calendars/google/authorize`),
+        api().post(`/api/v1/tenants/${A.id}/calendars/google/authorize`),
         A.users.admin.token,
       );
-      expect(res.status).toBe(302);
-      const state = new URL(res.headers['location']!).searchParams.get('state')!;
+      expect(res.status).toBe(200);
+      const state = new URL((res.body as { url: string }).url).searchParams.get('state')!;
       const [encoded, signature] = state.split('.');
       expect(signature).toBe(createHmac('sha256', SECRET()).update(encoded!).digest('hex'));
       const payload = JSON.parse(Buffer.from(encoded!, 'base64url').toString('utf8')) as {
@@ -689,7 +845,7 @@ describe('Access control, privacy and outbound workers', () => {
       expect(
         (
           await auth(
-            api().get(`/api/v1/tenants/${A.id}/calendars/evil/authorize`),
+            api().post(`/api/v1/tenants/${A.id}/calendars/evil/authorize`),
             A.users.admin.token,
           )
         ).status,
@@ -697,7 +853,7 @@ describe('Access control, privacy and outbound workers', () => {
       expect(
         (
           await auth(
-            api().get(`/api/v1/tenants/${A.id}/calendars/google/authorize`),
+            api().post(`/api/v1/tenants/${A.id}/calendars/google/authorize`),
             A.users.operator.token,
           )
         ).status,
@@ -762,14 +918,12 @@ describe('Access control, privacy and outbound workers', () => {
     it("an operator reply from the inbox is delivered through the tenant's own number and marked sent", async () => {
       ctx.http.reset();
       const conversationId = createId();
-      await ctx.db
-        .insert(conversations)
-        .values({
-          id: conversationId,
-          tenantId: B.id,
-          contactId: B.otherContactId,
-          channel: 'whatsapp',
-        });
+      await ctx.db.insert(conversations).values({
+        id: conversationId,
+        tenantId: B.id,
+        contactId: B.otherContactId,
+        channel: 'whatsapp',
+      });
 
       const res = await auth(
         api().post(`/api/v1/tenants/${B.id}/conversations/${conversationId}/messages`),
@@ -795,14 +949,12 @@ describe('Access control, privacy and outbound workers', () => {
 
     it("a viewer cannot send, and nobody can send into another tenant's conversation", async () => {
       const conversationId = createId();
-      await ctx.db
-        .insert(conversations)
-        .values({
-          id: conversationId,
-          tenantId: A.id,
-          contactId: A.otherContactId,
-          channel: 'whatsapp',
-        });
+      await ctx.db.insert(conversations).values({
+        id: conversationId,
+        tenantId: A.id,
+        contactId: A.otherContactId,
+        channel: 'whatsapp',
+      });
       ctx.http.reset();
       expect(
         (

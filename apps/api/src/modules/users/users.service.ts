@@ -2,6 +2,7 @@ import { Injectable, Inject } from '@nestjs/common';
 import { eq, and, isNull } from 'drizzle-orm';
 import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';
 import { users, type User, type NewUser } from '../../database/schema/users';
+import { hashOneTimeToken } from '../../shared/crypto/one-time-token';
 
 @Injectable()
 export class UsersService {
@@ -48,7 +49,7 @@ export class UsersService {
     const [user] = await this.db
       .select()
       .from(users)
-      .where(eq(users.emailVerificationToken, token))
+      .where(eq(users.emailVerificationToken, hashOneTimeToken(token)))
       .limit(1);
     return user ?? null;
   }
@@ -57,7 +58,7 @@ export class UsersService {
     const [user] = await this.db
       .select()
       .from(users)
-      .where(eq(users.passwordResetToken, token))
+      .where(eq(users.passwordResetToken, hashOneTimeToken(token)))
       .limit(1);
     return user ?? null;
   }
@@ -68,9 +69,17 @@ export class UsersService {
       emailVerificationExpiresAt?: Date;
     },
   ): Promise<User> {
+    const { emailVerificationToken, ...rest } = data;
     const [user] = await this.db
       .insert(users)
-      .values({ ...data, email: data.email.toLowerCase() })
+      .values({
+        ...rest,
+        email: data.email.toLowerCase(),
+        // Raw token goes out by e-mail; only its hash is persisted.
+        ...(emailVerificationToken
+          ? { emailVerificationToken: hashOneTimeToken(emailVerificationToken) }
+          : {}),
+      })
       .returning();
     return user!;
   }
@@ -90,7 +99,11 @@ export class UsersService {
   async setPasswordResetToken(userId: string, token: string, expiresAt: Date): Promise<void> {
     await this.db
       .update(users)
-      .set({ passwordResetToken: token, passwordResetExpiresAt: expiresAt, updatedAt: new Date() })
+      .set({
+        passwordResetToken: hashOneTimeToken(token),
+        passwordResetExpiresAt: expiresAt,
+        updatedAt: new Date(),
+      })
       .where(eq(users.id, userId));
   }
 

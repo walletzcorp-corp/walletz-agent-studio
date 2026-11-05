@@ -8,7 +8,8 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
-import { randomBytes, randomUUID } from 'crypto';
+import { randomUUID } from 'crypto';
+import { generateOneTimeToken } from '../../shared/crypto/one-time-token';
 import type { RegisterDto } from './dto/register.dto';
 import type { LoginDto } from './dto/login.dto';
 import type { ForgotPasswordDto } from './dto/forgot-password.dto';
@@ -59,7 +60,7 @@ export class AuthService {
     const rounds = Number(this.configService.get('BCRYPT_ROUNDS', BCRYPT_ROUNDS_DEFAULT));
     const passwordHash = await bcrypt.hash(dto.password, rounds);
 
-    const verificationToken = randomBytes(32).toString('hex');
+    const verificationToken = generateOneTimeToken();
     const user = await this.usersService.create({
       email: dto.email,
       passwordHash,
@@ -164,7 +165,7 @@ export class AuthService {
     // Always respond 204 to prevent user enumeration
     if (!user) return;
 
-    const token = randomBytes(32).toString('hex');
+    const token = generateOneTimeToken();
     await this.usersService.setPasswordResetToken(
       user.id,
       token,

@@ -9,7 +9,10 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { eq, and, isNull } from 'drizzle-orm';
-import { createHash, randomBytes } from 'crypto';
+import * as bcrypt from 'bcryptjs';
+import { generateOneTimeToken, hashOneTimeToken } from '../../shared/crypto/one-time-token';
+import { AuditService } from '../../shared/audit/audit.service';
+import type { AcceptInviteDto } from './dto/accept-invite.dto';
 import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';
 import { tenants, type Tenant } from '../../database/schema/tenants';
 import { memberships, users, type Membership } from '../../database/schema/users';
@@ -27,6 +30,7 @@ export class TenantsService {
     @Inject(DRIZZLE_TOKEN) private readonly db: DrizzleDB,
     private readonly mailService: MailService,
     private readonly config: ConfigService,
+    private readonly audit: AuditService,
   ) {}
 
   async findById(id: string): Promise<Tenant | null> {
@@ -132,7 +136,7 @@ export class TenantsService {
       if (existing[0]) throw new ConflictException('User already a member');
     }
 
-    const inviteToken = randomBytes(32).toString('hex');
+    const inviteToken = generateOneTimeToken();
     const inviteExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
     const targetUserId = userId ?? createId(); // placeholder if user doesn't exist yet
@@ -154,7 +158,7 @@ export class TenantsService {
         status: 'invited',
         invitedByUserId,
         // Only the hash is stored; the raw token travels by e-mail and is never persisted.
-        inviteToken: createHash('sha256').update(inviteToken).digest('hex'),
+        inviteToken: hashOneTimeToken(inviteToken),
         inviteExpiresAt,
       })
       .returning();
@@ -172,9 +176,103 @@ export class TenantsService {
         this.logger.error(`Failed to send invite email to ${dto.email}: ${String(err)}`),
       );
 
+    await this.audit.log({
+      tenantId,
+      userId: invitedByUserId,
+      action: 'tenant.member_invited',
+      resourceType: 'membership',
+      resourceId: membership!.id,
+      newState: { role: dto.role, email: dto.email.toLowerCase() },
+    });
+
     const safe: Partial<Membership> = { ...membership! };
     delete safe.inviteToken;
     return safe as Omit<Membership, 'inviteToken'>;
+  }
+
+  /**
+   * Public, token-authenticated. The token is looked up by hash, must be unexpired and the
+   * membership still `invited`; the activation is a single conditional UPDATE so a token can
+   * only ever be redeemed once, even under concurrent requests.
+   */
+  async acceptInvite(
+    dto: AcceptInviteDto,
+    ipAddress?: string,
+  ): Promise<{ tenantId: string; email: string; role: Membership['role'] }> {
+    const invalid = () => new BadRequestException('Invalid or expired invite');
+
+    const [row] = await this.db
+      .select({
+        membership: memberships,
+        user: users,
+      })
+      .from(memberships)
+      .innerJoin(users, eq(memberships.userId, users.id))
+      .where(
+        and(
+          eq(memberships.inviteToken, hashOneTimeToken(dto.token)),
+          eq(memberships.status, 'invited'),
+          isNull(users.deletedAt),
+        ),
+      )
+      .limit(1);
+
+    if (!row || !row.membership.inviteExpiresAt || row.membership.inviteExpiresAt < new Date()) {
+      throw invalid();
+    }
+    const { membership, user } = row;
+
+    let passwordHash: string | undefined;
+    if (!user.passwordHash) {
+      if (!dto.password) {
+        throw new BadRequestException('Password is required to create your account');
+      }
+      const rounds = Number(this.config.get('BCRYPT_ROUNDS', 12));
+      passwordHash = await bcrypt.hash(dto.password, rounds);
+    }
+
+    const [activated] = await this.db
+      .update(memberships)
+      .set({ status: 'active', inviteToken: null, inviteExpiresAt: null, updatedAt: new Date() })
+      .where(
+        and(
+          eq(memberships.id, membership.id),
+          eq(memberships.tenantId, membership.tenantId),
+          eq(memberships.status, 'invited'),
+          eq(memberships.inviteToken, membership.inviteToken!),
+        ),
+      )
+      .returning({ id: memberships.id });
+    if (!activated) throw invalid();
+
+    // Redeeming the e-mailed token proves control of the mailbox. The password of an existing
+    // account is never replaced here — only a placeholder account (no password) gets one.
+    await this.db
+      .update(users)
+      .set({
+        ...(passwordHash
+          ? {
+              passwordHash,
+              firstName: dto.firstName ?? user.firstName,
+              lastName: dto.lastName ?? user.lastName,
+            }
+          : {}),
+        emailVerifiedAt: user.emailVerifiedAt ?? new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, user.id));
+
+    await this.audit.logSync({
+      tenantId: membership.tenantId,
+      userId: user.id,
+      action: 'tenant.invite_accepted',
+      resourceType: 'membership',
+      resourceId: membership.id,
+      newState: { role: membership.role },
+      ipAddress,
+    });
+
+    return { tenantId: membership.tenantId, email: user.email, role: membership.role };
   }
 
   async updateMemberRole(
@@ -226,6 +324,16 @@ export class TenantsService {
       .where(and(eq(memberships.id, membershipId), eq(memberships.tenantId, tenantId)))
       .returning();
 
+    await this.audit.log({
+      tenantId,
+      userId: requestingUserId,
+      action: 'tenant.member_role_changed',
+      resourceType: 'membership',
+      resourceId: membershipId,
+      previousState: { role: target.role },
+      newState: { role },
+    });
+
     return updated!;
   }
 
@@ -266,8 +374,17 @@ export class TenantsService {
 
     await this.db
       .update(memberships)
-      .set({ status: 'suspended', updatedAt: new Date() })
+      .set({ status: 'suspended', inviteToken: null, inviteExpiresAt: null, updatedAt: new Date() })
       .where(and(eq(memberships.id, membershipId), eq(memberships.tenantId, tenantId)));
+
+    await this.audit.log({
+      tenantId,
+      userId: requestingUserId,
+      action: 'tenant.member_removed',
+      resourceType: 'membership',
+      resourceId: membershipId,
+      previousState: { role: membership.role, status: membership.status },
+    });
   }
 
   async getUserTenants(userId: string) {

@@ -24,7 +24,7 @@ function build(
 describe('InboxDispatchProcessor', () => {
   it('marks the message sent after delivering through the tenant WhatsApp account', async () => {
     const { fake, processor, sendTextMessage } = build([
-      [{ id: 'wa-1' }],
+      [{ id: 'wa-1', status: 'connected' }],
       [{ phone: '+5511999990001' }],
     ]);
 
@@ -50,7 +50,7 @@ describe('InboxDispatchProcessor', () => {
   });
 
   it('fails without retrying when the contact has no WhatsApp number', async () => {
-    const { fake, processor, sendTextMessage } = build([[{ id: 'wa-1' }], []]);
+    const { fake, processor, sendTextMessage } = build([[{ id: 'wa-1', status: 'connected' }], []]);
 
     await expect(processor.process(job)).resolves.toBeUndefined();
 
@@ -63,7 +63,7 @@ describe('InboxDispatchProcessor', () => {
   it('records the provider error and rethrows so BullMQ retries', async () => {
     const sendTextMessage = jest.fn().mockRejectedValue(new Error('Meta 500'));
     const { fake, processor } = build(
-      [[{ id: 'wa-1' }], [{ phone: '+5511999990001' }]],
+      [[{ id: 'wa-1', status: 'connected' }], [{ phone: '+5511999990001' }]],
       sendTextMessage,
     );
 

@@ -169,7 +169,7 @@ jobs:
   # ============================================================
   build:
     name: Build
-    needs: [quality, test]
+    needs: [quality, test, security-e2e]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -196,20 +196,21 @@ jobs:
           retention-days: 3
 
   # ============================================================
-  # Tenant Isolation Suite
+  # Security E2E: tenant isolation (every route x role x tenant),
+  # WhatsApp->calendar leak, agent tools, access control, LGPD.
+  # Runs on EVERY push/PR; a single FAIL blocks the merge.
   # ============================================================
-  isolation:
-    name: Tenant Isolation
-    needs: test
+  security-e2e:
+    name: Security E2E (tenant isolation)
+    needs: setup
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/staging'
     services:
       postgres:
         image: pgvector/pgvector:pg16
         env:
           POSTGRES_USER: walletz
           POSTGRES_PASSWORD: walletz_test_password
-          POSTGRES_DB: walletz_test
+          POSTGRES_DB: walletz_e2e
         ports:
           - 5432:5432
         options: >-
@@ -221,14 +222,16 @@ jobs:
         image: redis:7-alpine
         ports:
           - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
 
     env:
-      DATABASE_TEST_URL: postgresql://walletz:walletz_test_password@localhost:5432/walletz_test
+      DATABASE_URL: postgresql://walletz:walletz_test_password@localhost:5432/walletz_e2e
       REDIS_URL: redis://localhost:6379
       NODE_ENV: test
-      JWT_ACCESS_SECRET: test_jwt_access_secret_for_ci_only
-      JWT_REFRESH_SECRET: test_jwt_refresh_secret_for_ci_only
-      ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
 
     steps:
       - uses: actions/checkout@v4
@@ -240,11 +243,20 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: "pnpm"
       - run: pnpm install --frozen-lockfile
-      - run: pnpm db:migrate
-        env:
-          DATABASE_URL: ${{ env.DATABASE_TEST_URL }}
-      - name: Run tenant isolation suite
-        run: pnpm test:isolation
+
+      - name: Apply the full migration chain to the empty E2E database
+        run: E2E_SKIP_CREATE=1 node scripts/e2e-db.cjs
+        working-directory: apps/api
+
+      - name: Security suites (tenant-isolation, whatsapp-calendar, tools, access-control)
+        run: pnpm --filter @walletz/api test:security
+
+      - name: Upload isolation matrix
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tenant-isolation-matrix
+          path: docs/qa/TENANT_ISOLATION_MATRIX.md
 
   # ============================================================
   # Migration Check

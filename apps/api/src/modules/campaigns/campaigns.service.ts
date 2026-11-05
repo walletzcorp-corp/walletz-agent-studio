@@ -10,12 +10,9 @@ import {
   consents,
   suppressions,
 } from '../../database/schema/contacts';
-import {
-  whatsappAccounts,
-  whatsappTemplates,
-  whatsappMessageLogs,
-} from '../../database/schema/whatsapp';
+import { whatsappTemplates, whatsappMessageLogs } from '../../database/schema/whatsapp';
 import { AuditService } from '../../shared/audit/audit.service';
+import { pickOutboundAccount } from '../whatsapp/outbound-account';
 import { TenantOwnershipService } from '../../shared/tenancy/tenant-ownership.service';
 import {
   CAMPAIGN_DISPATCH_QUEUE,
@@ -175,11 +172,7 @@ export class CampaignsService {
     }
 
     // ── Check 4 (campaign-level): WhatsApp connected ──
-    const [wa] = await this.db
-      .select()
-      .from(whatsappAccounts)
-      .where(and(eq(whatsappAccounts.tenantId, tenantId), isNull(whatsappAccounts.deletedAt)))
-      .limit(1);
+    const wa = await pickOutboundAccount(this.db, tenantId);
 
     if (!wa || wa.status !== 'connected') {
       throw new BadRequestException('Nenhuma conta WhatsApp conectada');
@@ -369,11 +362,7 @@ export class CampaignsService {
     }
 
     // Get the connected WhatsApp account for this tenant
-    const [wa] = await this.db
-      .select({ id: whatsappAccounts.id })
-      .from(whatsappAccounts)
-      .where(and(eq(whatsappAccounts.tenantId, tenantId), isNull(whatsappAccounts.deletedAt)))
-      .limit(1);
+    const wa = await pickOutboundAccount(this.db, tenantId);
 
     if (!wa) {
       throw new BadRequestException('Nenhuma conta WhatsApp encontrada');

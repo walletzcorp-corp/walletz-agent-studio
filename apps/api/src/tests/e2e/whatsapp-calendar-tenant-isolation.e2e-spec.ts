@@ -382,6 +382,64 @@ describe('WhatsApp -> agent -> calendar tenant isolation', () => {
       expect(res.status).toBe(401);
     });
 
+    describe('signature secret not configured (fail closed)', () => {
+      const KEYS = ['META_APP_SECRET', 'WHATSAPP_ALLOW_UNSIGNED_WEBHOOKS', 'NODE_ENV'] as const;
+      const saved: Record<string, string | undefined> = {};
+      beforeEach(() => {
+        for (const k of KEYS) saved[k] = process.env[k];
+        delete process.env['META_APP_SECRET'];
+      });
+      afterEach(() => {
+        for (const k of KEYS) {
+          if (saved[k] === undefined) delete process.env[k];
+          else process.env[k] = saved[k];
+        }
+      });
+
+      const unsigned = (id: string, phone: string) => {
+        const { body } = whatsappWebhook({
+          phoneNumberId: B.phoneNumberId,
+          from: phone,
+          text: 'oi',
+          messageId: id,
+        });
+        return request(ctx.app.getHttpServer())
+          .post('/api/v1/webhook/whatsapp')
+          .set('Content-Type', 'application/json')
+          .send(body);
+      };
+
+      it('rejects EVERY delivery when the app secret is missing, even if it carries a signature header', async () => {
+        const phone = uniquePhone();
+        expect((await unsigned(`wamid.IN.${randomUUID()}`, phone)).status).toBe(401);
+        const { body, signature } = whatsappWebhook({
+          phoneNumberId: B.phoneNumberId,
+          from: phone,
+          text: 'oi',
+          messageId: `wamid.IN.${randomUUID()}`,
+        });
+        const forged = await request(ctx.app.getHttpServer())
+          .post('/api/v1/webhook/whatsapp')
+          .set('Content-Type', 'application/json')
+          .set('x-hub-signature-256', signature)
+          .send(body);
+        expect(forged.status).toBe(401);
+        const identities = await ctx.db
+          .select()
+          .from(contactIdentities)
+          .where(eq(contactIdentities.normalizedValue, phone));
+        expect(identities).toHaveLength(0);
+      });
+
+      it('unsigned deliveries need an explicit opt-in and are never accepted in production', async () => {
+        process.env['WHATSAPP_ALLOW_UNSIGNED_WEBHOOKS'] = 'true';
+        expect((await unsigned(`wamid.IN.${randomUUID()}`, uniquePhone())).status).toBe(200); // dev opt-in
+        await ctx.app.get(WhatsappService).whenAiIdle();
+        process.env['NODE_ENV'] = 'production';
+        expect((await unsigned(`wamid.IN.${randomUUID()}`, uniquePhone())).status).toBe(401); // never in production
+      });
+    });
+
     it('ignores events for a phone_number_id nobody registered (no data is created)', async () => {
       const phone = uniquePhone();
       const res = await postWebhook(

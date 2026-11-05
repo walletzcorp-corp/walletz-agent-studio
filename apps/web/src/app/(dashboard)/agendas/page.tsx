@@ -21,6 +21,7 @@ import {
   PhoneCall,
 } from 'lucide-react';
 import { useAuth } from '../../../hooks/use-auth';
+import { calendarsApi } from '../../../lib/calendars-api';
 
 /* ── Types ── */
 interface CalendarConnection {
@@ -170,15 +171,12 @@ function getWeekDays() {
 }
 
 /* ── Page ── */
-function getToken() {
-  return typeof window !== 'undefined' ? (localStorage.getItem('accessToken') ?? '') : '';
-}
-
 export default function AgendasPage() {
   const { tenantId } = useAuth();
   const [connections, setConnections] = useState<CalendarConnection[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [connectError, setConnectError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'calendar' | 'meetings' | 'settings'>(
     'overview',
   );
@@ -187,36 +185,32 @@ export default function AgendasPage() {
 
   useEffect(() => {
     if (!tenantId) return;
-    const token = getToken();
-    if (!token) {
-      setLoading(false);
-      return;
-    }
     setLoading(true);
-    fetch(`/api/v1/tenants/${tenantId}/calendars/connections`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((r) => (r.ok ? r.json() : []))
-      .then((data) => setConnections(Array.isArray(data) ? data : []))
+    calendarsApi
+      .listConnections(tenantId)
+      .then(({ data }) => setConnections(Array.isArray(data) ? (data as CalendarConnection[]) : []))
       .catch(() => setConnections([]))
       .finally(() => setLoading(false));
   }, [tenantId]);
 
-  const handleConnect = (provider: 'google' | 'microsoft') => {
+  const handleConnect = async (provider: 'google' | 'microsoft') => {
     if (!tenantId) return;
-    window.location.href = `/api/v1/tenants/${tenantId}/calendars/${provider}/authorize`;
+    setConnectError(null);
+    try {
+      const { data } = await calendarsApi.startAuthorization(tenantId, provider);
+      window.location.href = data.url;
+    } catch {
+      setConnectError(
+        'Não foi possível iniciar a conexão. Verifique se a integração está configurada e se você é administrador.',
+      );
+    }
   };
 
   const handleSync = async () => {
     if (!tenantId || syncing) return;
-    const token = getToken();
-    if (!token) return;
     setSyncing(true);
     try {
-      await fetch(`/api/v1/tenants/${tenantId}/calendars/sync`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      await calendarsApi.sync(tenantId);
     } finally {
       setTimeout(() => setSyncing(false), 2000);
     }
@@ -224,12 +218,7 @@ export default function AgendasPage() {
 
   const handleDisconnect = async (connectionId: string) => {
     if (!tenantId) return;
-    const token = getToken();
-    if (!token) return;
-    await fetch(`/api/v1/tenants/${tenantId}/calendars/connections/${connectionId}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    await calendarsApi.disconnect(tenantId, connectionId);
     setConnections((prev) => prev.filter((c) => c.id !== connectionId));
   };
 
@@ -238,6 +227,15 @@ export default function AgendasPage() {
 
   return (
     <div className="page-container space-y-6">
+      {connectError && (
+        <div
+          role="alert"
+          className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-400"
+        >
+          {connectError}
+        </div>
+      )}
+
       {/* ── Header ── */}
       <div className="flex items-start justify-between gap-4">
         <div>

@@ -61,20 +61,21 @@ export class CalendarsController {
 
   /* ── OAuth flow ── */
 
-  @Get(':provider/authorize')
+  @Post(':provider/authorize')
   @Roles('admin')
-  @ApiOperation({ summary: 'Iniciar OAuth com Google ou Microsoft' })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Iniciar OAuth com Google ou Microsoft (retorna a URL de consentimento do provedor)',
+  })
   authorize(
     @CurrentTenant('tenantId') tenantId: string,
     @Param('provider') provider: string,
     @CurrentUser() user: JwtPayload,
-    @Res() res: Response,
-  ) {
+  ): { url: string } {
     if (provider !== 'google' && provider !== 'microsoft') {
       throw new BadRequestException('Unsupported calendar provider');
     }
-    const url = this.svc.buildAuthUrl(tenantId, provider, user.sub);
-    res.redirect(url);
+    return { url: this.svc.buildAuthUrl(tenantId, provider, user.sub) };
   }
 }
 

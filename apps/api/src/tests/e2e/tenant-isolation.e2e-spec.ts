@@ -43,6 +43,7 @@ const PUBLIC_ALLOWLIST = new Set([
   'POST /api/v1/auth/refresh',
   'POST /api/v1/auth/forgot-password',
   'POST /api/v1/auth/reset-password',
+  'POST /api/v1/invites/accept',
   'GET /api/v1/health',
   'GET /api/v1/ready',
   'GET /api/v1/webhook/whatsapp',
