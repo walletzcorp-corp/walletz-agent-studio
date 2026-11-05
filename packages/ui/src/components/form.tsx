@@ -1,9 +1,13 @@
 'use client';
 
 import * as React from 'react';
-import type { FieldError } from 'react-hook-form';
 import { cn } from '../utils';
 import { Label } from './label';
+
+// Structurally compatible with react-hook-form's FieldError, without depending on it.
+interface FieldError {
+  message?: string;
+}
 
 interface FormFieldProps {
   label?: string;

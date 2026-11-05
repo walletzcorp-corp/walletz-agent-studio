@@ -6,7 +6,7 @@ import {
   Clock, Loader2, ChevronRight, ExternalLink, RefreshCw,
   Smartphone, Calendar, Brain, Globe, Mail, Webhook,
   CreditCard, Users, Zap, MoreHorizontal, ShieldCheck,
-  Activity, Plus, Monitor,
+  Activity, Plus, Monitor, Puzzle,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '../../../hooks/use-auth';

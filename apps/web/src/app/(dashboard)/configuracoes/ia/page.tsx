@@ -105,7 +105,7 @@ function ProviderCard({
   const [expanded, setExpanded] = useState(isDefault);
   const [showKey, setShowKey] = useState(false);
   const [keyValue, setKeyValue] = useState(provider.status === 'connected' ? '••••••••••••••••••••••••••' : '');
-  const [selectedModel, setSelectedModel] = useState(provider.models.find(m => m.recommended)?.id ?? provider.models[0].id);
+  const [selectedModel, setSelectedModel] = useState(provider.models.find(m => m.recommended)?.id ?? provider.models[0]?.id ?? '');
 
   const statusConfig = {
     connected:    { label: 'Conectado', className: 'badge-success', icon: CheckCircle2 },

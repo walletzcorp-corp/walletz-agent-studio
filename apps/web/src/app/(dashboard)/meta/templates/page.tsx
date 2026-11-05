@@ -407,7 +407,7 @@ function NewTemplateDrawer({ onClose }: { onClose: () => void }) {
                     value={btn.type}
                     onChange={e => {
                       const btns = [...(form.buttons ?? [])];
-                      btns[i] = { ...btns[i], type: e.target.value as TemplateButton['type'] };
+                      btns[i] = { ...(btns[i] as TemplateButton), type: e.target.value as TemplateButton['type'] };
                       update({ buttons: btns });
                     }}
                     className="rounded-lg border border-border bg-surface-1 px-2 py-1.5 text-xs text-foreground focus:outline-none shrink-0"
@@ -419,7 +419,7 @@ function NewTemplateDrawer({ onClose }: { onClose: () => void }) {
                     value={btn.text}
                     onChange={e => {
                       const btns = [...(form.buttons ?? [])];
-                      btns[i] = { ...btns[i], text: e.target.value };
+                      btns[i] = { ...(btns[i] as TemplateButton), text: e.target.value };
                       update({ buttons: btns });
                     }}
                     placeholder="Texto do botão"

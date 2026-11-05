@@ -5,7 +5,7 @@ import { useAuth } from '../../../hooks/use-auth';
 import { api } from '../../../lib/api';
 import { Button, Badge } from '@walletz/ui';
 import {
-  MessageSquare, Bot, User, PhoneCall, CheckCheck,
+  MessageSquare, Bot, User, PhoneCall, CheckCheck, Check, Clock, AlertCircle,
   Send, ArrowLeft, Pause, Play, XCircle, RefreshCw,
 } from 'lucide-react';
 
@@ -26,11 +26,33 @@ interface Message {
   id: string;
   direction: 'inbound' | 'outbound';
   status: string;
+  failureReason?: string | null;
   content: { text?: string };
   isAiGenerated: boolean;
   sentByUserId: string | null;
   sentByAgentId: string | null;
   createdAt: string;
+}
+
+function DeliveryStatus({ status, reason }: { status: string; reason?: string | null }) {
+  if (status === 'failed') {
+    return (
+      <span className="inline-flex items-center gap-0.5 font-semibold text-red-300" title={reason ?? 'Falha no envio'}>
+        <AlertCircle className="h-3 w-3" aria-hidden /> Falhou
+      </span>
+    );
+  }
+  if (status === 'pending') {
+    return <span title="Enviando…"><Clock className="h-2.5 w-2.5" aria-label="Enviando" /></span>;
+  }
+  if (status === 'sent') {
+    return <span title="Enviada"><Check className="h-2.5 w-2.5" aria-label="Enviada" /></span>;
+  }
+  return (
+    <span title={status === 'read' ? 'Lida' : 'Entregue'}>
+      <CheckCheck className={`h-2.5 w-2.5 ${status === 'read' ? 'text-sky-300' : ''}`} aria-label={status === 'read' ? 'Lida' : 'Entregue'} />
+    </span>
+  );
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -163,7 +185,7 @@ export default function ConversasPage() {
             Conversas
           </h1>
           <div className="flex items-center gap-2">
-            <RefreshCw className="h-3 w-3 text-muted-foreground animate-spin opacity-40" title="Atualizando automaticamente" />
+            <span title="Atualizando automaticamente"><RefreshCw className="h-3 w-3 text-muted-foreground animate-spin opacity-40" /></span>
             <Badge variant="outline" className="text-xs">
               {conversations.filter((c) => c.status === 'open').length} abertas
             </Badge>
@@ -287,7 +309,7 @@ export default function ConversasPage() {
                       {msg.isAiGenerated && <Bot className="h-2.5 w-2.5" />}
                       {!msg.isAiGenerated && msg.sentByUserId && <User className="h-2.5 w-2.5" />}
                       {new Date(msg.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                      {isOut && <CheckCheck className="h-2.5 w-2.5" />}
+                      {isOut && <DeliveryStatus status={msg.status} reason={msg.failureReason} />}
                     </div>
                   </div>
                 </div>
