@@ -19,7 +19,12 @@ function build(results: unknown[]) {
   const fake = createFakeDb(results);
   const queue = { add: jest.fn().mockResolvedValue(undefined) };
   const audit = { log: jest.fn().mockResolvedValue(undefined) };
-  const service = new CampaignsService(fake.db as never, audit as never, queue as never);
+  const service = new CampaignsService(
+    fake.db as never,
+    audit as never,
+    { assertAgent: jest.fn(), assertSegment: jest.fn() } as never,
+    queue as never,
+  );
   return { fake, queue, audit, service };
 }
 
