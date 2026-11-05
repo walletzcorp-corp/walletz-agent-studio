@@ -96,9 +96,9 @@ export class MicrosoftCalendarService {
       },
     );
     if (!res.ok) {
-      const body = await res.text();
-      this.logger.error(`Microsoft token exchange failed: ${body}`);
-      throw new Error(`Microsoft OAuth error: ${body}`);
+      await res.text();
+      this.logger.error(`Microsoft token exchange failed (HTTP ${res.status})`);
+      throw new Error(`Microsoft OAuth token exchange failed (HTTP ${res.status})`);
     }
     const data = (await res.json()) as {
       access_token: string;

@@ -82,9 +82,9 @@ export class GoogleCalendarService {
       }).toString(),
     });
     if (!res.ok) {
-      const body = await res.text();
-      this.logger.error(`Google token exchange failed: ${body}`);
-      throw new Error(`Google OAuth error: ${body}`);
+      await res.text();
+      this.logger.error(`Google token exchange failed (HTTP ${res.status})`);
+      throw new Error(`Google OAuth token exchange failed (HTTP ${res.status})`);
     }
     const data = (await res.json()) as {
       access_token: string;

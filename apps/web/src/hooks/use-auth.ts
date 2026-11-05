@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { createContext, createElement, useContext, useState, useCallback, useEffect } from 'react';
+import type { ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { authApi, tenantsApi, type LoginResponse } from '../lib/api';
 
@@ -26,7 +27,7 @@ const INITIAL_STATE: AuthState = {
   isLoading: true,
 };
 
-export function useAuth() {
+function useAuthState() {
   const [state, setState] = useState<AuthState>(INITIAL_STATE);
   const router = useRouter();
 
@@ -112,4 +113,23 @@ export function useAuth() {
   }, [clearTokens, router]);
 
   return { ...state, login, logout, reload: loadUser };
+}
+
+export type AuthContextValue = ReturnType<typeof useAuthState>;
+
+const AuthContext = createContext<AuthContextValue | null>(null);
+
+/**
+ * Loads the session once for the whole app. Every `useAuth()` consumer reads this shared state
+ * instead of refetching /auth/me and /tenants/my on its own.
+ */
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const value = useAuthState();
+  return createElement(AuthContext.Provider, { value }, children);
+}
+
+export function useAuth(): AuthContextValue {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuth must be used inside <AuthProvider>');
+  return ctx;
 }
