@@ -1,5 +1,5 @@
 import { Injectable, ForbiddenException, Inject } from '@nestjs/common';
-import { eq, count, and, isNull } from 'drizzle-orm';
+import { eq, count, and, isNull, inArray } from 'drizzle-orm';
 import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';
 import { memberships } from '../../database/schema/users';
 import { agents } from '../../database/schema/agents';
@@ -53,7 +53,9 @@ export class QuotaService {
     const memberRows = await this.db
       .select({ value: count() })
       .from(memberships)
-      .where(and(eq(memberships.tenantId, tenantId), eq(memberships.status, 'active')));
+      .where(
+        and(eq(memberships.tenantId, tenantId), inArray(memberships.status, ['active', 'invited'])),
+      );
     const value = memberRows[0]?.value ?? 0;
 
     if (value >= limits.maxMembers) {

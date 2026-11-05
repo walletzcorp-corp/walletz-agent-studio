@@ -1,5 +1,5 @@
 import { Injectable, Inject, NotFoundException } from '@nestjs/common';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, inArray } from 'drizzle-orm';
 import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';
 import {
   contacts,
@@ -8,6 +8,8 @@ import {
   suppressions,
 } from '../../database/schema/contacts';
 import { conversations, messages } from '../../database/schema/conversations';
+import { whatsappMessageLogs } from '../../database/schema/whatsapp';
+import { calendarMeetings } from '../../database/schema/calendars';
 import { AuditService } from '../../shared/audit/audit.service';
 
 export interface DataSubjectExport {
@@ -19,6 +21,7 @@ export interface DataSubjectExport {
   messageCount: number;
   exportedAt: string;
   requestedBy: string;
+  messages: Array<Record<string, unknown>>;
 }
 
 @Injectable()
@@ -44,7 +47,12 @@ export class PrivacyService {
     if (!contact) throw new NotFoundException('Contact not found');
 
     const [identityRows, consentRows, suppressionRows, convRows] = await Promise.all([
-      this.db.select().from(contactIdentities).where(eq(contactIdentities.contactId, contactId)),
+      this.db
+        .select()
+        .from(contactIdentities)
+        .where(
+          and(eq(contactIdentities.contactId, contactId), eq(contactIdentities.tenantId, tenantId)),
+        ),
       this.db
         .select()
         .from(consents)
@@ -64,11 +72,27 @@ export class PrivacyService {
         .where(and(eq(conversations.contactId, contactId), eq(conversations.tenantId, tenantId))),
     ]);
 
-    await this.db
-      .select({ count: messages.id })
-      .from(messages)
-      .innerJoin(conversations, eq(messages.conversationId, conversations.id))
-      .where(and(eq(conversations.contactId, contactId), eq(conversations.tenantId, tenantId)));
+    const messageRows =
+      convRows.length === 0
+        ? []
+        : await this.db
+            .select({
+              id: messages.id,
+              conversationId: messages.conversationId,
+              direction: messages.direction,
+              content: messages.content,
+              createdAt: messages.createdAt,
+            })
+            .from(messages)
+            .where(
+              and(
+                eq(messages.tenantId, tenantId),
+                inArray(
+                  messages.conversationId,
+                  convRows.map((c) => c.id),
+                ),
+              ),
+            );
 
     const suppFiltered = suppressionRows.filter((s) =>
       identityRows.some((i) => i.normalizedValue === s.normalizedValue),
@@ -84,12 +108,13 @@ export class PrivacyService {
     });
 
     return {
-      contact: { ...contact, accessToken: undefined } as Record<string, unknown>,
+      contact: contact as Record<string, unknown>,
       identities: identityRows,
       consents: consentRows,
       suppressions: suppFiltered,
       conversations: convRows,
-      messageCount: convRows.length,
+      messageCount: messageRows.length,
+      messages: messageRows,
       exportedAt: new Date().toISOString(),
       requestedBy: requestedByUserId,
     };
@@ -126,7 +151,40 @@ export class PrivacyService {
       .where(and(eq(contacts.id, contactId), eq(contacts.tenantId, tenantId)));
 
     // Remove identity records (phone, email)
-    await this.db.delete(contactIdentities).where(eq(contactIdentities.contactId, contactId));
+    await this.db
+      .delete(contactIdentities)
+      .where(
+        and(eq(contactIdentities.contactId, contactId), eq(contactIdentities.tenantId, tenantId)),
+      );
+
+    // Erase personal content that references the contact (messages, delivery logs, meetings)
+    const convIds = (
+      await this.db
+        .select({ id: conversations.id })
+        .from(conversations)
+        .where(and(eq(conversations.contactId, contactId), eq(conversations.tenantId, tenantId)))
+    ).map((c) => c.id);
+    if (convIds.length > 0) {
+      await this.db
+        .update(messages)
+        .set({ content: { text: '[removido]' } })
+        .where(and(eq(messages.tenantId, tenantId), inArray(messages.conversationId, convIds)));
+    }
+    await this.db
+      .update(whatsappMessageLogs)
+      .set({ from: null, to: null, content: { text: '[removido]' } })
+      .where(
+        and(
+          eq(whatsappMessageLogs.tenantId, tenantId),
+          eq(whatsappMessageLogs.contactId, contactId),
+        ),
+      );
+    await this.db
+      .update(calendarMeetings)
+      .set({ contactName: null, contactEmail: null, attendees: [], description: null })
+      .where(
+        and(eq(calendarMeetings.tenantId, tenantId), eq(calendarMeetings.contactId, contactId)),
+      );
 
     // Revoke all consents
     await this.db

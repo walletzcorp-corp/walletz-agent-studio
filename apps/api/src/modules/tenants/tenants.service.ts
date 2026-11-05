@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { eq, and, isNull } from 'drizzle-orm';
-import { randomBytes } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';
 import { tenants, type Tenant } from '../../database/schema/tenants';
 import { memberships, users, type Membership } from '../../database/schema/users';
@@ -108,7 +108,12 @@ export class TenantsService {
     tenantId: string,
     dto: InviteMemberDto,
     invitedByUserId: string,
-  ): Promise<Membership> {
+  ): Promise<Omit<Membership, 'inviteToken'>> {
+    // Same rule as updateMemberRole: admin is a privileged seat only an owner can hand out.
+    if (dto.role === 'admin' && (await this.roleOf(tenantId, invitedByUserId)) !== 'owner') {
+      throw new ForbiddenException('Only owners can invite admins');
+    }
+
     const existingUser = await this.db
       .select({ id: users.id })
       .from(users)
@@ -148,7 +153,8 @@ export class TenantsService {
         role: dto.role,
         status: 'invited',
         invitedByUserId,
-        inviteToken,
+        // Only the hash is stored; the raw token travels by e-mail and is never persisted.
+        inviteToken: createHash('sha256').update(inviteToken).digest('hex'),
         inviteExpiresAt,
       })
       .returning();
@@ -166,7 +172,9 @@ export class TenantsService {
         this.logger.error(`Failed to send invite email to ${dto.email}: ${String(err)}`),
       );
 
-    return membership!;
+    const safe: Partial<Membership> = { ...membership! };
+    delete safe.inviteToken;
+    return safe as Omit<Membership, 'inviteToken'>;
   }
 
   async updateMemberRole(
@@ -194,6 +202,9 @@ export class TenantsService {
 
     if (!target) throw new NotFoundException('Membership not found');
     if (target.role === 'owner') throw new ForbiddenException("Cannot change the owner's role");
+    if (target.role === 'admin' && (await this.roleOf(tenantId, requestingUserId)) !== 'owner') {
+      throw new ForbiddenException("Only owners can change an admin's role");
+    }
 
     const [requester] = await this.db
       .select()
@@ -212,13 +223,32 @@ export class TenantsService {
     const [updated] = await this.db
       .update(memberships)
       .set({ role: role as Membership['role'], updatedAt: new Date() })
-      .where(eq(memberships.id, membershipId))
+      .where(and(eq(memberships.id, membershipId), eq(memberships.tenantId, tenantId)))
       .returning();
 
     return updated!;
   }
 
-  async removeMember(tenantId: string, membershipId: string): Promise<void> {
+  private async roleOf(tenantId: string, userId: string): Promise<Membership['role'] | null> {
+    const [row] = await this.db
+      .select({ role: memberships.role })
+      .from(memberships)
+      .where(
+        and(
+          eq(memberships.tenantId, tenantId),
+          eq(memberships.userId, userId),
+          eq(memberships.status, 'active'),
+        ),
+      )
+      .limit(1);
+    return row?.role ?? null;
+  }
+
+  async removeMember(
+    tenantId: string,
+    membershipId: string,
+    requestingUserId: string,
+  ): Promise<void> {
     const [membership] = await this.db
       .select()
       .from(memberships)
@@ -227,11 +257,17 @@ export class TenantsService {
 
     if (!membership) throw new NotFoundException('Membership not found');
     if (membership.role === 'owner') throw new ConflictException('Cannot remove the owner');
+    if (
+      membership.role === 'admin' &&
+      (await this.roleOf(tenantId, requestingUserId)) !== 'owner'
+    ) {
+      throw new ForbiddenException('Only owners can remove an admin');
+    }
 
     await this.db
       .update(memberships)
       .set({ status: 'suspended', updatedAt: new Date() })
-      .where(eq(memberships.id, membershipId));
+      .where(and(eq(memberships.id, membershipId), eq(memberships.tenantId, tenantId)));
   }
 
   async getUserTenants(userId: string) {

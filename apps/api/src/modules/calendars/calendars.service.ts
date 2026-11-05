@@ -17,6 +17,7 @@ import {
   type CalendarConnection,
   type CalendarMeeting,
 } from '../../database/schema/calendars';
+import { agents } from '../../database/schema/agents';
 import { AuditService } from '../../shared/audit/audit.service';
 import { GoogleCalendarService } from './google.service';
 import { MicrosoftCalendarService } from './microsoft.service';
@@ -27,10 +28,16 @@ import type { UpdateAgentCalendarSettingsDto } from './dto/update-agent-settings
 
 type Provider = 'google' | 'microsoft';
 
+/** Restricts a meeting operation to one contact's own meetings (external channels). */
+export interface MeetingScope {
+  contactId?: string;
+}
+
 @Injectable()
 export class CalendarsService {
   private readonly logger = new Logger(CalendarsService.name);
   private readonly encKey: Buffer;
+  private readonly oauthStateSecret: string;
 
   constructor(
     @Inject(DRIZZLE_TOKEN) private readonly db: DrizzleDB,
@@ -53,6 +60,14 @@ export class CalendarsService {
       );
     }
     this.encKey = raw ? Buffer.from(raw, 'hex') : crypto.randomBytes(32);
+
+    // The signed OAuth state binds tenant + user; a guessable secret would let anyone forge it
+    // and attach their own calendar to any tenant. No default value exists.
+    const stateSecret = this.config.get<string>('CALENDAR_OAUTH_STATE_SECRET', '');
+    if (!stateSecret && this.config.get('NODE_ENV') === 'production') {
+      throw new Error('CALENDAR_OAUTH_STATE_SECRET must be set in production');
+    }
+    this.oauthStateSecret = stateSecret || crypto.randomBytes(32).toString('hex');
   }
 
   /* ── Token encryption (AES-256-GCM) ── */
@@ -112,7 +127,9 @@ export class CalendarsService {
         tokenExpiresAt: refreshed.expiresAt,
         updatedAt: new Date(),
       })
-      .where(eq(calendarConnections.id, conn.id));
+      .where(
+        and(eq(calendarConnections.id, conn.id), eq(calendarConnections.tenantId, conn.tenantId)),
+      );
 
     this.logger.log(
       `MS token refreshed for ${conn.email}, expires ${refreshed.expiresAt.toISOString()}`,
@@ -123,15 +140,17 @@ export class CalendarsService {
   /* ── OAuth ── */
 
   private signOAuthState(payload: string): string {
-    const secret = this.config.get<string>(
-      'CALENDAR_OAUTH_STATE_SECRET',
-      'dev-state-secret-change-in-prod',
-    );
-    return crypto.createHmac('sha256', secret).update(payload).digest('hex');
+    return crypto.createHmac('sha256', this.oauthStateSecret).update(payload).digest('hex');
   }
 
-  buildAuthUrl(tenantId: string, provider: Provider): string {
-    const payload = JSON.stringify({ tenantId, provider, ts: Date.now() });
+  buildAuthUrl(tenantId: string, provider: Provider, userId: string): string {
+    const payload = JSON.stringify({
+      tenantId,
+      userId,
+      provider,
+      ts: Date.now(),
+      nonce: crypto.randomBytes(8).toString('hex'),
+    });
     const encoded = Buffer.from(payload).toString('base64url');
     const sig = this.signOAuthState(encoded);
     const state = `${encoded}.${sig}`;
@@ -149,13 +168,15 @@ export class CalendarsService {
     if (parts.length !== 2) throw new BadRequestException('Invalid OAuth state');
     const [encoded, sig] = parts as [string, string];
 
-    const expectedSig = this.signOAuthState(encoded);
-    if (!crypto.timingSafeEqual(Buffer.from(sig, 'hex'), Buffer.from(expectedSig, 'hex'))) {
+    const expectedSig = Buffer.from(this.signOAuthState(encoded), 'hex');
+    const givenSig = Buffer.from(sig, 'hex');
+    if (givenSig.length !== expectedSig.length || !crypto.timingSafeEqual(givenSig, expectedSig)) {
       throw new BadRequestException('OAuth state signature invalid — possible CSRF');
     }
 
     const decoded = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8')) as {
       tenantId: string;
+      userId?: string;
       provider: Provider;
       ts: number;
     };
@@ -165,6 +186,9 @@ export class CalendarsService {
     }
 
     const { tenantId, provider } = decoded;
+    // The connecting user is the one who started the flow (signed in the state), never the
+    // anonymous caller of the callback URL.
+    const connectedBy = decoded.userId ?? userId;
 
     const tokens =
       provider === 'google'
@@ -199,11 +223,16 @@ export class CalendarsService {
           syncStatus: 'pending',
           updatedAt: new Date(),
         })
-        .where(eq(calendarConnections.id, existing[0]!.id));
+        .where(
+          and(
+            eq(calendarConnections.id, existing[0]!.id),
+            eq(calendarConnections.tenantId, tenantId),
+          ),
+        );
     } else {
       await this.db.insert(calendarConnections).values({
         tenantId,
-        connectedByUserId: userId,
+        connectedByUserId: connectedBy,
         provider,
         email: tokens.email,
         displayName: tokens.displayName ?? null,
@@ -217,7 +246,7 @@ export class CalendarsService {
 
     await this.auditService.log({
       tenantId,
-      userId: userId ?? undefined,
+      userId: connectedBy ?? undefined,
       action: 'calendar.connect',
       resourceType: 'calendar_connection',
       metadata: { provider, email: tokens.email },
@@ -255,7 +284,9 @@ export class CalendarsService {
     await this.db
       .update(calendarConnections)
       .set({ deletedAt: new Date(), syncStatus: 'disconnected', updatedAt: new Date() })
-      .where(eq(calendarConnections.id, connectionId));
+      .where(
+        and(eq(calendarConnections.id, connectionId), eq(calendarConnections.tenantId, tenantId)),
+      );
 
     await this.auditService.log({
       tenantId,
@@ -338,6 +369,7 @@ export class CalendarsService {
         .where(
           and(
             eq(calendarConnections.id, settings.connectionId),
+            eq(calendarConnections.tenantId, tenantId),
             isNull(calendarConnections.deletedAt),
           ),
         )
@@ -397,6 +429,9 @@ export class CalendarsService {
     const endAt = new Date(dto.endAt);
 
     if (endAt <= startAt) throw new BadRequestException('endAt must be after startAt');
+
+    if (dto.agentId) await this.assertAgentOwned(tenantId, dto.agentId);
+    if (dto.connectionId) await this.assertConnectionOwned(tenantId, dto.connectionId);
 
     /* Double-booking check: any meeting that overlaps [startAt, endAt) */
     const conflicts = await this.db
@@ -513,20 +548,13 @@ export class CalendarsService {
     meetingId: string,
     userId: string,
     dto: RescheduleMeetingDto,
+    scope: MeetingScope = {},
   ): Promise<CalendarMeeting> {
-    const [meeting] = await this.db
-      .select()
-      .from(calendarMeetings)
-      .where(
-        and(
-          eq(calendarMeetings.id, meetingId),
-          eq(calendarMeetings.tenantId, tenantId),
-          isNull(calendarMeetings.deletedAt),
-        ),
-      )
-      .limit(1);
+    const meeting = await this.findOwnedMeeting(tenantId, meetingId, scope);
 
-    if (!meeting) throw new NotFoundException('Meeting not found');
+    if (!['confirmed', 'pending'].includes(meeting.status)) {
+      throw new ConflictException(`Meeting cannot be rescheduled (status: ${meeting.status})`);
+    }
 
     const startAt = new Date(dto.startAt);
     const endAt = new Date(dto.endAt);
@@ -592,7 +620,7 @@ export class CalendarsService {
     await this.db
       .update(calendarMeetings)
       .set({ status: 'rescheduled', updatedAt: new Date() })
-      .where(eq(calendarMeetings.id, meetingId));
+      .where(and(eq(calendarMeetings.id, meetingId), eq(calendarMeetings.tenantId, tenantId)));
 
     const [newMeeting] = await this.db
       .insert(calendarMeetings)
@@ -600,6 +628,9 @@ export class CalendarsService {
         tenantId,
         connectionId: meeting.connectionId,
         agentId: meeting.agentId,
+        conversationId: meeting.conversationId,
+        contactId: meeting.contactId,
+        attendees: meeting.attendees,
         externalEventId: meeting.externalEventId ?? null,
         externalMeetUrl: meeting.externalMeetUrl ?? null,
         title: meeting.title,
@@ -636,27 +667,25 @@ export class CalendarsService {
     meetingId: string,
     userId: string,
     reason?: string,
+    scope: MeetingScope = {},
   ): Promise<void> {
-    const [meeting] = await this.db
-      .select()
-      .from(calendarMeetings)
-      .where(
-        and(
-          eq(calendarMeetings.id, meetingId),
-          eq(calendarMeetings.tenantId, tenantId),
-          isNull(calendarMeetings.deletedAt),
-        ),
-      )
-      .limit(1);
+    const meeting = await this.findOwnedMeeting(tenantId, meetingId, scope);
 
-    if (!meeting) throw new NotFoundException('Meeting not found');
+    if (meeting.status === 'cancelled') {
+      throw new ConflictException('Meeting is already cancelled');
+    }
 
     /* Delete from external provider if linked */
     if (meeting.externalEventId && meeting.connectionId) {
       const [conn] = await this.db
         .select()
         .from(calendarConnections)
-        .where(eq(calendarConnections.id, meeting.connectionId))
+        .where(
+          and(
+            eq(calendarConnections.id, meeting.connectionId),
+            eq(calendarConnections.tenantId, tenantId),
+          ),
+        )
         .limit(1);
 
       if (conn) {
@@ -679,7 +708,7 @@ export class CalendarsService {
     await this.db
       .update(calendarMeetings)
       .set({ status: 'cancelled', cancellationReason: reason ?? null, updatedAt: new Date() })
-      .where(eq(calendarMeetings.id, meetingId));
+      .where(and(eq(calendarMeetings.id, meetingId), eq(calendarMeetings.tenantId, tenantId)));
 
     await this.auditService.log({
       tenantId,
@@ -709,6 +738,7 @@ export class CalendarsService {
   /* ── Agent scheduling settings ── */
 
   async getAgentSettings(tenantId: string, agentId: string) {
+    await this.assertAgentOwned(tenantId, agentId);
     const [settings] = await this.db
       .select()
       .from(agentCalendarSettings)
@@ -728,6 +758,9 @@ export class CalendarsService {
     userId: string,
     dto: UpdateAgentCalendarSettingsDto,
   ) {
+    await this.assertAgentOwned(tenantId, agentId);
+    if (dto.connectionId) await this.assertConnectionOwned(tenantId, dto.connectionId);
+
     const existing = await this.getAgentSettings(tenantId, agentId);
 
     const safeFields = {
@@ -748,8 +781,21 @@ export class CalendarsService {
       const [updated] = await this.db
         .update(agentCalendarSettings)
         .set({ ...safeFields, updatedAt: new Date() })
-        .where(eq(agentCalendarSettings.id, existing.id))
+        .where(
+          and(
+            eq(agentCalendarSettings.id, existing.id),
+            eq(agentCalendarSettings.tenantId, tenantId),
+          ),
+        )
         .returning();
+
+      await this.auditService.log({
+        tenantId,
+        userId,
+        action: 'calendar.agent_settings.update',
+        resourceType: 'agent_calendar_settings',
+        resourceId: agentId,
+      });
       return updated;
     }
 
@@ -767,6 +813,57 @@ export class CalendarsService {
     });
 
     return created;
+  }
+
+  /* ── Ownership guards: every referenced resource must belong to the tenant ── */
+
+  private async assertAgentOwned(tenantId: string, agentId: string): Promise<void> {
+    const [agent] = await this.db
+      .select({ id: agents.id })
+      .from(agents)
+      .where(and(eq(agents.id, agentId), eq(agents.tenantId, tenantId), isNull(agents.deletedAt)))
+      .limit(1);
+    if (!agent) throw new NotFoundException('Agent not found');
+  }
+
+  async assertConnectionOwned(tenantId: string, connectionId: string): Promise<CalendarConnection> {
+    const [conn] = await this.db
+      .select()
+      .from(calendarConnections)
+      .where(
+        and(
+          eq(calendarConnections.id, connectionId),
+          eq(calendarConnections.tenantId, tenantId),
+          isNull(calendarConnections.deletedAt),
+        ),
+      )
+      .limit(1);
+    if (!conn) throw new NotFoundException('Calendar connection not found');
+    return conn;
+  }
+
+  /** Tenant-scoped meeting lookup; a contact scope narrows it to that contact's own meetings. */
+  private async findOwnedMeeting(
+    tenantId: string,
+    meetingId: string,
+    scope: MeetingScope,
+  ): Promise<CalendarMeeting> {
+    const [meeting] = await this.db
+      .select()
+      .from(calendarMeetings)
+      .where(
+        and(
+          eq(calendarMeetings.id, meetingId),
+          eq(calendarMeetings.tenantId, tenantId),
+          isNull(calendarMeetings.deletedAt),
+          ...(scope.contactId ? [eq(calendarMeetings.contactId, scope.contactId)] : []),
+        ),
+      )
+      .limit(1);
+
+    // Same answer whether the meeting does not exist or belongs to someone else.
+    if (!meeting) throw new NotFoundException('Meeting not found');
+    return meeting;
   }
 
   /* ── External event creation (used by SchedulingToolsService) ── */

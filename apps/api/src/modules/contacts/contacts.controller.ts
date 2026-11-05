@@ -1,28 +1,30 @@
 import {
   Controller,
+  BadRequestException,
   Get,
   Post,
   Delete,
   Param,
   Body,
   Query,
-  UseGuards,
   HttpCode,
   UseInterceptors,
   UploadedFile,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RbacGuard } from '../../shared/rbac/rbac.guard';
 import { Roles } from '../../shared/rbac/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { ContactsService, type ImportContactDto } from './contacts.service';
+import { ImportContactsBodyDto, MAX_IMPORT_ROWS } from './dto/import-contacts.dto';
+import { parsePaging } from '../../shared/http/paging';
+
+const MAX_CSV_BYTES = 5 * 1024 * 1024;
 import { parse as parseCsvSync } from 'csv-parse/sync';
+import { CurrentTenant } from '../../shared/rbac/tenant-context';
 
 @ApiTags('contacts')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RbacGuard)
 @Controller('tenants/:tenantId/contacts')
 export class ContactsController {
   constructor(private readonly contactsService: ContactsService) {}
@@ -31,22 +33,21 @@ export class ContactsController {
   @Roles('viewer')
   @ApiOperation({ summary: 'List contacts' })
   list(
-    @Param('tenantId') tenantId: string,
+    @CurrentTenant('tenantId') tenantId: string,
     @Query('search') search?: string,
-    @Query('limit') limit = '50',
-    @Query('offset') offset = '0',
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
   ) {
     return this.contactsService.listContacts(tenantId, {
-      search,
-      limit: +limit,
-      offset: +offset,
+      search: search?.slice(0, 100),
+      ...parsePaging(limit, offset),
     });
   }
 
   @Get(':contactId')
   @Roles('viewer')
   @ApiOperation({ summary: 'Get contact' })
-  get(@Param('tenantId') tenantId: string, @Param('contactId') contactId: string) {
+  get(@CurrentTenant('tenantId') tenantId: string, @Param('contactId') contactId: string) {
     return this.contactsService.getContact(tenantId, contactId);
   }
 
@@ -54,8 +55,8 @@ export class ContactsController {
   @Roles('manager')
   @ApiOperation({ summary: 'Import contacts from JSON array' })
   importJson(
-    @Param('tenantId') tenantId: string,
-    @Body() body: { contacts: ImportContactDto[] },
+    @CurrentTenant('tenantId') tenantId: string,
+    @Body() body: ImportContactsBodyDto,
     @CurrentUser('userId') userId: string,
   ) {
     return this.contactsService.importContacts(body.contacts, tenantId, userId);
@@ -70,17 +71,27 @@ export class ContactsController {
   })
   @ApiOperation({ summary: 'Import contacts from CSV/XLSX' })
   async importCsv(
-    @Param('tenantId') tenantId: string,
+    @CurrentTenant('tenantId') tenantId: string,
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser('userId') userId: string,
   ) {
-    if (!file) throw new Error('File is required');
+    if (!file) throw new BadRequestException('File is required');
+    if (file.size > MAX_CSV_BYTES)
+      throw new BadRequestException('CSV file is too large (max 5 MB)');
 
-    const rows = parseCsvSync(file.buffer, {
-      columns: true,
-      skip_empty_lines: true,
-      trim: true,
-    }) as Array<Record<string, string>>;
+    let rows: Array<Record<string, string>>;
+    try {
+      rows = parseCsvSync(file.buffer, {
+        columns: true,
+        skip_empty_lines: true,
+        trim: true,
+      }) as Array<Record<string, string>>;
+    } catch {
+      throw new BadRequestException('Invalid CSV file');
+    }
+    if (rows.length > MAX_IMPORT_ROWS) {
+      throw new BadRequestException(`Too many rows (max ${MAX_IMPORT_ROWS})`);
+    }
 
     const mapped: ImportContactDto[] = rows.map((r) => ({
       firstName: r['nome'] ?? r['first_name'] ?? r['nome_completo']?.split(' ')[0],
@@ -137,7 +148,7 @@ export class ContactsController {
   @HttpCode(204)
   @ApiOperation({ summary: 'Delete contact' })
   delete(
-    @Param('tenantId') tenantId: string,
+    @CurrentTenant('tenantId') tenantId: string,
     @Param('contactId') contactId: string,
     @CurrentUser('userId') userId: string,
   ) {

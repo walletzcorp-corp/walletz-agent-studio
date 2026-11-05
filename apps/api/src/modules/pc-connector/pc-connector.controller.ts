@@ -6,22 +6,28 @@ import {
   Body,
   Param,
   Headers,
-  UseGuards,
   HttpCode,
   HttpStatus,
   Patch,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { PcConnectorService } from './pc-connector.service';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RbacGuard } from '../../shared/rbac/rbac.guard';
 import { Roles } from '../../shared/rbac/roles.decorator';
+import { CurrentTenant } from '../../shared/rbac/tenant-context';
+import { Public } from '../../shared/rbac/access-policy.decorators';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import type { JwtPayload } from '../auth/auth.service';
+import {
+  ApproveCommandDto,
+  CommandResultDto,
+  PairDeviceDto,
+  UpdateCapabilitiesDto,
+} from './dto/pc-connector.dto';
 
 // ── Authenticated tenant routes ───────────────────────────────────────────────
 
 @ApiTags('pc-connector')
 @Controller('tenants/:tenantId/pc-connector')
-@UseGuards(JwtAuthGuard, RbacGuard)
 @ApiBearerAuth()
 export class PcConnectorTenantController {
   constructor(private readonly svc: PcConnectorService) {}
@@ -29,21 +35,21 @@ export class PcConnectorTenantController {
   @Post('pair-token')
   @Roles('admin')
   @ApiOperation({ summary: 'Gerar token de pareamento para novo dispositivo' })
-  generatePairingToken(@Param('tenantId') tenantId: string) {
+  generatePairingToken(@CurrentTenant('tenantId') tenantId: string) {
     return this.svc.generatePairingToken(tenantId);
   }
 
   @Get('devices')
   @Roles('viewer')
   @ApiOperation({ summary: 'Listar dispositivos conectados' })
-  listDevices(@Param('tenantId') tenantId: string) {
+  listDevices(@CurrentTenant('tenantId') tenantId: string) {
     return this.svc.listDevices(tenantId);
   }
 
   @Get('devices/:deviceId')
   @Roles('viewer')
   @ApiOperation({ summary: 'Obter dispositivo' })
-  getDevice(@Param('tenantId') tenantId: string, @Param('deviceId') deviceId: string) {
+  getDevice(@CurrentTenant('tenantId') tenantId: string, @Param('deviceId') deviceId: string) {
     return this.svc.getDevice(tenantId, deviceId);
   }
 
@@ -51,30 +57,36 @@ export class PcConnectorTenantController {
   @Roles('admin')
   @ApiOperation({ summary: 'Atualizar permissões do dispositivo' })
   updateCapabilities(
-    @Param('tenantId') tenantId: string,
+    @CurrentTenant('tenantId') tenantId: string,
     @Param('deviceId') deviceId: string,
-    @Body() body: { capabilities: Record<string, unknown> },
+    @Body() body: UpdateCapabilitiesDto,
+    @CurrentUser() user: JwtPayload,
   ) {
-    return this.svc.updateCapabilities(tenantId, deviceId, body.capabilities);
+    return this.svc.updateCapabilities(tenantId, deviceId, body.capabilities, user.sub);
   }
 
   @Delete('devices/:deviceId')
   @Roles('admin')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Desconectar dispositivo' })
-  disconnect(@Param('tenantId') tenantId: string, @Param('deviceId') deviceId: string) {
-    return this.svc.disconnectDevice(tenantId, deviceId);
+  disconnect(
+    @CurrentTenant('tenantId') tenantId: string,
+    @Param('deviceId') deviceId: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.svc.disconnectDevice(tenantId, deviceId, user.sub);
   }
 
   @Patch('commands/:commandId/approve')
   @Roles('admin')
   @ApiOperation({ summary: 'Aprovar ou rejeitar comando de alto risco' })
   approveCommand(
-    @Param('tenantId') tenantId: string,
+    @CurrentTenant('tenantId') tenantId: string,
     @Param('commandId') commandId: string,
-    @Body() body: { approved: boolean },
+    @Body() body: ApproveCommandDto,
+    @CurrentUser() user: JwtPayload,
   ) {
-    return this.svc.approveCommand(tenantId, commandId, body.approved);
+    return this.svc.approveCommand(tenantId, commandId, body.approved, user.sub);
   }
 }
 
@@ -86,12 +98,14 @@ export class PcConnectorPublicController {
   constructor(private readonly svc: PcConnectorService) {}
 
   @Post('pair')
+  @Public('Token de pareamento de uso único emitido por admin do tenant')
   @ApiOperation({ summary: 'Parear dispositivo com token' })
-  pair(@Body() body: { token: string; deviceName: string; platform: string }) {
+  pair(@Body() body: PairDeviceDto) {
     return this.svc.pairDevice(body.token, body.deviceName, body.platform);
   }
 
   @Get('devices/:deviceId/commands')
+  @Public('Segredo do dispositivo (x-device-secret) validado por device')
   @ApiOperation({ summary: 'Buscar comandos pendentes (polling do connector)' })
   getPendingCommands(
     @Param('deviceId') deviceId: string,
@@ -101,13 +115,14 @@ export class PcConnectorPublicController {
   }
 
   @Post('devices/:deviceId/commands/:commandId/result')
+  @Public('Segredo do dispositivo (x-device-secret) validado por device')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Postar resultado de comando executado' })
   postResult(
     @Param('deviceId') deviceId: string,
     @Param('commandId') commandId: string,
     @Headers('x-device-secret') deviceSecret: string | undefined,
-    @Body() body: { success: boolean; result?: Record<string, unknown>; error?: string },
+    @Body() body: CommandResultDto,
   ) {
     return this.svc.postCommandResult(
       deviceId,

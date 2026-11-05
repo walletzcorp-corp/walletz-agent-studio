@@ -1,5 +1,5 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
-import { eq, and, isNull, inArray } from 'drizzle-orm';
+import { eq, and, isNull, inArray, desc, sql } from 'drizzle-orm';
 import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';
 import {
   calendarMeetings,
@@ -11,12 +11,11 @@ import { contacts } from '../../database/schema/contacts';
 import { CalendarsService } from './calendars.service';
 import { AvailabilityService, type TimeSlot } from './availability.service';
 import type { AvailabilityHours } from './availability.service';
-export interface ToolContext {
-  tenantId: string;
-  agentId: string;
-  conversationId?: string;
-  contactId?: string;
-}
+import type { AgentExecutionContext } from '../agents/execution-context';
+import { isToolAllowed } from '../agents/tool-policy';
+
+/** The only identity a tool ever sees. Built by the server; tool inputs cannot alter it. */
+export type ToolContext = AgentExecutionContext;
 
 export interface MeetingSlot {
   start: string /* ISO 8601 */;
@@ -35,6 +34,20 @@ export interface CreateMeetingInput {
   timezone?: string;
 }
 
+/** What a tool may reveal about a meeting: never attendee emails, descriptions or other contacts. */
+export interface MeetingView {
+  id: string;
+  title: string;
+  startAt: Date;
+  endAt: Date;
+  status: CalendarMeeting['status'];
+  platform: CalendarMeeting['platform'];
+  meetUrl: string | null;
+  timeZone: string;
+}
+
+const MAX_MEETING_MINUTES = 8 * 60;
+
 @Injectable()
 export class SchedulingToolsService {
   private readonly logger = new Logger(SchedulingToolsService.name);
@@ -44,6 +57,18 @@ export class SchedulingToolsService {
     private readonly calendarsService: CalendarsService,
     private readonly availabilityService: AvailabilityService,
   ) {}
+
+  /**
+   * A meeting may be read or changed from a tool only if it belongs to this tenant and, when the
+   * caller is an external contact, to that same contact. Enforced in the queries themselves.
+   */
+  private contactScope(ctx: ToolContext): { contactId?: string } {
+    if (ctx.source === 'external_contact') {
+      if (!ctx.contactId) throw new Error('Contexto de contato ausente');
+      return { contactId: ctx.contactId };
+    }
+    return {};
+  }
 
   /* ── Tool: get_availability ────────────────────────────────────────────── */
 
@@ -57,12 +82,13 @@ export class SchedulingToolsService {
       return { slots: [], message: 'Agendamento não está habilitado para este agente.' };
     }
 
+    const horizon = Math.min(Math.max(Math.trunc(daysAhead) || 7, 1), 30);
     const rangeStart = new Date();
     rangeStart.setMinutes(rangeStart.getMinutes() + (settings.minLeadTimeMinutes ?? 120));
     const rangeEnd = new Date(rangeStart);
-    rangeEnd.setDate(rangeEnd.getDate() + daysAhead);
+    rangeEnd.setDate(rangeEnd.getDate() + horizon);
 
-    /* Fetch busy blocks from existing confirmed meetings */
+    /* Busy blocks only (start/end): no meeting details leave this method */
     const existingMeetings = await this.db
       .select({ startAt: calendarMeetings.startAt, endAt: calendarMeetings.endAt })
       .from(calendarMeetings)
@@ -103,7 +129,7 @@ export class SchedulingToolsService {
 
     return {
       slots,
-      message: `Encontrei ${slots.length} horários disponíveis nos próximos ${daysAhead} dias.`,
+      message: `Encontrei ${slots.length} horários disponíveis nos próximos ${horizon} dias.`,
     };
   }
 
@@ -112,7 +138,7 @@ export class SchedulingToolsService {
   async createMeeting(
     ctx: ToolContext,
     input: CreateMeetingInput,
-  ): Promise<{ meeting: CalendarMeeting; meetUrl?: string; message: string }> {
+  ): Promise<{ meeting: MeetingView; meetUrl?: string; confirmed: boolean; message: string }> {
     const settings = await this.loadSettings(ctx.agentId, ctx.tenantId);
 
     if (!settings?.canSchedule) {
@@ -122,8 +148,17 @@ export class SchedulingToolsService {
     const startAt = new Date(input.startAt);
     const endAt = new Date(input.endAt);
 
+    if (Number.isNaN(startAt.getTime()) || Number.isNaN(endAt.getTime())) {
+      throw new Error('Datas inválidas. Use o formato ISO 8601.');
+    }
     if (endAt <= startAt) {
       throw new Error('Horário de término deve ser após o início.');
+    }
+    if (startAt.getTime() < Date.now()) {
+      throw new Error('Não é possível agendar no passado.');
+    }
+    if ((endAt.getTime() - startAt.getTime()) / 60_000 > MAX_MEETING_MINUTES) {
+      throw new Error('Duração acima do máximo permitido.');
     }
 
     /* Re-query conflicts with actual times */
@@ -153,34 +188,34 @@ export class SchedulingToolsService {
     const platform = input.platform ?? settings.defaultPlatform;
     const timeZone = input.timezone ?? settings.timeZone;
 
-    /* Try to create real provider event if connection exists */
+    /*
+     * A meeting is CONFIRMED only with an external_event_id from the calendar provider. The
+     * connection is the one configured for this agent and is re-validated against the tenant
+     * inside createExternalEvent; it is never picked from "any available connection".
+     */
     let externalEventId: string | undefined;
     let externalMeetUrl: string | undefined;
 
     if (settings.connectionId) {
-      try {
-        const eventResult = await this.calendarsService.createExternalEvent(
-          ctx.tenantId,
-          settings.connectionId,
-          {
-            summary: input.title,
-            description: input.description,
-            start: startAt.toISOString(),
-            end: endAt.toISOString(),
-            timeZone,
-            attendeeEmails: input.contactEmail ? [input.contactEmail] : [],
-            addMeet: platform === 'google_meet',
-            addTeams: platform === 'teams',
-          },
-        );
-        externalEventId = eventResult.id;
-        externalMeetUrl = eventResult.meetUrl;
-      } catch (err) {
-        this.logger.warn(
-          `Provider event creation failed, saving locally: ${err instanceof Error ? err.message : err}`,
-        );
-      }
+      const eventResult = await this.calendarsService.createExternalEvent(
+        ctx.tenantId,
+        settings.connectionId,
+        {
+          summary: input.title,
+          description: input.description,
+          start: startAt.toISOString(),
+          end: endAt.toISOString(),
+          timeZone,
+          attendeeEmails: input.contactEmail ? [input.contactEmail] : [],
+          addMeet: platform === 'google_meet',
+          addTeams: platform === 'teams',
+        },
+      );
+      externalEventId = eventResult.id;
+      externalMeetUrl = eventResult.meetUrl;
     }
+
+    const confirmed = Boolean(externalEventId);
 
     const [meeting] = await this.db
       .insert(calendarMeetings)
@@ -196,7 +231,7 @@ export class SchedulingToolsService {
         description: input.description ?? null,
         contactName: input.contactName ?? null,
         contactEmail: input.contactEmail ?? null,
-        status: 'confirmed',
+        status: confirmed ? 'confirmed' : 'pending',
         platform,
         origin: 'agent',
         startAt,
@@ -211,12 +246,15 @@ export class SchedulingToolsService {
 
     if (!meeting) throw new Error('Falha ao inserir reunião no banco.');
 
-    /* Update contact status to REUNIÃO AGENDADA */
+    /* Merge into the contact's custom fields (never overwrite what is already there) */
     if (ctx.contactId) {
       await this.db
         .update(contacts)
         .set({
-          customFields: { status: 'REUNIÃO AGENDADA', meetingId: meeting.id },
+          customFields: sql`coalesce(${contacts.customFields}, '{}'::jsonb) || ${JSON.stringify({
+            status: confirmed ? 'REUNIÃO AGENDADA' : 'REUNIÃO PENDENTE',
+            meetingId: meeting.id,
+          })}::jsonb`,
           updatedAt: new Date(),
         })
         .where(
@@ -232,11 +270,14 @@ export class SchedulingToolsService {
     const label = this.formatSlotLabel(startAt, timeZone);
 
     return {
-      meeting,
+      meeting: this.toView(meeting),
       meetUrl,
-      message: meetUrl
-        ? `Reunião criada para ${label}. Link: ${meetUrl}`
-        : `Reunião confirmada para ${label}.`,
+      confirmed,
+      message: confirmed
+        ? meetUrl
+          ? `Reunião criada para ${label}. Link: ${meetUrl}`
+          : `Reunião confirmada para ${label}.`
+        : `Solicitação de reunião registrada para ${label}, mas AINDA NÃO CONFIRMADA: não há calendário conectado. Informe ao cliente que a equipe confirmará.`,
     };
   }
 
@@ -245,25 +286,30 @@ export class SchedulingToolsService {
   async findMeetings(
     ctx: ToolContext,
     statusFilter: 'confirmed' | 'pending' | 'all' = 'all',
-  ): Promise<{ meetings: CalendarMeeting[]; message: string }> {
-    const whereBase = and(
+  ): Promise<{ meetings: MeetingView[]; message: string }> {
+    const scope = this.contactScope(ctx);
+
+    // Fail closed: an external contact is ALWAYS restricted to its own meetings. There is no
+    // code path where a missing filter widens the query to the whole tenant.
+    const conditions = [
       eq(calendarMeetings.tenantId, ctx.tenantId),
       isNull(calendarMeetings.deletedAt),
-      ctx.conversationId
-        ? eq(calendarMeetings.conversationId, ctx.conversationId)
-        : ctx.contactId
-          ? eq(calendarMeetings.contactId, ctx.contactId)
-          : undefined,
-    );
+      ...(scope.contactId ? [eq(calendarMeetings.contactId, scope.contactId)] : []),
+      ...(statusFilter === 'all' ? [] : [eq(calendarMeetings.status, statusFilter)]),
+    ];
 
-    const rows = await this.db.select().from(calendarMeetings).where(whereBase).limit(10);
+    const rows = await this.db
+      .select()
+      .from(calendarMeetings)
+      .where(and(...conditions))
+      .orderBy(desc(calendarMeetings.startAt))
+      .limit(10);
 
-    const filtered = statusFilter === 'all' ? rows : rows.filter((m) => m.status === statusFilter);
-
+    const meetings = rows.map((m) => this.toView(m));
     return {
-      meetings: filtered,
-      message: filtered.length
-        ? `Encontrei ${filtered.length} reunião(ões).`
+      meetings,
+      message: meetings.length
+        ? `Encontrei ${meetings.length} reunião(ões).`
         : 'Não encontrei reuniões para este contato.',
     };
   }
@@ -276,15 +322,16 @@ export class SchedulingToolsService {
     newStartAt: string,
     newEndAt: string,
     reason?: string,
-  ): Promise<{ meeting: CalendarMeeting; message: string }> {
+  ): Promise<{ meeting: MeetingView; message: string }> {
     const result = await this.calendarsService.rescheduleMeeting(
       ctx.tenantId,
       meetingId,
-      ctx.agentId,
+      `agent:${ctx.agentId}`,
       { startAt: newStartAt, endAt: newEndAt, reason },
+      this.contactScope(ctx),
     );
     return {
-      meeting: result,
+      meeting: this.toView(result),
       message: `Reunião reagendada para ${this.formatSlotLabel(new Date(newStartAt))}.`,
     };
   }
@@ -296,7 +343,13 @@ export class SchedulingToolsService {
     meetingId: string,
     reason?: string,
   ): Promise<{ message: string }> {
-    await this.calendarsService.cancelMeeting(ctx.tenantId, meetingId, ctx.agentId, reason);
+    await this.calendarsService.cancelMeeting(
+      ctx.tenantId,
+      meetingId,
+      `agent:${ctx.agentId}`,
+      reason,
+      this.contactScope(ctx),
+    );
     return { message: 'Reunião cancelada com sucesso.' };
   }
 
@@ -307,6 +360,10 @@ export class SchedulingToolsService {
     toolInput: Record<string, unknown>,
     ctx: ToolContext,
   ): Promise<unknown> {
+    if (!isToolAllowed(toolName, ctx)) {
+      throw new Error(`Ferramenta não permitida: ${toolName}`);
+    }
+
     switch (toolName) {
       case 'get_availability':
         return this.getAvailability(
@@ -329,11 +386,13 @@ export class SchedulingToolsService {
           timezone: toolInput['timezone'] != null ? String(toolInput['timezone']) : undefined,
         });
 
-      case 'find_meetings':
+      case 'find_meetings': {
+        const status = toolInput['status'];
         return this.findMeetings(
           ctx,
-          (toolInput['status'] as 'confirmed' | 'pending' | 'all') ?? 'all',
+          status === 'confirmed' || status === 'pending' ? status : 'all',
         );
+      }
 
       case 'reschedule_meeting':
         return this.rescheduleMeeting(
@@ -370,6 +429,19 @@ export class SchedulingToolsService {
       )
       .limit(1);
     return s ?? null;
+  }
+
+  private toView(m: CalendarMeeting): MeetingView {
+    return {
+      id: m.id,
+      title: m.title,
+      startAt: m.startAt,
+      endAt: m.endAt,
+      status: m.status,
+      platform: m.platform,
+      meetUrl: m.externalMeetUrl,
+      timeZone: m.timeZone,
+    };
   }
 
   private formatSlotLabel(date: Date, timezone?: string | null): string {

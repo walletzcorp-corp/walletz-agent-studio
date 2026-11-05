@@ -8,7 +8,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
-import { randomBytes } from 'crypto';
+import { randomBytes, randomUUID } from 'crypto';
 import type { RegisterDto } from './dto/register.dto';
 import type { LoginDto } from './dto/login.dto';
 import type { ForgotPasswordDto } from './dto/forgot-password.dto';
@@ -321,10 +321,12 @@ export class AuthService {
       this.jwtService.signAsync(payload, {
         expiresIn: this.configService.get('JWT_ACCESS_EXPIRES_IN', '15m'),
         secret: this.configService.getOrThrow('JWT_ACCESS_SECRET'),
+        jwtid: randomUUID(),
       }),
       this.jwtService.signAsync(payload, {
         expiresIn: this.configService.get('JWT_REFRESH_EXPIRES_IN', '7d'),
         secret: this.configService.getOrThrow('JWT_REFRESH_SECRET'),
+        jwtid: randomUUID(),
       }),
     ]);
 

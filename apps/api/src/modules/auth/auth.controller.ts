@@ -1,14 +1,4 @@
-import {
-  Controller,
-  Post,
-  Get,
-  Body,
-  Query,
-  Req,
-  HttpCode,
-  HttpStatus,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Post, Get, Body, Query, Req, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
 import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import type { Request } from 'express';
@@ -19,9 +9,9 @@ import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { VerifyMfaSetupDto, DisableMfaDto } from './dto/verify-mfa.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
-import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
 import type { JwtPayload } from './auth.service';
+import { Public, Authenticated } from '../../shared/rbac/access-policy.decorators';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -30,6 +20,7 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('register')
+  @Public('Cadastro: sem sessão; protegido por throttling')
   @Throttle({ short: { limit: 3, ttl: 60000 }, medium: { limit: 5, ttl: 3600000 } })
   @ApiOperation({ summary: 'Cadastrar novo usuário' })
   @ApiResponse({ status: 201 })
@@ -39,6 +30,7 @@ export class AuthController {
   }
 
   @Get('verify-email')
+  @Public('Token de verificação de e-mail de uso único')
   @SkipThrottle()
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Confirmar email' })
@@ -47,6 +39,7 @@ export class AuthController {
   }
 
   @Post('login')
+  @Public('Autenticação por credenciais; protegido por throttling')
   @Throttle({ short: { limit: 5, ttl: 60000 }, medium: { limit: 10, ttl: 3600000 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Login' })
@@ -55,6 +48,7 @@ export class AuthController {
   }
 
   @Post('refresh')
+  @Public('Refresh token + sessionId validados no servidor')
   @Throttle({ short: { limit: 10, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Renovar tokens' })
@@ -63,7 +57,7 @@ export class AuthController {
   }
 
   @Post('logout')
-  @UseGuards(JwtAuthGuard)
+  @Authenticated()
   @ApiBearerAuth()
   @SkipThrottle()
   @HttpCode(HttpStatus.NO_CONTENT)
@@ -73,6 +67,7 @@ export class AuthController {
   }
 
   @Post('forgot-password')
+  @Public('Fluxo de recuperação; resposta uniforme anti-enumeração')
   @Throttle({ short: { limit: 3, ttl: 60000 }, medium: { limit: 5, ttl: 3600000 } })
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Solicitar redefinição de senha' })
@@ -81,6 +76,7 @@ export class AuthController {
   }
 
   @Post('reset-password')
+  @Public('Token de redefinição de uso único')
   @Throttle({ short: { limit: 3, ttl: 60000 }, medium: { limit: 5, ttl: 3600000 } })
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Redefinir senha' })
@@ -89,7 +85,7 @@ export class AuthController {
   }
 
   @Post('change-password')
-  @UseGuards(JwtAuthGuard)
+  @Authenticated()
   @ApiBearerAuth()
   @Throttle({ short: { limit: 5, ttl: 60000 } })
   @HttpCode(HttpStatus.NO_CONTENT)
@@ -103,7 +99,7 @@ export class AuthController {
   }
 
   @Get('mfa/setup')
-  @UseGuards(JwtAuthGuard)
+  @Authenticated()
   @ApiBearerAuth()
   @Throttle({ short: { limit: 3, ttl: 60000 } })
   @ApiOperation({ summary: 'Iniciar configuração de MFA' })
@@ -112,7 +108,7 @@ export class AuthController {
   }
 
   @Post('mfa/confirm')
-  @UseGuards(JwtAuthGuard)
+  @Authenticated()
   @ApiBearerAuth()
   @Throttle({ short: { limit: 5, ttl: 60000 } })
   @HttpCode(HttpStatus.NO_CONTENT)
@@ -126,7 +122,7 @@ export class AuthController {
   }
 
   @Post('mfa/disable')
-  @UseGuards(JwtAuthGuard)
+  @Authenticated()
   @ApiBearerAuth()
   @Throttle({ short: { limit: 3, ttl: 60000 } })
   @HttpCode(HttpStatus.NO_CONTENT)
@@ -140,7 +136,7 @@ export class AuthController {
   }
 
   @Get('me')
-  @UseGuards(JwtAuthGuard)
+  @Authenticated()
   @ApiBearerAuth()
   @SkipThrottle()
   @ApiOperation({ summary: 'Dados do usuário autenticado' })

@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, MaxLength } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, MaxLength, ValidateIf } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class ConnectWhatsappDto {
@@ -81,4 +81,15 @@ export class SendMessageDto {
   @IsOptional()
   @IsString()
   idempotencyKey?: string;
+}
+
+export class AssignAgentDto {
+  @ApiProperty({
+    nullable: true,
+    description: 'ID do agente publicado que responde neste número; null remove a associação',
+  })
+  @ValidateIf((o: AssignAgentDto) => o.agentId !== null)
+  @IsString()
+  @IsNotEmpty()
+  agentId!: string | null;
 }

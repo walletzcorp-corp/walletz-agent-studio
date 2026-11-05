@@ -4,6 +4,7 @@ import { Inject } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';
 import { sql } from 'drizzle-orm';
+import { Public } from '../../shared/rbac/access-policy.decorators';
 
 @ApiTags('health')
 @Controller()
@@ -14,6 +15,7 @@ export class HealthController {
   ) {}
 
   @Get('health')
+  @Public('Probe de liveness sem dados de tenant')
   @ApiOperation({ summary: 'Health check' })
   async health() {
     return {
@@ -25,6 +27,7 @@ export class HealthController {
   }
 
   @Get('ready')
+  @Public('Probe de readiness sem dados de tenant')
   @ApiOperation({ summary: 'Readiness check' })
   async ready() {
     const checks: Record<string, boolean> = {};

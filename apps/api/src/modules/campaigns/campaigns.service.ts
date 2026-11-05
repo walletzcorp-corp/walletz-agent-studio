@@ -16,6 +16,7 @@ import {
   whatsappMessageLogs,
 } from '../../database/schema/whatsapp';
 import { AuditService } from '../../shared/audit/audit.service';
+import { TenantOwnershipService } from '../../shared/tenancy/tenant-ownership.service';
 import {
   CAMPAIGN_DISPATCH_QUEUE,
   type CampaignDispatchJobData,
@@ -40,6 +41,7 @@ export class CampaignsService {
   constructor(
     @Inject(DRIZZLE_TOKEN) private readonly db: DrizzleDB,
     private readonly auditService: AuditService,
+    private readonly ownership: TenantOwnershipService,
     @InjectQueue(CAMPAIGN_DISPATCH_QUEUE)
     private readonly campaignQueue: Queue<CampaignDispatchJobData>,
   ) {}
@@ -78,7 +80,10 @@ export class CampaignsService {
       .from(segments)
       .where(and(eq(segments.id, segmentId), eq(segments.tenantId, tenantId)));
     if (!seg) throw new NotFoundException('Segment not found');
-    await this.db.update(segments).set({ deletedAt: new Date() }).where(eq(segments.id, segmentId));
+    await this.db
+      .update(segments)
+      .set({ deletedAt: new Date() })
+      .where(and(eq(segments.id, segmentId), eq(segments.tenantId, tenantId)));
   }
 
   // ─── Campaigns ───────────────────────────────────────────────────────────────
@@ -115,6 +120,9 @@ export class CampaignsService {
       scheduledAt?: string;
     },
   ) {
+    if (data.agentId) await this.ownership.assertAgent(tenantId, data.agentId);
+    if (data.segmentId) await this.ownership.assertSegment(tenantId, data.segmentId);
+
     const [campaign] = await this.db
       .insert(campaigns)
       .values({
@@ -267,7 +275,7 @@ export class CampaignsService {
         totalBlocked: results.blocked,
         updatedAt: new Date(),
       })
-      .where(eq(campaigns.id, campaignId));
+      .where(and(eq(campaigns.id, campaignId), eq(campaigns.tenantId, tenantId)));
 
     return results;
   }
@@ -374,7 +382,7 @@ export class CampaignsService {
     await this.db
       .update(campaigns)
       .set({ status: 'running', startedAt: new Date(), updatedAt: new Date() })
-      .where(eq(campaigns.id, campaignId));
+      .where(and(eq(campaigns.id, campaignId), eq(campaigns.tenantId, tenantId)));
 
     // Create recipient records and enqueue a dispatch job for each
     const recipients = eligibility.recipients ?? [];

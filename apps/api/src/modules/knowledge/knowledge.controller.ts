@@ -6,7 +6,6 @@ import {
   Body,
   Param,
   Query,
-  UseGuards,
   UseInterceptors,
   UploadedFile,
   HttpCode,
@@ -18,15 +17,13 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes, ApiHeader } from '@nestjs/swagger';
 import { KnowledgeService } from './knowledge.service';
 import { UploadSourceDto, CreateUrlSourceDto, CreateTypedSourceDto } from './dto/upload-source.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RbacGuard } from '../../shared/rbac/rbac.guard';
 import { Roles } from '../../shared/rbac/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/auth.service';
+import { CurrentTenant } from '../../shared/rbac/tenant-context';
 
 @ApiTags('knowledge')
 @Controller('tenants/:tenantId/knowledge')
-@UseGuards(JwtAuthGuard, RbacGuard)
 @ApiBearerAuth()
 @ApiHeader({ name: 'x-tenant-slug', required: true })
 export class KnowledgeController {
@@ -35,14 +32,14 @@ export class KnowledgeController {
   @Get()
   @Roles('viewer')
   @ApiOperation({ summary: 'Listar fontes de conhecimento do tenant' })
-  findAll(@Param('tenantId') tenantId: string, @Query('agentId') agentId?: string) {
+  findAll(@CurrentTenant('tenantId') tenantId: string, @Query('agentId') agentId?: string) {
     return this.knowledgeService.listSources(tenantId, agentId);
   }
 
   @Get(':sourceId')
   @Roles('viewer')
   @ApiOperation({ summary: 'Detalhes da fonte de conhecimento' })
-  findOne(@Param('tenantId') tenantId: string, @Param('sourceId') sourceId: string) {
+  findOne(@CurrentTenant('tenantId') tenantId: string, @Param('sourceId') sourceId: string) {
     return this.knowledgeService.getSource(sourceId, tenantId);
   }
 
@@ -52,7 +49,7 @@ export class KnowledgeController {
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(FileInterceptor('file'))
   async uploadFile(
-    @Param('tenantId') tenantId: string,
+    @CurrentTenant('tenantId') tenantId: string,
     @UploadedFile(
       new ParseFilePipe({
         validators: [new MaxFileSizeValidator({ maxSize: 50 * 1024 * 1024 })],
@@ -70,7 +67,7 @@ export class KnowledgeController {
   @Roles('manager')
   @ApiOperation({ summary: 'Indexar URL' })
   createFromUrl(
-    @Param('tenantId') tenantId: string,
+    @CurrentTenant('tenantId') tenantId: string,
     @Body() dto: CreateUrlSourceDto,
     @CurrentUser() user: JwtPayload,
   ) {
@@ -81,7 +78,7 @@ export class KnowledgeController {
   @Roles('manager')
   @ApiOperation({ summary: 'Criar fonte de texto digitado' })
   createTyped(
-    @Param('tenantId') tenantId: string,
+    @CurrentTenant('tenantId') tenantId: string,
     @Body() dto: CreateTypedSourceDto,
     @CurrentUser() user: JwtPayload,
   ) {
@@ -92,7 +89,7 @@ export class KnowledgeController {
   @Roles('manager')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Reprocessar fonte com falha' })
-  retry(@Param('tenantId') tenantId: string, @Param('sourceId') sourceId: string) {
+  retry(@CurrentTenant('tenantId') tenantId: string, @Param('sourceId') sourceId: string) {
     return this.knowledgeService.retryProcessing(sourceId, tenantId);
   }
 
@@ -101,7 +98,7 @@ export class KnowledgeController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Remover fonte de conhecimento' })
   async remove(
-    @Param('tenantId') tenantId: string,
+    @CurrentTenant('tenantId') tenantId: string,
     @Param('sourceId') sourceId: string,
     @CurrentUser() user: JwtPayload,
   ) {

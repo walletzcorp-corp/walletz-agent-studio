@@ -115,7 +115,7 @@ export class AgentsService {
     const [lastRelease] = await this.db
       .select({ version: agentReleases.version })
       .from(agentReleases)
-      .where(eq(agentReleases.agentId, id))
+      .where(and(eq(agentReleases.agentId, id), eq(agentReleases.tenantId, tenantId)))
       .orderBy(desc(agentReleases.version))
       .limit(1);
 
@@ -150,7 +150,7 @@ export class AgentsService {
     await this.db
       .update(agents)
       .set({ status: 'published', currentReleaseId: release!.id, updatedAt: new Date() })
-      .where(eq(agents.id, id));
+      .where(and(eq(agents.id, id), eq(agents.tenantId, tenantId)));
 
     await this.auditService.log({
       userId,
@@ -235,29 +235,60 @@ export class AgentsService {
     const [release] = await this.db
       .select()
       .from(agentReleases)
-      .where(and(eq(agentReleases.id, releaseId), eq(agentReleases.agentId, agentId)))
+      .where(
+        and(
+          eq(agentReleases.id, releaseId),
+          eq(agentReleases.agentId, agentId),
+          eq(agentReleases.tenantId, tenantId),
+        ),
+      )
       .limit(1);
 
     if (!release) throw new NotFoundException('Release not found');
 
-    const config = release.config as Record<string, unknown>;
+    const config = release.config as Partial<
+      Pick<
+        Agent,
+        | 'name'
+        | 'title'
+        | 'objective'
+        | 'persona'
+        | 'tone'
+        | 'language'
+        | 'channels'
+        | 'workingHours'
+        | 'handoffCriteria'
+        | 'template'
+      >
+    >;
 
     await this.db
       .update(agents)
       .set({
-        ...config,
+        name: config.name,
+        title: config.title,
+        objective: config.objective,
+        persona: config.persona,
+        tone: config.tone,
+        language: config.language,
+        channels: config.channels,
+        workingHours: config.workingHours,
+        handoffCriteria: config.handoffCriteria,
+        template: config.template,
         currentReleaseId: releaseId,
         status: 'published',
         updatedAt: new Date(),
       })
-      .where(eq(agents.id, agentId));
+      .where(and(eq(agents.id, agentId), eq(agents.tenantId, tenantId)));
 
     // Mark current release as rolled back
     if (agent.currentReleaseId && agent.currentReleaseId !== releaseId) {
       await this.db
         .update(agentReleases)
         .set({ rolledBackAt: new Date() })
-        .where(eq(agentReleases.id, agent.currentReleaseId));
+        .where(
+          and(eq(agentReleases.id, agent.currentReleaseId), eq(agentReleases.tenantId, tenantId)),
+        );
     }
 
     await this.auditService.log({
@@ -294,6 +325,7 @@ export class AgentsService {
       .where(
         and(
           eq(agentToolPermissions.agentId, agentId),
+          eq(agentToolPermissions.tenantId, tenantId),
           eq(agentToolPermissions.toolName, dto.toolName),
         ),
       )
@@ -305,7 +337,12 @@ export class AgentsService {
       const [updated] = await this.db
         .update(agentToolPermissions)
         .set({ allowed: dto.allowed, constraints: dto.constraints ?? {}, updatedAt: new Date() })
-        .where(eq(agentToolPermissions.id, existing.id))
+        .where(
+          and(
+            eq(agentToolPermissions.id, existing.id),
+            eq(agentToolPermissions.tenantId, tenantId),
+          ),
+        )
         .returning();
       permission = updated!;
     } else {

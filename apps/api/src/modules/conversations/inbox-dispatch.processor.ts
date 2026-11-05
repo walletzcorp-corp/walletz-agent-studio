@@ -55,7 +55,7 @@ export class InboxDispatchProcessor extends WorkerHost {
           failedAt: new Date(),
           failureReason: 'No connected WhatsApp account',
         })
-        .where(eq(messages.id, messageId));
+        .where(and(eq(messages.id, messageId), eq(messages.tenantId, tenantId)));
       return;
     }
 
@@ -80,12 +80,12 @@ export class InboxDispatchProcessor extends WorkerHost {
           failedAt: new Date(),
           failureReason: 'Contact has no WhatsApp phone',
         })
-        .where(eq(messages.id, messageId));
+        .where(and(eq(messages.id, messageId), eq(messages.tenantId, tenantId)));
       return;
     }
 
     try {
-      await this.whatsappService.sendTextMessage(tenantId, wa.id, {
+      const sent = await this.whatsappService.sendTextMessage(tenantId, wa.id, {
         to: identity.phone,
         text,
         idempotencyKey: `inbox-${messageId}`,
@@ -93,8 +93,12 @@ export class InboxDispatchProcessor extends WorkerHost {
 
       await this.db
         .update(messages)
-        .set({ status: 'sent', sentAt: new Date() })
-        .where(eq(messages.id, messageId));
+        .set({
+          status: 'sent',
+          sentAt: new Date(),
+          ...(sent.providerMessageId ? { providerMessageId: sent.providerMessageId } : {}),
+        })
+        .where(and(eq(messages.id, messageId), eq(messages.tenantId, tenantId)));
 
       this.logger.log(`Sent inbox message ${messageId} to ${identity.phone}`);
     } catch (err) {
@@ -103,7 +107,7 @@ export class InboxDispatchProcessor extends WorkerHost {
       await this.db
         .update(messages)
         .set({ status: 'failed', failedAt: new Date(), failureReason: reason })
-        .where(eq(messages.id, messageId));
+        .where(and(eq(messages.id, messageId), eq(messages.tenantId, tenantId)));
       throw err;
     }
   }

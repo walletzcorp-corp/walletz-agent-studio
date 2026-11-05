@@ -66,7 +66,9 @@ export class CampaignDispatchProcessor extends WorkerHost {
       await this.db
         .update(campaignRecipients)
         .set({ status: 'failed', failedAt: new Date() })
-        .where(eq(campaignRecipients.id, recipientId));
+        .where(
+          and(eq(campaignRecipients.id, recipientId), eq(campaignRecipients.tenantId, tenantId)),
+        );
       await this.db
         .update(campaigns)
         .set({ totalFailed: sql`${campaigns.totalFailed} + 1`, updatedAt: new Date() })
@@ -78,7 +80,9 @@ export class CampaignDispatchProcessor extends WorkerHost {
     await this.db
       .update(campaignRecipients)
       .set({ status: 'sent', sentAt: new Date() })
-      .where(eq(campaignRecipients.id, recipientId));
+      .where(
+        and(eq(campaignRecipients.id, recipientId), eq(campaignRecipients.tenantId, tenantId)),
+      );
     await this.db
       .update(campaigns)
       .set({ totalSent: sql`${campaigns.totalSent} + 1`, updatedAt: new Date() })

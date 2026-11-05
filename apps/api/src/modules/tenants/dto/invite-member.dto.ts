@@ -12,3 +12,9 @@ export class InviteMemberDto {
   @IsEnum(['admin', 'manager', 'agent_operator', 'analyst', 'viewer'])
   role!: MembershipRole;
 }
+
+export class UpdateMemberRoleDto {
+  @ApiProperty({ enum: ['admin', 'manager', 'agent_operator', 'analyst', 'viewer'] })
+  @IsEnum(['admin', 'manager', 'agent_operator', 'analyst', 'viewer'])
+  role!: MembershipRole;
+}

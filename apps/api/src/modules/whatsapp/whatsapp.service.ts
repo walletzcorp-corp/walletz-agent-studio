@@ -10,7 +10,7 @@ import {
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import * as crypto from 'crypto';
-import { eq, and, isNull, ne } from 'drizzle-orm';
+import { eq, and, isNull, ne, desc, inArray } from 'drizzle-orm';
 import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';
 import {
   whatsappAccounts,
@@ -30,6 +30,7 @@ import { AuditService } from '../../shared/audit/audit.service';
 import { EncryptionService } from '../../shared/crypto/encryption.service';
 import { createId } from '../../database/utils/id';
 import { LabService } from '../lab/lab.service';
+import { createExecutionContext } from '../agents/execution-context';
 import type {
   ConnectWhatsappDto,
   EmbeddedSignupDto,
@@ -61,6 +62,19 @@ function isOptOutMessage(text: string): boolean {
   return OPT_OUT_KEYWORDS.has(normalized);
 }
 
+export type PublicWhatsappAccount = Omit<
+  WhatsappAccount,
+  'accessToken' | 'verifyToken' | 'appSecret'
+>;
+
+function toPublicAccount(account: WhatsappAccount): PublicWhatsappAccount {
+  const safe: Partial<WhatsappAccount> = { ...account };
+  delete safe.accessToken;
+  delete safe.verifyToken;
+  delete safe.appSecret;
+  return safe as PublicWhatsappAccount;
+}
+
 @Injectable()
 export class WhatsappService {
   private readonly logger = new Logger(WhatsappService.name);
@@ -88,6 +102,7 @@ export class WhatsappService {
     messagingLimitTier: whatsappAccounts.messagingLimitTier,
     lastSyncedAt: whatsappAccounts.lastSyncedAt,
     connectedByUserId: whatsappAccounts.connectedByUserId,
+    agentId: whatsappAccounts.agentId,
     createdAt: whatsappAccounts.createdAt,
     updatedAt: whatsappAccounts.updatedAt,
   };
@@ -133,9 +148,11 @@ export class WhatsappService {
     dto: ConnectWhatsappDto,
     tenantId: string,
     userId: string,
-  ): Promise<WhatsappAccount> {
+  ): Promise<PublicWhatsappAccount> {
+    // Ownership is checked against ALL rows (including soft-deleted ones): a number that ever
+    // belonged to another tenant is never silently re-bound.
     const [existing] = await this.db
-      .select()
+      .select({ id: whatsappAccounts.id, tenantId: whatsappAccounts.tenantId })
       .from(whatsappAccounts)
       .where(eq(whatsappAccounts.phoneNumberId, dto.phoneNumberId));
 
@@ -183,6 +200,7 @@ export class WhatsappService {
       })
       .onConflictDoUpdate({
         target: whatsappAccounts.phoneNumberId,
+        setWhere: eq(whatsappAccounts.tenantId, tenantId),
         set: {
           accessToken: encryptedToken,
           appSecret: encryptedAppSecret,
@@ -191,10 +209,14 @@ export class WhatsappService {
           displayName,
           phoneNumber,
           status: 'connected',
+          deletedAt: null,
           updatedAt: new Date(),
         },
       })
       .returning();
+
+    if (!account)
+      throw new ConflictException('Phone Number ID already registered to another tenant');
 
     await this.auditService.log({
       action: 'whatsapp.account_connected',
@@ -209,7 +231,7 @@ export class WhatsappService {
       this.logger.warn(`Template sync failed: ${e}`),
     );
 
-    return account!;
+    return toPublicAccount(account);
   }
 
   // ─── Embedded Signup ─────────────────────────────────────────────────────────
@@ -218,7 +240,7 @@ export class WhatsappService {
     dto: EmbeddedSignupDto,
     tenantId: string,
     userId: string,
-  ): Promise<WhatsappAccount> {
+  ): Promise<PublicWhatsappAccount> {
     const appId = process.env.META_APP_ID;
     const appSecret = process.env.META_APP_SECRET;
     if (!appId || !appSecret) {
@@ -332,9 +354,7 @@ export class WhatsappService {
     const [existingForPhone] = await this.db
       .select({ id: whatsappAccounts.id, tenantId: whatsappAccounts.tenantId })
       .from(whatsappAccounts)
-      .where(
-        and(eq(whatsappAccounts.phoneNumberId, phoneNumberId), isNull(whatsappAccounts.deletedAt)),
-      )
+      .where(eq(whatsappAccounts.phoneNumberId, phoneNumberId))
       .limit(1);
 
     if (existingForPhone && existingForPhone.tenantId !== tenantId) {
@@ -363,15 +383,20 @@ export class WhatsappService {
       })
       .onConflictDoUpdate({
         target: whatsappAccounts.phoneNumberId,
+        setWhere: eq(whatsappAccounts.tenantId, tenantId),
         set: {
           accessToken: encryptedAccessToken,
           displayName,
           phoneNumber,
           status: 'connected',
+          deletedAt: null,
           updatedAt: new Date(),
         },
       })
       .returning();
+
+    if (!account)
+      throw new ConflictException('Phone Number ID already registered to another tenant');
 
     await this.auditService.log({
       action: 'whatsapp.embedded_signup_completed',
@@ -386,7 +411,7 @@ export class WhatsappService {
       this.logger.warn(`Template sync after embedded signup failed: ${e}`),
     );
 
-    return account!;
+    return toPublicAccount(account);
   }
 
   /**
@@ -398,7 +423,7 @@ export class WhatsappService {
     dto: EmbeddedSignupDto,
     tenantId: string,
     userId: string,
-  ): Promise<WhatsappAccount> {
+  ): Promise<PublicWhatsappAccount> {
     const existing = await this.getAccount(tenantId, accountId);
     // Reuse the embedded signup flow — it upserts on phoneNumberId conflict
     dto.phoneNumberId = dto.phoneNumberId ?? existing.phoneNumberId;
@@ -415,6 +440,47 @@ export class WhatsappService {
     });
 
     return account;
+  }
+
+  /**
+   * Explicit channel -> agent binding. The agent must belong to the same tenant and be published.
+   * null removes the binding (the channel then receives messages without an AI reply).
+   */
+  async assignAgent(
+    tenantId: string,
+    accountId: string,
+    agentId: string | null,
+    userId: string,
+  ): Promise<PublicWhatsappAccount> {
+    await this.getAccount(tenantId, accountId);
+
+    if (agentId) {
+      const [agent] = await this.db
+        .select({ id: agents.id, status: agents.status })
+        .from(agents)
+        .where(and(eq(agents.id, agentId), eq(agents.tenantId, tenantId), isNull(agents.deletedAt)))
+        .limit(1);
+      if (!agent) throw new NotFoundException('Agent not found');
+      if (agent.status !== 'published') {
+        throw new BadRequestException('Only a published agent can be assigned to a channel');
+      }
+    }
+
+    await this.db
+      .update(whatsappAccounts)
+      .set({ agentId, updatedAt: new Date() })
+      .where(and(eq(whatsappAccounts.id, accountId), eq(whatsappAccounts.tenantId, tenantId)));
+
+    await this.auditService.log({
+      action: 'whatsapp.agent_assigned',
+      resourceType: 'whatsapp_account',
+      resourceId: accountId,
+      tenantId,
+      userId,
+      metadata: { agentId },
+    });
+
+    return this.getAccount(tenantId, accountId) as Promise<PublicWhatsappAccount>;
   }
 
   async disconnectAccount(tenantId: string, accountId: string, userId: string): Promise<void> {
@@ -470,7 +536,7 @@ export class WhatsappService {
     tenantId: string,
     accountId: string,
     dto: SendMessageDto,
-  ): Promise<{ messageId: string; status: string }> {
+  ): Promise<{ messageId: string; status: string; providerMessageId?: string }> {
     const account = await this.getAccountInternal(tenantId, accountId);
 
     if (account.status !== 'connected') {
@@ -511,15 +577,15 @@ export class WhatsappService {
       await this.db
         .update(whatsappMessageLogs)
         .set({ status: 'sent', providerMessageId: providerMsgId, sentAt: new Date() })
-        .where(eq(whatsappMessageLogs.id, logId));
+        .where(and(eq(whatsappMessageLogs.id, logId), eq(whatsappMessageLogs.tenantId, tenantId)));
 
-      return { messageId: logId, status: 'sent' };
+      return { messageId: logId, status: 'sent', providerMessageId: providerMsgId };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       await this.db
         .update(whatsappMessageLogs)
         .set({ status: 'failed', errorMessage: msg, failedAt: new Date() })
-        .where(eq(whatsappMessageLogs.id, logId));
+        .where(and(eq(whatsappMessageLogs.id, logId), eq(whatsappMessageLogs.tenantId, tenantId)));
       // Detect expired/invalid token and mark account for reconnection
       await this.handleApiError(err, account.id, tenantId);
       throw new BadRequestException(`Falha ao enviar mensagem: ${msg}`);
@@ -555,7 +621,12 @@ export class WhatsappService {
         await this.db
           .update(whatsappMessageLogs)
           .set({ status: 'pending', errorMessage: null, failedAt: null })
-          .where(eq(whatsappMessageLogs.id, existing.id));
+          .where(
+            and(
+              eq(whatsappMessageLogs.id, existing.id),
+              eq(whatsappMessageLogs.tenantId, tenantId),
+            ),
+          );
         return { logId: existing.id, deduplicated: false };
       }
     }
@@ -629,7 +700,7 @@ export class WhatsappService {
       await this.db
         .update(whatsappMessageLogs)
         .set({ status: 'sent', providerMessageId: providerMsgId, sentAt: new Date() })
-        .where(eq(whatsappMessageLogs.id, logId));
+        .where(and(eq(whatsappMessageLogs.id, logId), eq(whatsappMessageLogs.tenantId, tenantId)));
 
       return { messageId: logId, status: 'sent' };
     } catch (err) {
@@ -637,7 +708,7 @@ export class WhatsappService {
       await this.db
         .update(whatsappMessageLogs)
         .set({ status: 'failed', errorMessage: msg, failedAt: new Date() })
-        .where(eq(whatsappMessageLogs.id, logId));
+        .where(and(eq(whatsappMessageLogs.id, logId), eq(whatsappMessageLogs.tenantId, tenantId)));
       await this.handleApiError(err, account.id, tenantId);
       throw new BadRequestException(`Falha ao enviar template: ${msg}`);
     }
@@ -652,17 +723,19 @@ export class WhatsappService {
     contactId: string,
     agentId: string,
     traceId: string,
+    inboundProviderMessageId: string,
   ): Promise<void> {
+    const tenantId = account.tenantId;
     const logId = createId();
-    const idempotencyKey = `ai-${traceId}`;
+    // One AI reply per inbound message, however many times the pipeline is entered.
+    const idempotencyKey = `ai-reply-${inboundProviderMessageId}`;
 
-    // Check idempotency
     const [dup] = await this.db
       .select({ id: whatsappMessageLogs.id })
       .from(whatsappMessageLogs)
       .where(
         and(
-          eq(whatsappMessageLogs.tenantId, account.tenantId),
+          eq(whatsappMessageLogs.tenantId, tenantId),
           eq(whatsappMessageLogs.idempotencyKey, idempotencyKey),
         ),
       )
@@ -671,7 +744,7 @@ export class WhatsappService {
 
     await this.db.insert(whatsappMessageLogs).values({
       id: logId,
-      tenantId: account.tenantId,
+      tenantId,
       accountId: account.id,
       direction: 'outbound',
       status: 'pending',
@@ -684,16 +757,19 @@ export class WhatsappService {
     });
 
     // Insert outbound message in messages table
-    await this.db.insert(messages).values({
-      conversationId,
-      tenantId: account.tenantId,
-      direction: 'outbound',
-      status: 'pending',
-      content: { text },
-      sentByAgentId: agentId,
-      isAiGenerated: true,
-      traceId,
-    });
+    const [outbound] = await this.db
+      .insert(messages)
+      .values({
+        conversationId,
+        tenantId,
+        direction: 'outbound',
+        status: 'pending',
+        content: { text },
+        sentByAgentId: agentId,
+        isAiGenerated: true,
+        traceId,
+      })
+      .returning({ id: messages.id });
 
     const bearerToken = this.decryptToken(account);
 
@@ -718,19 +794,24 @@ export class WhatsappService {
       await this.db
         .update(whatsappMessageLogs)
         .set({ status: 'sent', providerMessageId: providerMsgId, sentAt: new Date() })
-        .where(eq(whatsappMessageLogs.id, logId));
+        .where(and(eq(whatsappMessageLogs.id, logId), eq(whatsappMessageLogs.tenantId, tenantId)));
 
       await this.db
         .update(messages)
-        .set({ status: 'sent', sentAt: new Date() })
-        .where(and(eq(messages.traceId, traceId), eq(messages.conversationId, conversationId)));
+        .set({ status: 'sent', providerMessageId: providerMsgId, sentAt: new Date() })
+        .where(and(eq(messages.id, outbound!.id), eq(messages.tenantId, tenantId)));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`AI reply send failed: ${msg}`);
       await this.db
         .update(whatsappMessageLogs)
         .set({ status: 'failed', errorMessage: msg, failedAt: new Date() })
-        .where(eq(whatsappMessageLogs.id, logId));
+        .where(and(eq(whatsappMessageLogs.id, logId), eq(whatsappMessageLogs.tenantId, tenantId)));
+      await this.db
+        .update(messages)
+        .set({ status: 'failed', failedAt: new Date(), failureReason: msg })
+        .where(and(eq(messages.id, outbound!.id), eq(messages.tenantId, tenantId)));
+      await this.handleApiError(err, account.id, tenantId);
     }
   }
 
@@ -739,10 +820,46 @@ export class WhatsappService {
   verifyWebhook(mode: string, challenge: string, token: string): string {
     if (mode !== 'subscribe') throw new BadRequestException('Invalid mode');
     const expected = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN;
-    if (!expected || token !== expected) {
+    const given = Buffer.from(token ?? '');
+    const wanted = Buffer.from(expected ?? '');
+    if (!expected || given.length !== wanted.length || !crypto.timingSafeEqual(given, wanted)) {
       throw new UnauthorizedException('Invalid verify token');
     }
     return challenge;
+  }
+
+  /**
+   * Meta signs every webhook with the app secret. Fail closed: without a configured secret the
+   * endpoint refuses traffic (a forged event would otherwise be attributed to a real tenant).
+   * Unsigned events can only be enabled explicitly, never in production.
+   */
+  private verifyWebhookSignature(signature: string | undefined, rawBody: Buffer): void {
+    const appSecret = process.env.META_APP_SECRET;
+
+    if (!appSecret) {
+      const unsignedAllowed =
+        process.env.NODE_ENV !== 'production' &&
+        process.env.WHATSAPP_ALLOW_UNSIGNED_WEBHOOKS === 'true';
+      if (!unsignedAllowed) {
+        this.logger.error('Webhook rejected: META_APP_SECRET is not configured');
+        throw new UnauthorizedException('Webhook signature verification is not configured');
+      }
+      this.logger.warn('Accepting UNSIGNED webhook (WHATSAPP_ALLOW_UNSIGNED_WEBHOOKS=true)');
+      return;
+    }
+
+    if (!signature) {
+      this.logger.warn('Webhook rejected: missing x-hub-signature-256 header');
+      throw new UnauthorizedException('Webhook signature required');
+    }
+    const expected = `sha256=${this.encryptionService.hmacSha256(appSecret, rawBody)}`;
+    if (
+      signature.length !== expected.length ||
+      !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))
+    ) {
+      this.logger.warn('Webhook rejected: signature mismatch');
+      throw new UnauthorizedException('Invalid webhook signature');
+    }
   }
 
   async handleWebhookEvent(
@@ -750,145 +867,173 @@ export class WhatsappService {
     signature: string | undefined,
     rawBody: Buffer,
   ): Promise<void> {
-    // Validate Meta signature (x-hub-signature-256: sha256=<hex>)
-    const appSecret = process.env.META_APP_SECRET;
-    if (appSecret) {
-      if (!signature) {
-        this.logger.warn('Webhook rejected: missing x-hub-signature-256 header');
-        throw new UnauthorizedException('Webhook signature required');
-      }
-      const expected = `sha256=${this.encryptionService.hmacSha256(appSecret, rawBody)}`;
-      if (
-        signature.length !== expected.length ||
-        !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))
-      ) {
-        this.logger.warn('Webhook rejected: signature mismatch');
-        throw new UnauthorizedException('Invalid webhook signature');
-      }
-    }
+    this.verifyWebhookSignature(signature, rawBody);
 
     const body = payload as WebhookPayload;
-
-    if (body.object !== 'whatsapp_business_account') return;
+    if (body?.object !== 'whatsapp_business_account') return;
 
     for (const entry of body.entry ?? []) {
       for (const change of entry.changes ?? []) {
         if (change.field !== 'messages') continue;
         const value = change.value;
 
+        // The tenant is derived ONLY from the receiving number registered with us.
+        const account = await this.resolveInboundAccount(value.metadata?.phone_number_id);
+        if (!account) continue;
+
         for (const message of value.messages ?? []) {
-          await this.processInboundMessage(
-            value.metadata?.phone_number_id,
-            message,
-            value.contacts?.[0],
-          );
+          await this.processInboundMessage(account, message, value.contacts?.[0]);
         }
 
         for (const status of value.statuses ?? []) {
-          await this.processStatusUpdate(status);
+          await this.processStatusUpdate(account, status);
         }
       }
     }
   }
 
-  private async processInboundMessage(
+  /**
+   * phone_number_id -> exactly one registered account -> trusted tenantId.
+   * Unknown / ambiguous / disconnected numbers are dropped (and ambiguity is a security event);
+   * nothing is ever resolved by "first match" or by anything written in the message itself.
+   */
+  private async resolveInboundAccount(
     phoneNumberId: string | undefined,
-    message: WaMessage,
-    waContact: WaContact | undefined,
-  ): Promise<void> {
-    if (!phoneNumberId) return;
+  ): Promise<WhatsappAccount | null> {
+    if (!phoneNumberId) return null;
 
-    const [account] = await this.db
+    const rows = await this.db
       .select()
       .from(whatsappAccounts)
       .where(eq(whatsappAccounts.phoneNumberId, phoneNumberId))
-      .limit(1);
+      .limit(2);
 
-    if (!account) {
-      this.logger.warn(`No account found for phoneNumberId: ${phoneNumberId}`);
-      return;
+    if (rows.length === 0) {
+      this.logger.warn(`Webhook ignored: no account registered for phoneNumberId ${phoneNumberId}`);
+      return null;
+    }
+    if (rows.length > 1) {
+      this.logger.error(`Webhook dropped: phoneNumberId ${phoneNumberId} maps to several accounts`);
+      await this.auditService.logSync({
+        action: 'SECURITY_WHATSAPP_ACCOUNT_AMBIGUOUS',
+        resourceType: 'whatsapp_account',
+        metadata: { phoneNumberId, accountIds: rows.map((r) => r.id) },
+      });
+      return null;
     }
 
+    const account = rows[0]!;
+    if (account.deletedAt || account.status === 'disconnected') {
+      this.logger.warn(`Webhook ignored: account ${account.id} is disconnected`);
+      return null;
+    }
+    return account;
+  }
+
+  private async processInboundMessage(
+    account: WhatsappAccount,
+    message: WaMessage,
+    waContact: WaContact | undefined,
+  ): Promise<void> {
     const tenantId = account.tenantId;
     const content = this.extractMessageContent(message);
 
     // Normalize phone: Meta sends without '+', E.164 needs '+'
     const normalizedPhone = message.from.startsWith('+') ? message.from : `+${message.from}`;
 
-    // ── Store raw log (idempotent on provider message ID) ──
-    await this.db
-      .insert(whatsappMessageLogs)
-      .values({
+    // Everything below is one transaction: either the message is fully recorded (and counted as
+    // received) or nothing is, so a Meta retry can never lose or duplicate a message.
+    const recorded = await this.db.transaction(async (tx) => {
+      const inserted = await tx
+        .insert(whatsappMessageLogs)
+        .values({
+          tenantId,
+          accountId: account.id,
+          direction: 'inbound',
+          status: 'delivered',
+          providerMessageId: message.id,
+          from: normalizedPhone,
+          messageType: message.type,
+          content,
+          idempotencyKey: message.id,
+        })
+        .onConflictDoNothing()
+        .returning({ id: whatsappMessageLogs.id });
+
+      if (inserted.length === 0) return null; // already processed: idempotent retry
+      const logId = inserted[0]!.id;
+
+      const contactId = await this.findOrCreateContact(tx, tenantId, normalizedPhone, waContact);
+
+      const [existingConv] = await tx
+        .select()
+        .from(conversations)
+        .where(
+          and(
+            eq(conversations.tenantId, tenantId),
+            eq(conversations.contactId, contactId),
+            eq(conversations.channel, 'whatsapp'),
+            ne(conversations.status, 'resolved'),
+          ),
+        )
+        .limit(1);
+
+      let conversationId: string;
+      let aiPausedAt: Date | null = null;
+
+      if (existingConv) {
+        conversationId = existingConv.id;
+        aiPausedAt = existingConv.aiPausedAt;
+        await tx
+          .update(conversations)
+          .set({ lastMessageAt: new Date(), status: 'open', updatedAt: new Date() })
+          .where(and(eq(conversations.id, conversationId), eq(conversations.tenantId, tenantId)));
+      } else {
+        const [newConv] = await tx
+          .insert(conversations)
+          .values({
+            tenantId,
+            contactId,
+            channel: 'whatsapp',
+            channelConversationId: normalizedPhone,
+            status: 'open',
+            lastMessageAt: new Date(),
+          })
+          .returning();
+        conversationId = newConv!.id;
+      }
+
+      await tx.insert(messages).values({
+        conversationId,
         tenantId,
-        accountId: account.id,
         direction: 'inbound',
         status: 'delivered',
         providerMessageId: message.id,
-        from: normalizedPhone,
-        messageType: message.type,
         content,
-        idempotencyKey: message.id,
-      })
-      .onConflictDoNothing();
+        isAiGenerated: false,
+      });
 
-    this.logger.log(`Inbound message from ${normalizedPhone} (${message.type})`);
+      await tx
+        .update(whatsappMessageLogs)
+        .set({ conversationId, contactId })
+        .where(and(eq(whatsappMessageLogs.id, logId), eq(whatsappMessageLogs.tenantId, tenantId)));
 
-    // ── Find or create contact ──
-    const contactId = await this.findOrCreateContact(tenantId, normalizedPhone, waContact);
+      const [contact] = await tx
+        .select({ isBlocked: contacts.isBlocked })
+        .from(contacts)
+        .where(and(eq(contacts.id, contactId), eq(contacts.tenantId, tenantId)))
+        .limit(1);
 
-    // ── Find or create conversation ──
-    const [existingConv] = await this.db
-      .select()
-      .from(conversations)
-      .where(
-        and(
-          eq(conversations.tenantId, tenantId),
-          eq(conversations.contactId, contactId),
-          eq(conversations.channel, 'whatsapp'),
-          ne(conversations.status, 'resolved'),
-        ),
-      )
-      .limit(1);
-
-    let conversationId: string;
-
-    if (existingConv) {
-      conversationId = existingConv.id;
-      await this.db
-        .update(conversations)
-        .set({ lastMessageAt: new Date(), status: 'open', updatedAt: new Date() })
-        .where(eq(conversations.id, conversationId));
-    } else {
-      const [newConv] = await this.db
-        .insert(conversations)
-        .values({
-          tenantId,
-          contactId,
-          channel: 'whatsapp',
-          channelConversationId: normalizedPhone,
-          status: 'open',
-          lastMessageAt: new Date(),
-        })
-        .returning();
-      conversationId = newConv!.id;
-    }
-
-    // ── Insert inbound message into messages table ──
-    await this.db.insert(messages).values({
-      conversationId,
-      tenantId,
-      direction: 'inbound',
-      status: 'delivered',
-      providerMessageId: message.id,
-      content,
-      isAiGenerated: false,
+      return { conversationId, contactId, aiPausedAt, contactBlocked: contact?.isBlocked ?? false };
     });
 
-    // ── Update whatsapp_message_logs with conversationId + contactId ──
-    await this.db
-      .update(whatsappMessageLogs)
-      .set({ conversationId, contactId })
-      .where(eq(whatsappMessageLogs.idempotencyKey, message.id));
+    if (!recorded) {
+      this.logger.log(`Duplicate webhook delivery ignored (message ${message.id})`);
+      return;
+    }
+
+    this.logger.log(`Inbound message from ${normalizedPhone} (${message.type})`);
+    const { conversationId, contactId, aiPausedAt, contactBlocked } = recorded;
 
     // ── Opt-out handling: STOP keywords trigger suppression + confirmation ──
     if (message.type === 'text' && message.text?.body && isOptOutMessage(message.text.body)) {
@@ -896,32 +1041,40 @@ export class WhatsappService {
       return;
     }
 
-    // ── Trigger AI response if conversation is not paused ──
-    const conv =
-      existingConv ??
-      (await this.db
-        .select()
-        .from(conversations)
-        .where(eq(conversations.id, conversationId))
-        .limit(1)
-        .then((r) => r[0]));
-
-    if (conv?.aiPausedAt) {
+    if (aiPausedAt) {
       this.logger.log(`AI is paused for conversation ${conversationId}, skipping response`);
+      return;
+    }
+    if (contactBlocked) {
+      this.logger.log(`Contact ${contactId} is blocked, skipping AI response`);
       return;
     }
 
     // Only respond to text messages
     if (message.type !== 'text' || !message.text?.body) return;
 
-    void this.triggerAiResponse(
-      account,
-      conversationId,
-      contactId,
-      normalizedPhone,
-      message.text.body,
-      tenantId,
+    this.trackAiRun(
+      this.triggerAiResponse(
+        account,
+        conversationId,
+        contactId,
+        normalizedPhone,
+        message.text.body,
+        message.id,
+      ),
     );
+  }
+
+  /** The AI turn runs after the webhook has been acknowledged; tests/shutdown can await it. */
+  private readonly aiRuns = new Set<Promise<void>>();
+
+  private trackAiRun(run: Promise<void>): void {
+    this.aiRuns.add(run);
+    void run.finally(() => this.aiRuns.delete(run));
+  }
+
+  async whenAiIdle(): Promise<void> {
+    await Promise.allSettled([...this.aiRuns]);
   }
 
   private async handleOptOut(
@@ -987,11 +1140,12 @@ export class WhatsappService {
   }
 
   private async findOrCreateContact(
+    db: Pick<DrizzleDB, 'select' | 'insert'>,
     tenantId: string,
     normalizedPhone: string,
     waContact: WaContact | undefined,
   ): Promise<string> {
-    const [identity] = await this.db
+    const [identity] = await db
       .select({ contactId: contactIdentities.contactId })
       .from(contactIdentities)
       .where(
@@ -1008,7 +1162,7 @@ export class WhatsappService {
     const name = waContact?.profile?.name ?? '';
     const [firstName, ...rest] = name.split(' ');
 
-    const [newContact] = await this.db
+    const [newContact] = await db
       .insert(contacts)
       .values({
         tenantId,
@@ -1018,7 +1172,7 @@ export class WhatsappService {
       })
       .returning();
 
-    await this.db.insert(contactIdentities).values({
+    await db.insert(contactIdentities).values({
       contactId: newContact!.id,
       tenantId,
       channel: 'whatsapp',
@@ -1030,32 +1184,91 @@ export class WhatsappService {
     return newContact!.id;
   }
 
+  /** Last turns of this conversation (tenant-scoped), oldest first, excluding the new message. */
+  private async loadConversationHistory(
+    tenantId: string,
+    conversationId: string,
+    excludeProviderMessageId: string,
+  ): Promise<Array<{ role: 'user' | 'assistant'; content: string }>> {
+    const rows = await this.db
+      .select({
+        direction: messages.direction,
+        content: messages.content,
+        providerMessageId: messages.providerMessageId,
+      })
+      .from(messages)
+      .where(and(eq(messages.tenantId, tenantId), eq(messages.conversationId, conversationId)))
+      .orderBy(desc(messages.createdAt))
+      .limit(14);
+
+    const history = rows
+      .filter((m) => m.providerMessageId !== excludeProviderMessageId)
+      .reverse()
+      .map((m) => ({
+        role: (m.direction === 'inbound' ? 'user' : 'assistant') as 'user' | 'assistant',
+        content: String((m.content as { text?: string } | null)?.text ?? '').slice(0, 2000),
+      }))
+      .filter((m) => m.content.length > 0);
+
+    while (history.length > 0 && history[0]!.role !== 'user') history.shift();
+    return history;
+  }
+
   private async triggerAiResponse(
     account: WhatsappAccount,
     conversationId: string,
     contactId: string,
     to: string,
     userMessage: string,
-    tenantId: string,
+    inboundProviderMessageId: string,
   ): Promise<void> {
-    // Find active agent for tenant
+    const tenantId = account.tenantId;
+
+    if (account.status !== 'connected') {
+      this.logger.warn(`Account ${account.id} is ${account.status}; AI reply skipped`);
+      return;
+    }
+
+    // Only the agent explicitly assigned to THIS channel may answer, and only if published.
+    if (!account.agentId) {
+      this.logger.log(`No agent assigned to WhatsApp account ${account.id}, skipping AI response`);
+      return;
+    }
     const [agent] = await this.db
       .select({ id: agents.id })
       .from(agents)
       .where(
-        and(eq(agents.tenantId, tenantId), isNull(agents.deletedAt), ne(agents.status, 'archived')),
+        and(
+          eq(agents.id, account.agentId),
+          eq(agents.tenantId, tenantId),
+          eq(agents.status, 'published'),
+          isNull(agents.deletedAt),
+        ),
       )
       .limit(1);
 
     if (!agent) {
-      this.logger.log(`No active agent found for tenant ${tenantId}, skipping AI response`);
+      this.logger.warn(`Agent ${account.agentId} of account ${account.id} is not published`);
       return;
     }
 
     try {
-      const result = await this.labService.chat(
-        { agentId: agent.id, message: userMessage },
+      const ctx = createExecutionContext({
         tenantId,
+        agentId: agent.id,
+        channel: 'whatsapp',
+        source: 'external_contact',
+        conversationId,
+        contactId,
+      });
+      const history = await this.loadConversationHistory(
+        tenantId,
+        conversationId,
+        inboundProviderMessageId,
+      );
+      const result = await this.labService.chat(
+        { agentId: agent.id, message: userMessage, history },
+        ctx,
       );
 
       if (!result.reply) return;
@@ -1068,6 +1281,7 @@ export class WhatsappService {
         contactId,
         agent.id,
         result.traceId,
+        inboundProviderMessageId,
       );
 
       this.logger.log(
@@ -1079,27 +1293,75 @@ export class WhatsappService {
     }
   }
 
-  private async processStatusUpdate(status: WaStatusUpdate): Promise<void> {
-    const updateData: Record<string, unknown> = {};
+  private async processStatusUpdate(
+    account: WhatsappAccount,
+    status: WaStatusUpdate,
+  ): Promise<void> {
+    if (!status.status || !status.id) return;
+    if (!['sent', 'delivered', 'read', 'failed'].includes(status.status)) return;
 
-    if (status.status === 'sent') updateData['sentAt'] = new Date(Number(status.timestamp) * 1000);
-    else if (status.status === 'delivered')
-      updateData['deliveredAt'] = new Date(Number(status.timestamp) * 1000);
-    else if (status.status === 'read')
-      updateData['readAt'] = new Date(Number(status.timestamp) * 1000);
-    else if (status.status === 'failed') {
-      updateData['failedAt'] = new Date();
-      updateData['errorCode'] = status.errors?.[0]?.code?.toString() ?? '';
-      updateData['errorMessage'] = status.errors?.[0]?.title ?? '';
-    }
+    const next = status.status as 'sent' | 'delivered' | 'read' | 'failed';
+    const when = new Date(Number(status.timestamp) * 1000);
+    const at = Number.isNaN(when.getTime()) ? new Date() : when;
 
-    if (!status.status) return;
+    // A status may only move forward (a late "delivered" never downgrades "read").
+    const movesFrom: Record<typeof next, Array<'pending' | 'sent' | 'delivered' | 'read'>> = {
+      sent: ['pending'],
+      delivered: ['pending', 'sent'],
+      read: ['pending', 'sent', 'delivered'],
+      failed: ['pending', 'sent'],
+    };
 
-    const safeStatus = status.status as 'pending' | 'sent' | 'delivered' | 'read' | 'failed';
+    const timestamps =
+      next === 'sent'
+        ? { sentAt: at }
+        : next === 'delivered'
+          ? { deliveredAt: at }
+          : next === 'read'
+            ? { readAt: at }
+            : {
+                failedAt: new Date(),
+                errorCode: status.errors?.[0]?.code?.toString() ?? '',
+                errorMessage: status.errors?.[0]?.title ?? '',
+              };
+
+    // Scoped to the account (and therefore tenant) that received the event.
     await this.db
       .update(whatsappMessageLogs)
-      .set({ status: safeStatus, ...(updateData as Record<string, Date | string | null>) })
-      .where(eq(whatsappMessageLogs.providerMessageId, status.id));
+      .set({ status: next, ...timestamps })
+      .where(
+        and(
+          eq(whatsappMessageLogs.tenantId, account.tenantId),
+          eq(whatsappMessageLogs.accountId, account.id),
+          eq(whatsappMessageLogs.providerMessageId, status.id),
+          eq(whatsappMessageLogs.direction, 'outbound'),
+          inArray(whatsappMessageLogs.status, movesFrom[next]),
+        ),
+      );
+
+    // Mirror the delivery state into the inbox message so agents see real ticks.
+    const messageTimestamps =
+      next === 'sent'
+        ? { sentAt: at }
+        : next === 'delivered'
+          ? { deliveredAt: at }
+          : next === 'read'
+            ? { readAt: at }
+            : {
+                failedAt: new Date(),
+                failureReason: status.errors?.[0]?.title ?? 'Delivery failed',
+              };
+    await this.db
+      .update(messages)
+      .set({ status: next, ...messageTimestamps })
+      .where(
+        and(
+          eq(messages.tenantId, account.tenantId),
+          eq(messages.providerMessageId, status.id),
+          eq(messages.direction, 'outbound'),
+          inArray(messages.status, movesFrom[next]),
+        ),
+      );
   }
 
   // ─── Templates ───────────────────────────────────────────────────────────────
@@ -1111,7 +1373,7 @@ export class WhatsappService {
       .where(and(eq(whatsappAccounts.id, accountId), eq(whatsappAccounts.tenantId, tenantId)))
       .limit(1);
 
-    if (!account) return;
+    if (!account) throw new NotFoundException('WhatsApp account not found');
 
     const plainToken = this.decryptToken(account);
 
@@ -1139,7 +1401,7 @@ export class WhatsappService {
             components: tpl.components ?? [],
           })
           .onConflictDoUpdate({
-            target: whatsappTemplates.accountId,
+            target: [whatsappTemplates.accountId, whatsappTemplates.templateId],
             set: { status: tpl.status, components: tpl.components ?? [], updatedAt: new Date() },
           });
       }
@@ -1147,7 +1409,7 @@ export class WhatsappService {
       await this.db
         .update(whatsappAccounts)
         .set({ lastSyncedAt: new Date() })
-        .where(eq(whatsappAccounts.id, accountId));
+        .where(and(eq(whatsappAccounts.id, accountId), eq(whatsappAccounts.tenantId, tenantId)));
 
       this.logger.log(`Synced ${templates.length} templates for account ${accountId}`);
     } catch (err) {
@@ -1156,6 +1418,7 @@ export class WhatsappService {
   }
 
   async listTemplates(tenantId: string, accountId: string) {
+    await this.getAccount(tenantId, accountId);
     return this.db
       .select()
       .from(whatsappTemplates)
@@ -1165,6 +1428,7 @@ export class WhatsappService {
   }
 
   async getStats(tenantId: string, accountId: string) {
+    await this.getAccount(tenantId, accountId);
     const logs = await this.db
       .select()
       .from(whatsappMessageLogs)

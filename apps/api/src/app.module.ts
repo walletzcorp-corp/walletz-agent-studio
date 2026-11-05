@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
+import { AccessPolicyGuard } from './shared/rbac/access-policy.guard';
+import { TenancyModule } from './shared/tenancy/tenancy.module';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { ScheduleModule } from '@nestjs/schedule';
@@ -41,6 +43,11 @@ import { anthropicConfig } from './config/anthropic.config';
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
+    },
+    // Deny-by-default access policy: runs after throttling, before every handler.
+    {
+      provide: APP_GUARD,
+      useClass: AccessPolicyGuard,
     },
   ],
   imports: [
@@ -84,6 +91,7 @@ import { anthropicConfig } from './config/anthropic.config';
     AuditModule,
     CryptoModule,
     RbacModule,
+    TenancyModule,
     OutboxModule,
     HealthModule,
     AuthModule,

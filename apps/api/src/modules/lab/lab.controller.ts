@@ -1,14 +1,13 @@
-import { Controller, Post, Body, Param, UseGuards, HttpCode } from '@nestjs/common';
+import { Controller, Post, Body, HttpCode } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RbacGuard } from '../../shared/rbac/rbac.guard';
 import { Roles } from '../../shared/rbac/roles.decorator';
 import { LabService } from './lab.service';
 import { LabChatDto } from './dto/chat.dto';
+import { CurrentTenant, type TenantContext } from '../../shared/rbac/tenant-context';
+import { createExecutionContext } from '../agents/execution-context';
 
 @ApiTags('lab')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RbacGuard)
 @Controller('tenants/:tenantId/lab')
 export class LabController {
   constructor(private readonly labService: LabService) {}
@@ -17,10 +16,15 @@ export class LabController {
   @Roles('manager')
   @HttpCode(200)
   @ApiOperation({ summary: 'Test agent in the lab with RAG' })
-  chat(@Param('tenantId') tenantId: string, @Body() dto: LabChatDto) {
-    return this.labService.chat(dto, tenantId, {
-      conversationId: dto.conversationId,
-      contactId: dto.contactId,
+  chat(@CurrentTenant() tenant: TenantContext, @Body() dto: LabChatDto) {
+    // The execution context is built here from the verified TenantContext, never from the body.
+    const ctx = createExecutionContext({
+      tenantId: tenant.tenantId,
+      agentId: dto.agentId,
+      channel: 'lab',
+      source: 'internal_user',
+      userId: tenant.userId,
     });
+    return this.labService.chat(dto, ctx);
   }
 }

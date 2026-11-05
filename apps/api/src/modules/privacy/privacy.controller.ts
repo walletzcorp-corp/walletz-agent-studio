@@ -1,21 +1,10 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Delete,
-  Param,
-  Body,
-  Query,
-  UseGuards,
-  HttpCode,
-} from '@nestjs/common';
+import { Controller, Get, Post, Delete, Param, Body, Query, HttpCode } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { IsString, IsNotEmpty, IsOptional } from 'class-validator';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RbacGuard } from '../../shared/rbac/rbac.guard';
 import { Roles } from '../../shared/rbac/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { PrivacyService } from './privacy.service';
+import { CurrentTenant } from '../../shared/rbac/tenant-context';
 
 class RevokeConsentDto {
   @IsString() @IsNotEmpty() channel!: string;
@@ -28,7 +17,6 @@ class AnonymizeDto {
 
 @ApiTags('privacy')
 @Controller()
-@UseGuards(JwtAuthGuard, RbacGuard)
 @ApiBearerAuth()
 export class PrivacyController {
   constructor(private readonly privacyService: PrivacyService) {}
@@ -39,7 +27,7 @@ export class PrivacyController {
   @Roles('admin', 'owner')
   @ApiOperation({ summary: 'LGPD Art. 18 I — Export all data for a data subject' })
   exportContactData(
-    @Param('tenantId') tenantId: string,
+    @CurrentTenant('tenantId') tenantId: string,
     @Param('contactId') contactId: string,
     @CurrentUser('userId') userId: string,
   ) {
@@ -53,7 +41,7 @@ export class PrivacyController {
   @HttpCode(200)
   @ApiOperation({ summary: 'LGPD Art. 18 VI — Anonymize contact (right to erasure)' })
   anonymizeContact(
-    @Param('tenantId') tenantId: string,
+    @CurrentTenant('tenantId') tenantId: string,
     @Param('contactId') contactId: string,
     @Body() dto: AnonymizeDto,
     @CurrentUser('userId') userId: string,
@@ -72,7 +60,7 @@ export class PrivacyController {
   @Roles('viewer')
   @ApiOperation({ summary: 'List all consent records for tenant' })
   listConsents(
-    @Param('tenantId') tenantId: string,
+    @CurrentTenant('tenantId') tenantId: string,
     @Query('channel') channel?: string,
     @Query('status') status?: string,
     @Query('limit') limit?: string,
@@ -93,7 +81,7 @@ export class PrivacyController {
   @HttpCode(204)
   @ApiOperation({ summary: 'LGPD Art. 15 I — Revoke consent for a data subject' })
   async revokeConsent(
-    @Param('tenantId') tenantId: string,
+    @CurrentTenant('tenantId') tenantId: string,
     @Param('contactId') contactId: string,
     @Body() dto: RevokeConsentDto,
     @CurrentUser('userId') userId: string,
