@@ -132,8 +132,7 @@ jobs:
       - name: Surface failure details (Unit test failures)
         if: failure()
         run: |
-          grep -E "●|✕|Expected|Received|Error|FAIL|rror:" test.log | head -n 40 | sed -e 's/%/%25/g' -e ':a;N;$!ba;s/
-/%0A/g' | xargs -0 -I{} echo "::error title=Unit test failures::{}"
+          grep -E "●|✕|Expected|Received|Error|FAIL|rror:" test.log | head -n 40 | sed -e 's/%/%25/g' -e ':a;N;$!ba;s/\n/%0A/g' | xargs -0 -I{} echo "::error title=Unit test failures::{}"
 
       - name: Upload coverage
         uses: actions/upload-artifact@v4
@@ -261,8 +260,7 @@ jobs:
       - name: Surface failure details (Security suite failures)
         if: failure()
         run: |
-          grep -E "●|✕|Expected|Received|Error|FAIL|rror:" security.log | head -n 40 | sed -e 's/%/%25/g' -e ':a;N;$!ba;s/
-/%0A/g' | xargs -0 -I{} echo "::error title=Security suite failures::{}"
+          grep -E "●|✕|Expected|Received|Error|FAIL|rror:" security.log | head -n 40 | sed -e 's/%/%25/g' -e ':a;N;$!ba;s/\n/%0A/g' | xargs -0 -I{} echo "::error title=Security suite failures::{}"
 
       - name: Upload isolation matrix
         uses: actions/upload-artifact@v4
