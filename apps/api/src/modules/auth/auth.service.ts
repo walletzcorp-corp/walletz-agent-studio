@@ -103,7 +103,7 @@ export class AuthService {
     dto: LoginDto,
     ipAddress?: string,
     userAgent?: string,
-  ): Promise<AuthTokens & { requiresMfa?: boolean; mfaToken?: string }> {
+  ): Promise<AuthTokens & { sessionId?: string; requiresMfa?: boolean; mfaToken?: string }> {
     const user = await this.usersService.findByEmail(dto.email);
 
     if (!user || !user.passwordHash) {
@@ -156,7 +156,7 @@ export class AuthService {
       userAgent,
     });
 
-    return tokens;
+    return { ...tokens, sessionId: session.id };
   }
 
   async forgotPassword(dto: ForgotPasswordDto, ipAddress?: string): Promise<void> {
