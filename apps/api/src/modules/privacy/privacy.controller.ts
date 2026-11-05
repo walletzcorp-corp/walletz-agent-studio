@@ -1,6 +1,13 @@
 import {
-  Controller, Get, Post, Delete, Param, Body, Query,
-  UseGuards, HttpCode,
+  Controller,
+  Get,
+  Post,
+  Delete,
+  Param,
+  Body,
+  Query,
+  UseGuards,
+  HttpCode,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { IsString, IsNotEmpty, IsOptional } from 'class-validator';
@@ -51,7 +58,12 @@ export class PrivacyController {
     @Body() dto: AnonymizeDto,
     @CurrentUser('userId') userId: string,
   ) {
-    return this.privacyService.anonymizeContact(tenantId, contactId, userId, dto.reason ?? 'user_request');
+    return this.privacyService.anonymizeContact(
+      tenantId,
+      contactId,
+      userId,
+      dto.reason ?? 'user_request',
+    );
   }
 
   // ─── LGPD — Consentimentos ────────────────────────────────────────────────

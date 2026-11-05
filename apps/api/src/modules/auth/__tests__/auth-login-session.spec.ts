@@ -5,7 +5,9 @@ import { AuthService } from '../auth.service';
 async function build() {
   const passwordHash = await bcrypt.hash('Correct-Horse-9!', 4);
   const usersService = {
-    findByEmail: jest.fn().mockResolvedValue({ id: 'user-1', email: 'a@b.com', passwordHash, mfaEnabledAt: null }),
+    findByEmail: jest
+      .fn()
+      .mockResolvedValue({ id: 'user-1', email: 'a@b.com', passwordHash, mfaEnabledAt: null }),
   };
   const jwtService = { signAsync: jest.fn().mockResolvedValue('signed.jwt') };
   const configService = {
@@ -47,7 +49,9 @@ describe('AuthService.login', () => {
   it('rejects a wrong password without creating a session', async () => {
     const { service, sessionService } = await build();
 
-    await expect(service.login({ email: 'a@b.com', password: 'wrong' })).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(service.login({ email: 'a@b.com', password: 'wrong' })).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
 
     expect(sessionService.create).not.toHaveBeenCalled();
   });

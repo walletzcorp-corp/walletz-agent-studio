@@ -1,9 +1,4 @@
-import {
-  Injectable,
-  Inject,
-  NotFoundException,
-  BadRequestException,
-} from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, BadRequestException } from '@nestjs/common';
 import { eq, and, isNull, desc } from 'drizzle-orm';
 import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';
 import {
@@ -177,7 +172,11 @@ export class AgentsService {
       .where(and(eq(agents.id, id), eq(agents.tenantId, tenantId)));
 
     await this.auditService.log({
-      userId, tenantId, action: 'agent.paused', resourceType: 'agent', resourceId: id,
+      userId,
+      tenantId,
+      action: 'agent.paused',
+      resourceType: 'agent',
+      resourceId: id,
     });
   }
 
@@ -192,7 +191,11 @@ export class AgentsService {
       .where(and(eq(agents.id, id), eq(agents.tenantId, tenantId)));
 
     await this.auditService.log({
-      userId, tenantId, action: 'agent.resumed', resourceType: 'agent', resourceId: id,
+      userId,
+      tenantId,
+      action: 'agent.resumed',
+      resourceType: 'agent',
+      resourceId: id,
     });
   }
 
@@ -204,7 +207,11 @@ export class AgentsService {
       .where(and(eq(agents.id, id), eq(agents.tenantId, tenantId)));
 
     await this.auditService.log({
-      userId, tenantId, action: 'agent.deleted', resourceType: 'agent', resourceId: id,
+      userId,
+      tenantId,
+      action: 'agent.deleted',
+      resourceType: 'agent',
+      resourceId: id,
     });
   }
 
@@ -217,7 +224,12 @@ export class AgentsService {
       .orderBy(desc(agentReleases.version));
   }
 
-  async rollbackToRelease(agentId: string, releaseId: string, tenantId: string, userId: string): Promise<void> {
+  async rollbackToRelease(
+    agentId: string,
+    releaseId: string,
+    tenantId: string,
+    userId: string,
+  ): Promise<void> {
     const agent = await this.findById(agentId, tenantId);
 
     const [release] = await this.db
@@ -230,12 +242,15 @@ export class AgentsService {
 
     const config = release.config as Record<string, unknown>;
 
-    await this.db.update(agents).set({
-      ...config,
-      currentReleaseId: releaseId,
-      status: 'published',
-      updatedAt: new Date(),
-    }).where(eq(agents.id, agentId));
+    await this.db
+      .update(agents)
+      .set({
+        ...config,
+        currentReleaseId: releaseId,
+        status: 'published',
+        updatedAt: new Date(),
+      })
+      .where(eq(agents.id, agentId));
 
     // Mark current release as rolled back
     if (agent.currentReleaseId && agent.currentReleaseId !== releaseId) {
@@ -246,8 +261,11 @@ export class AgentsService {
     }
 
     await this.auditService.log({
-      userId, tenantId, action: 'agent.rolled_back',
-      resourceType: 'agent', resourceId: agentId,
+      userId,
+      tenantId,
+      action: 'agent.rolled_back',
+      resourceType: 'agent',
+      resourceId: agentId,
       newState: { targetReleaseId: releaseId, targetVersion: release.version },
     });
   }
@@ -257,7 +275,9 @@ export class AgentsService {
     return this.db
       .select()
       .from(agentToolPermissions)
-      .where(and(eq(agentToolPermissions.agentId, agentId), eq(agentToolPermissions.tenantId, tenantId)));
+      .where(
+        and(eq(agentToolPermissions.agentId, agentId), eq(agentToolPermissions.tenantId, tenantId)),
+      );
   }
 
   async setToolPermission(
@@ -271,10 +291,12 @@ export class AgentsService {
     const [existing] = await this.db
       .select()
       .from(agentToolPermissions)
-      .where(and(
-        eq(agentToolPermissions.agentId, agentId),
-        eq(agentToolPermissions.toolName, dto.toolName),
-      ))
+      .where(
+        and(
+          eq(agentToolPermissions.agentId, agentId),
+          eq(agentToolPermissions.toolName, dto.toolName),
+        ),
+      )
       .limit(1);
 
     let permission: AgentToolPermission;
@@ -302,8 +324,11 @@ export class AgentsService {
     }
 
     await this.auditService.log({
-      userId, tenantId, action: 'agent.tool_permission_updated',
-      resourceType: 'agent', resourceId: agentId,
+      userId,
+      tenantId,
+      action: 'agent.tool_permission_updated',
+      resourceType: 'agent',
+      resourceId: agentId,
       newState: { tool: dto.toolName, allowed: dto.allowed },
     });
 

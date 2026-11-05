@@ -6,9 +6,22 @@ import { useAuth } from '../../../hooks/use-auth';
 import { agentsApi, type Agent } from '../../../lib/agents-api';
 import { Button, Skeleton } from '@walletz/ui';
 import {
-  Plus, Bot, Settings, Play, Pause, ChevronRight,
-  Radar, PhoneIncoming, PhoneOutgoing, Filter, Briefcase,
-  RefreshCw, UserCheck, Calendar, Heart, Star,
+  Plus,
+  Bot,
+  Settings,
+  Play,
+  Pause,
+  ChevronRight,
+  Radar,
+  PhoneIncoming,
+  PhoneOutgoing,
+  Filter,
+  Briefcase,
+  RefreshCw,
+  UserCheck,
+  Calendar,
+  Heart,
+  Star,
 } from 'lucide-react';
 
 // ── Category config ───────────────────────────────────────────────────────────
@@ -32,14 +45,29 @@ const CATEGORIES: Category[] = [
   {
     id: 'COMERCIAL',
     label: 'Comercial',
-    templates: ['sdr', 'sdr_inbound', 'sdr_outbound', 'pre_qualifier', 'commercial', 'commercial_consultant', 'followup_commercial'],
+    templates: [
+      'sdr',
+      'sdr_inbound',
+      'sdr_outbound',
+      'pre_qualifier',
+      'commercial',
+      'commercial_consultant',
+      'followup_commercial',
+    ],
     color: 'text-[#F59E0B]',
     bgColor: 'bg-[#F59E0B]/10',
   },
   {
     id: 'ATENDIMENTO',
     label: 'Atendimento',
-    templates: ['reception', 'reception_scheduling', 'customer_service', 'customer_success_cs', 'faq', 'collection'],
+    templates: [
+      'reception',
+      'reception_scheduling',
+      'customer_service',
+      'customer_success_cs',
+      'faq',
+      'collection',
+    ],
     color: 'text-[#10B981]',
     bgColor: 'bg-[#10B981]/10',
   },
@@ -61,33 +89,36 @@ const CATEGORIES: Category[] = [
 
 // ── Template icons + labels ───────────────────────────────────────────────────
 
-const TEMPLATE_META: Record<string, { label: string; Icon: React.ComponentType<{ className?: string }> }> = {
-  radar_editais:        { label: 'Radar Editais',       Icon: Radar },
-  reception:            { label: 'Recepção',             Icon: PhoneIncoming },
-  reception_scheduling: { label: 'Recepção/Agenda',      Icon: PhoneIncoming },
-  sdr:                  { label: 'SDR',                  Icon: Star },
-  sdr_inbound:          { label: 'SDR Inbound',          Icon: PhoneIncoming },
-  sdr_outbound:         { label: 'SDR Outbound',         Icon: PhoneOutgoing },
-  pre_qualifier:        { label: 'Pré-Qualificador',     Icon: Filter },
-  commercial:           { label: 'Comercial',            Icon: Briefcase },
-  commercial_consultant:{ label: 'Consultor Comercial',  Icon: Briefcase },
-  followup_commercial:  { label: 'Follow-up',            Icon: RefreshCw },
-  customer_service:     { label: 'Atendimento',          Icon: UserCheck },
-  customer_success_cs:  { label: 'Customer Success',     Icon: Heart },
-  executive_assistant:  { label: 'Assistente Executivo', Icon: Bot },
-  agenda_ai:            { label: 'Agenda AI',            Icon: Calendar },
-  post_sale:            { label: 'Pós-venda',            Icon: Star },
-  faq:                  { label: 'FAQ',                  Icon: Bot },
-  collection:           { label: 'Cobrança',             Icon: Bot },
-  custom:               { label: 'Personalizado',        Icon: Bot },
+const TEMPLATE_META: Record<
+  string,
+  { label: string; Icon: React.ComponentType<{ className?: string }> }
+> = {
+  radar_editais: { label: 'Radar Editais', Icon: Radar },
+  reception: { label: 'Recepção', Icon: PhoneIncoming },
+  reception_scheduling: { label: 'Recepção/Agenda', Icon: PhoneIncoming },
+  sdr: { label: 'SDR', Icon: Star },
+  sdr_inbound: { label: 'SDR Inbound', Icon: PhoneIncoming },
+  sdr_outbound: { label: 'SDR Outbound', Icon: PhoneOutgoing },
+  pre_qualifier: { label: 'Pré-Qualificador', Icon: Filter },
+  commercial: { label: 'Comercial', Icon: Briefcase },
+  commercial_consultant: { label: 'Consultor Comercial', Icon: Briefcase },
+  followup_commercial: { label: 'Follow-up', Icon: RefreshCw },
+  customer_service: { label: 'Atendimento', Icon: UserCheck },
+  customer_success_cs: { label: 'Customer Success', Icon: Heart },
+  executive_assistant: { label: 'Assistente Executivo', Icon: Bot },
+  agenda_ai: { label: 'Agenda AI', Icon: Calendar },
+  post_sale: { label: 'Pós-venda', Icon: Star },
+  faq: { label: 'FAQ', Icon: Bot },
+  collection: { label: 'Cobrança', Icon: Bot },
+  custom: { label: 'Personalizado', Icon: Bot },
 };
 
 const STATUS_BADGE: Record<string, { label: string; className: string }> = {
-  draft:     { label: 'Rascunho',  className: 'bg-muted text-muted-foreground' },
-  testing:   { label: 'Em teste',  className: 'bg-yellow-100 text-yellow-700' },
-  published: { label: 'Ativo',     className: 'bg-green-100 text-green-700' },
-  paused:    { label: 'Pausado',   className: 'bg-gray-100 text-gray-600' },
-  archived:  { label: 'Arquivado', className: 'bg-red-100 text-red-700' },
+  draft: { label: 'Rascunho', className: 'bg-muted text-muted-foreground' },
+  testing: { label: 'Em teste', className: 'bg-yellow-100 text-yellow-700' },
+  published: { label: 'Ativo', className: 'bg-green-100 text-green-700' },
+  paused: { label: 'Pausado', className: 'bg-gray-100 text-gray-600' },
+  archived: { label: 'Arquivado', className: 'bg-red-100 text-red-700' },
 };
 
 // ── Page ─────────────────────────────────────────────────────────────────────
@@ -110,7 +141,9 @@ export default function AgentsPage() {
     }
   }, [tenantId]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   const handleToggle = async (agent: Agent) => {
     if (!tenantId) return;
@@ -121,18 +154,20 @@ export default function AgentsPage() {
         await agentsApi.resume(tenantId, agent.id);
       }
       await load();
-    } catch { /* silent */ }
+    } catch {
+      /* silent */
+    }
   };
 
   // Group agents by category
-  const grouped = CATEGORIES.map(cat => ({
+  const grouped = CATEGORIES.map((cat) => ({
     category: cat,
-    agents: agents.filter(a => cat.templates.includes(a.template)),
-  })).filter(g => g.agents.length > 0);
+    agents: agents.filter((a) => cat.templates.includes(a.template)),
+  })).filter((g) => g.agents.length > 0);
 
   // Stats
-  const totalActive = agents.filter(a => a.status === 'published').length;
-  const totalTesting = agents.filter(a => a.status === 'testing').length;
+  const totalActive = agents.filter((a) => a.status === 'published').length;
+  const totalTesting = agents.filter((a) => a.status === 'testing').length;
 
   return (
     <div className="page-container space-y-8">
@@ -141,7 +176,9 @@ export default function AgentsPage() {
         <div>
           <h1 className="text-2xl font-display font-bold text-foreground">Meus Agentes</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            {loading ? '…' : `${agents.length} agentes • ${totalActive} ativos • ${totalTesting} em teste`}
+            {loading
+              ? '…'
+              : `${agents.length} agentes • ${totalActive} ativos • ${totalTesting} em teste`}
           </p>
         </div>
         <Link href="/agentes/novo">
@@ -158,11 +195,13 @@ export default function AgentsPage() {
 
       {loading ? (
         <div className="space-y-8">
-          {[1, 2].map(i => (
+          {[1, 2].map((i) => (
             <div key={i} className="space-y-3">
               <Skeleton className="h-5 w-32" />
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {[1, 2, 3].map(j => <Skeleton key={j} className="h-44" />)}
+                {[1, 2, 3].map((j) => (
+                  <Skeleton key={j} className="h-44" />
+                ))}
               </div>
             </div>
           ))}
@@ -237,24 +276,28 @@ function AgentCard({
       {/* Top row */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-3 min-w-0">
-          <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${category.bgColor}`}>
+          <div
+            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${category.bgColor}`}
+          >
             <Icon className={`h-5 w-5 ${category.color}`} />
           </div>
           <div className="min-w-0">
             <p className="font-semibold text-sm text-foreground truncate">{agent.name}</p>
-            {agent.title && (
-              <p className="text-xs text-muted-foreground truncate">{agent.title}</p>
-            )}
+            {agent.title && <p className="text-xs text-muted-foreground truncate">{agent.title}</p>}
           </div>
         </div>
-        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${statusInfo.className}`}>
+        <span
+          className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${statusInfo.className}`}
+        >
           {statusInfo.label}
         </span>
       </div>
 
       {/* Template badge */}
       <div className="flex items-center gap-2">
-        <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium border border-border ${category.color}`}>
+        <span
+          className={`rounded-full px-2 py-0.5 text-[10px] font-medium border border-border ${category.color}`}
+        >
           {meta.label}
         </span>
         <span className="text-[10px] text-muted-foreground">{agent.language ?? 'pt-BR'}</span>

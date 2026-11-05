@@ -59,10 +59,7 @@ export class SessionService {
   }
 
   async revoke(sessionId: string): Promise<void> {
-    await this.db
-      .update(sessions)
-      .set({ revokedAt: new Date() })
-      .where(eq(sessions.id, sessionId));
+    await this.db.update(sessions).set({ revokedAt: new Date() }).where(eq(sessions.id, sessionId));
   }
 
   async revokeAllForUser(userId: string): Promise<void> {

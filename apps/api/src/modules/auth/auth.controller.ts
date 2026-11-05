@@ -94,7 +94,11 @@ export class AuthController {
   @Throttle({ short: { limit: 5, ttl: 60000 } })
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Alterar senha' })
-  async changePassword(@CurrentUser() user: JwtPayload, @Body() dto: ChangePasswordDto, @Req() req: Request) {
+  async changePassword(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: ChangePasswordDto,
+    @Req() req: Request,
+  ) {
     await this.authService.changePassword(user.sub, dto, req.ip);
   }
 
@@ -113,7 +117,11 @@ export class AuthController {
   @Throttle({ short: { limit: 5, ttl: 60000 } })
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Confirmar configuração de MFA' })
-  async confirmMfa(@CurrentUser() user: JwtPayload, @Body() dto: VerifyMfaSetupDto, @Req() req: Request) {
+  async confirmMfa(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: VerifyMfaSetupDto,
+    @Req() req: Request,
+  ) {
     await this.authService.confirmMfaSetup(user.sub, dto, req.ip);
   }
 
@@ -123,7 +131,11 @@ export class AuthController {
   @Throttle({ short: { limit: 3, ttl: 60000 } })
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Desativar MFA' })
-  async disableMfa(@CurrentUser() user: JwtPayload, @Body() dto: DisableMfaDto, @Req() req: Request) {
+  async disableMfa(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: DisableMfaDto,
+    @Req() req: Request,
+  ) {
     await this.authService.disableMfa(user.sub, dto, req.ip);
   }
 

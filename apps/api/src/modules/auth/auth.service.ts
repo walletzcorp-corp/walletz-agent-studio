@@ -165,7 +165,11 @@ export class AuthService {
     if (!user) return;
 
     const token = randomBytes(32).toString('hex');
-    await this.usersService.setPasswordResetToken(user.id, token, new Date(Date.now() + PASSWORD_RESET_TTL_MS));
+    await this.usersService.setPasswordResetToken(
+      user.id,
+      token,
+      new Date(Date.now() + PASSWORD_RESET_TTL_MS),
+    );
 
     const baseUrl = this.configService.get<string>('APP_URL', 'http://localhost:3000');
     await this.mailService.sendPasswordReset(user.email, token, baseUrl);

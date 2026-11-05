@@ -15,7 +15,10 @@ export class TeachService {
     tenantId: string,
     filters?: { type?: string; agentId?: string; approved?: boolean },
   ) {
-    return this.repo.findByTenant(tenantId, filters as Parameters<TeachRepository['findByTenant']>[1]);
+    return this.repo.findByTenant(
+      tenantId,
+      filters as Parameters<TeachRepository['findByTenant']>[1],
+    );
   }
 
   async getItem(id: string, tenantId: string) {

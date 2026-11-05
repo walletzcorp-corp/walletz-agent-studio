@@ -14,12 +14,7 @@ export interface LabChatResponse {
 }
 
 export const labApi = {
-  chat: (
-    tenantId: string,
-    agentId: string,
-    message: string,
-    history?: ChatMessage[],
-  ) =>
+  chat: (tenantId: string, agentId: string, message: string, history?: ChatMessage[]) =>
     api.post<LabChatResponse>(`/tenants/${tenantId}/lab/chat`, {
       agentId,
       message,

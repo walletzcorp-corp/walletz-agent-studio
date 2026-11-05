@@ -3,19 +3,48 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../../hooks/use-auth';
 import { teachApi, type KnowledgeItem, type KnowledgeItemType } from '../../../lib/teach-api';
+import { Button, Card, CardContent, CardHeader, CardTitle, Skeleton } from '@walletz/ui';
 import {
-  Button, Card, CardContent, CardHeader, CardTitle, Skeleton,
-} from '@walletz/ui';
-import {
-  Plus, CheckCircle2, Clock, Pencil, Trash2, ShieldCheck, ShieldX, ChevronDown, ChevronUp,
+  Plus,
+  CheckCircle2,
+  Clock,
+  Pencil,
+  Trash2,
+  ShieldCheck,
+  ShieldX,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 
-const TYPE_CONFIG: Record<KnowledgeItemType, { label: string; color: string; description: string }> = {
-  fact: { label: 'Fato', color: 'bg-blue-100 text-blue-700', description: 'Informação objetiva sobre a empresa/produto' },
-  guidance: { label: 'Diretriz', color: 'bg-purple-100 text-purple-700', description: 'Como o agente deve se comportar' },
-  procedure: { label: 'Procedimento', color: 'bg-orange-100 text-orange-700', description: 'Passo a passo para tarefas específicas' },
-  permission: { label: 'Permissão', color: 'bg-green-100 text-green-700', description: 'O que o agente pode ou não pode fazer' },
-  example: { label: 'Exemplo', color: 'bg-gray-100 text-gray-700', description: 'Exemplos de respostas corretas' },
+const TYPE_CONFIG: Record<
+  KnowledgeItemType,
+  { label: string; color: string; description: string }
+> = {
+  fact: {
+    label: 'Fato',
+    color: 'bg-blue-100 text-blue-700',
+    description: 'Informação objetiva sobre a empresa/produto',
+  },
+  guidance: {
+    label: 'Diretriz',
+    color: 'bg-purple-100 text-purple-700',
+    description: 'Como o agente deve se comportar',
+  },
+  procedure: {
+    label: 'Procedimento',
+    color: 'bg-orange-100 text-orange-700',
+    description: 'Passo a passo para tarefas específicas',
+  },
+  permission: {
+    label: 'Permissão',
+    color: 'bg-green-100 text-green-700',
+    description: 'O que o agente pode ou não pode fazer',
+  },
+  example: {
+    label: 'Exemplo',
+    color: 'bg-gray-100 text-gray-700',
+    description: 'Exemplos de respostas corretas',
+  },
 };
 
 const TYPES: KnowledgeItemType[] = ['fact', 'guidance', 'procedure', 'permission', 'example'];
@@ -53,7 +82,9 @@ export default function TeachPage() {
     }
   };
 
-  useEffect(() => { void load(); }, [tenantId, filter]);
+  useEffect(() => {
+    void load();
+  }, [tenantId, filter]);
 
   const resetForm = () => {
     setFormType('fact');
@@ -104,7 +135,9 @@ export default function TeachPage() {
     try {
       await teachApi.approve(tenantId, itemId);
       await load();
-    } catch { /* silent */ }
+    } catch {
+      /* silent */
+    }
   };
 
   const handleRevoke = async (itemId: string) => {
@@ -112,7 +145,9 @@ export default function TeachPage() {
     try {
       await teachApi.revokeApproval(tenantId, itemId);
       await load();
-    } catch { /* silent */ }
+    } catch {
+      /* silent */
+    }
   };
 
   const handleDelete = async (itemId: string) => {
@@ -120,7 +155,9 @@ export default function TeachPage() {
     try {
       await teachApi.remove(tenantId, itemId);
       setItems((prev) => prev.filter((i) => i.id !== itemId));
-    } catch { /* silent */ }
+    } catch {
+      /* silent */
+    }
   };
 
   const toggleExpand = (id: string) => {
@@ -143,7 +180,12 @@ export default function TeachPage() {
             Ensine fatos, diretrizes e procedimentos aos seus agentes
           </p>
         </div>
-        <Button onClick={() => { setShowForm(true); setEditingId(null); }}>
+        <Button
+          onClick={() => {
+            setShowForm(true);
+            setEditingId(null);
+          }}
+        >
           <Plus className="h-4 w-4" />
           Ensinar novo
         </Button>
@@ -151,7 +193,8 @@ export default function TeachPage() {
 
       {pendingCount > 0 && isAdmin && (
         <div className="rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
-          <strong>{pendingCount}</strong> {pendingCount === 1 ? 'item aguarda' : 'itens aguardam'} aprovação para entrar em produção.
+          <strong>{pendingCount}</strong> {pendingCount === 1 ? 'item aguarda' : 'itens aguardam'}{' '}
+          aprovação para entrar em produção.
         </div>
       )}
 
@@ -177,10 +220,14 @@ export default function TeachPage() {
                       key={t}
                       onClick={() => setFormType(t)}
                       className={`rounded-lg border-2 p-3 text-left transition-all ${
-                        formType === t ? 'border-primary bg-primary/5' : 'border-border hover:border-muted-foreground'
+                        formType === t
+                          ? 'border-primary bg-primary/5'
+                          : 'border-border hover:border-muted-foreground'
                       }`}
                     >
-                      <span className={`inline-block rounded px-1.5 py-0.5 text-xs font-medium ${cfg.color}`}>
+                      <span
+                        className={`inline-block rounded px-1.5 py-0.5 text-xs font-medium ${cfg.color}`}
+                      >
                         {cfg.label}
                       </span>
                       <p className="mt-1.5 text-xs text-muted-foreground">{cfg.description}</p>
@@ -193,11 +240,15 @@ export default function TeachPage() {
             <textarea
               className="w-full min-h-28 rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-y"
               placeholder={
-                formType === 'fact' ? 'Ex: Nosso horário de funcionamento é de segunda a sábado, das 8h às 18h.' :
-                formType === 'guidance' ? 'Ex: Sempre cumprimente o cliente pelo nome quando disponível.' :
-                formType === 'procedure' ? 'Ex: Para cancelamento: 1) Verifique o pedido, 2) Confirme dados, 3) Processe o estorno.' :
-                formType === 'permission' ? 'Ex: O agente NÃO pode oferecer descontos acima de 10% sem aprovação do gerente.' :
-                'Ex: Cliente: "Posso parcelar?" Agente: "Sim! Parcelamos em até 12x no cartão sem juros."'
+                formType === 'fact'
+                  ? 'Ex: Nosso horário de funcionamento é de segunda a sábado, das 8h às 18h.'
+                  : formType === 'guidance'
+                    ? 'Ex: Sempre cumprimente o cliente pelo nome quando disponível.'
+                    : formType === 'procedure'
+                      ? 'Ex: Para cancelamento: 1) Verifique o pedido, 2) Confirme dados, 3) Processe o estorno.'
+                      : formType === 'permission'
+                        ? 'Ex: O agente NÃO pode oferecer descontos acima de 10% sem aprovação do gerente.'
+                        : 'Ex: Cliente: "Posso parcelar?" Agente: "Sim! Parcelamos em até 12x no cartão sem juros."'
               }
               value={formContent}
               onChange={(e) => setFormContent(e.target.value)}
@@ -211,7 +262,9 @@ export default function TeachPage() {
             />
 
             <div className="flex gap-2 justify-end">
-              <Button variant="outline" onClick={resetForm}>Cancelar</Button>
+              <Button variant="outline" onClick={resetForm}>
+                Cancelar
+              </Button>
               <Button onClick={handleSubmit} disabled={submitting || !formContent.trim()}>
                 {submitting ? 'Salvando…' : editingId ? 'Atualizar' : 'Salvar'}
               </Button>
@@ -227,7 +280,9 @@ export default function TeachPage() {
             key={t}
             onClick={() => setFilter(t)}
             className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-              filter === t ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-accent'
+              filter === t
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-muted text-muted-foreground hover:bg-accent'
             }`}
           >
             {t === 'all' ? 'Todos' : TYPE_CONFIG[t].label}
@@ -238,7 +293,9 @@ export default function TeachPage() {
       {/* Items list */}
       {loading ? (
         <div className="space-y-3">
-          {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-20" />)}
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-20" />
+          ))}
         </div>
       ) : items.length === 0 ? (
         <Card>
@@ -258,7 +315,8 @@ export default function TeachPage() {
           {items.map((item) => {
             const cfg = TYPE_CONFIG[item.type];
             const isExpanded = expanded.has(item.id);
-            const contentShort = item.content.length > 120 ? item.content.slice(0, 120) + '…' : item.content;
+            const contentShort =
+              item.content.length > 120 ? item.content.slice(0, 120) + '…' : item.content;
             const needsTruncation = item.content.length > 120;
 
             return (
@@ -282,7 +340,9 @@ export default function TeachPage() {
                           </span>
                         )}
                         {item.context && (
-                          <span className="text-xs text-muted-foreground italic">· {item.context}</span>
+                          <span className="text-xs text-muted-foreground italic">
+                            · {item.context}
+                          </span>
                         )}
                       </div>
 
@@ -295,7 +355,15 @@ export default function TeachPage() {
                           onClick={() => toggleExpand(item.id)}
                           className="mt-1 flex items-center gap-1 text-xs text-primary hover:underline"
                         >
-                          {isExpanded ? <><ChevronUp className="h-3 w-3" /> Ver menos</> : <><ChevronDown className="h-3 w-3" /> Ver mais</>}
+                          {isExpanded ? (
+                            <>
+                              <ChevronUp className="h-3 w-3" /> Ver menos
+                            </>
+                          ) : (
+                            <>
+                              <ChevronDown className="h-3 w-3" /> Ver mais
+                            </>
+                          )}
                         </button>
                       )}
                     </div>
@@ -323,7 +391,12 @@ export default function TeachPage() {
                           <ShieldX className="h-4 w-4" />
                         </Button>
                       )}
-                      <Button variant="ghost" size="icon" title="Editar" onClick={() => handleEdit(item)}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        title="Editar"
+                        onClick={() => handleEdit(item)}
+                      >
                         <Pencil className="h-4 w-4" />
                       </Button>
                       <Button

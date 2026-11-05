@@ -2,19 +2,24 @@
 
 import { useState } from 'react';
 import {
-  CreditCard, 
-  MessageSquare, Calendar, CheckCircle2,
-  ChevronRight, Download,
-  Shield, Clock, DollarSign,
+  CreditCard,
+  MessageSquare,
+  Calendar,
+  CheckCircle2,
+  ChevronRight,
+  Download,
+  Shield,
+  Clock,
+  DollarSign,
 } from 'lucide-react';
 
 type BillingTab = 'overview' | 'plan' | 'invoices' | 'payment';
 
 const TABS: { id: BillingTab; label: string }[] = [
-  { id: 'overview',  label: 'Visão Geral' },
-  { id: 'plan',      label: 'Plano' },
-  { id: 'invoices',  label: 'Faturas' },
-  { id: 'payment',   label: 'Pagamento' },
+  { id: 'overview', label: 'Visão Geral' },
+  { id: 'plan', label: 'Plano' },
+  { id: 'invoices', label: 'Faturas' },
+  { id: 'payment', label: 'Pagamento' },
 ];
 
 const PLANS = [
@@ -23,7 +28,13 @@ const PLANS = [
     name: 'Starter',
     price: 'R$ 197',
     period: '/mês',
-    features: ['1 agente', '1.000 conversas/mês', '10 MB de conhecimento', 'WhatsApp (BYOC)', 'Suporte por e-mail'],
+    features: [
+      '1 agente',
+      '1.000 conversas/mês',
+      '10 MB de conhecimento',
+      'WhatsApp (BYOC)',
+      'Suporte por e-mail',
+    ],
     limits: { agents: 1, conversations: 1000, knowledge_mb: 10, users: 1 },
     current: false,
   },
@@ -32,7 +43,15 @@ const PLANS = [
     name: 'Professional',
     price: 'R$ 497',
     period: '/mês',
-    features: ['5 agentes', '10.000 conversas/mês', '500 MB de conhecimento', 'WhatsApp + Meta', 'Google/Microsoft Calendar', 'Suporte prioritário', 'Relatórios avançados'],
+    features: [
+      '5 agentes',
+      '10.000 conversas/mês',
+      '500 MB de conhecimento',
+      'WhatsApp + Meta',
+      'Google/Microsoft Calendar',
+      'Suporte prioritário',
+      'Relatórios avançados',
+    ],
     limits: { agents: 5, conversations: 10000, knowledge_mb: 500, users: 5 },
     current: true,
     popular: true,
@@ -42,7 +61,15 @@ const PLANS = [
     name: 'Business',
     price: 'R$ 1.197',
     period: '/mês',
-    features: ['Agentes ilimitados', '50.000 conversas/mês', '5 GB de conhecimento', 'Todos os canais', 'BYOK (chave própria de IA)', 'SLA dedicado', 'Onboarding personalizado'],
+    features: [
+      'Agentes ilimitados',
+      '50.000 conversas/mês',
+      '5 GB de conhecimento',
+      'Todos os canais',
+      'BYOK (chave própria de IA)',
+      'SLA dedicado',
+      'Onboarding personalizado',
+    ],
     limits: { agents: -1, conversations: 50000, knowledge_mb: 5120, users: -1 },
     current: false,
   },
@@ -61,7 +88,10 @@ function UsageBar({ value, max, label }: { value: number; max: number; label: st
         </span>
       </div>
       <div className="h-1.5 w-full rounded-full bg-surface-3 overflow-hidden">
-        <div className={`h-full rounded-full transition-all duration-500 ${color}`} style={{ width: `${pct}%` }} />
+        <div
+          className={`h-full rounded-full transition-all duration-500 ${color}`}
+          style={{ width: `${pct}%` }}
+        />
       </div>
     </div>
   );
@@ -69,13 +99,13 @@ function UsageBar({ value, max, label }: { value: number; max: number; label: st
 
 /* ── Overview Tab ── */
 function OverviewTab() {
-  const currentPlan = PLANS.find(p => p.current)!;
+  const currentPlan = PLANS.find((p) => p.current)!;
 
   const usage = [
-    { label: 'Agentes criados',        value: 2,   max: currentPlan.limits.agents },
-    { label: 'Conversas este mês',     value: 847, max: currentPlan.limits.conversations },
-    { label: 'Conhecimento (MB)',       value: 45,  max: currentPlan.limits.knowledge_mb },
-    { label: 'Usuários',               value: 2,   max: currentPlan.limits.users },
+    { label: 'Agentes criados', value: 2, max: currentPlan.limits.agents },
+    { label: 'Conversas este mês', value: 847, max: currentPlan.limits.conversations },
+    { label: 'Conhecimento (MB)', value: 45, max: currentPlan.limits.knowledge_mb },
+    { label: 'Usuários', value: 2, max: currentPlan.limits.users },
   ];
 
   return (
@@ -85,11 +115,18 @@ function OverviewTab() {
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <div className="flex items-center gap-2 mb-2">
-              <span className="text-sm font-display font-bold text-foreground">{currentPlan.name}</span>
-              <span className="badge-primary text-[11px] px-2 py-0.5 rounded-full font-medium">Plano atual</span>
+              <span className="text-sm font-display font-bold text-foreground">
+                {currentPlan.name}
+              </span>
+              <span className="badge-primary text-[11px] px-2 py-0.5 rounded-full font-medium">
+                Plano atual
+              </span>
             </div>
             <p className="text-2xl font-display font-bold text-foreground">
-              {currentPlan.price}<span className="text-sm text-muted-foreground font-normal">{currentPlan.period}</span>
+              {currentPlan.price}
+              <span className="text-sm text-muted-foreground font-normal">
+                {currentPlan.period}
+              </span>
             </p>
             <p className="text-xs text-muted-foreground mt-1">
               Próxima cobrança: <span className="text-foreground">1 Nov 2026</span>
@@ -107,7 +144,7 @@ function OverviewTab() {
       {/* Usage */}
       <div className="neural-card p-5 space-y-5">
         <h3 className="text-sm font-semibold text-foreground">Consumo do plano</h3>
-        {usage.map(u => (
+        {usage.map((u) => (
           <UsageBar key={u.label} {...u} />
         ))}
       </div>
@@ -115,11 +152,26 @@ function OverviewTab() {
       {/* Stats row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
-          { label: 'Valor próxima fatura',    value: 'R$ 497',    icon: DollarSign,  color: 'text-primary' },
-          { label: 'Ciclo de cobrança',       value: 'Mensal',    icon: Calendar,    color: 'text-neural-blue' },
-          { label: 'Conversas restantes',     value: '9.153',     icon: MessageSquare, color: 'text-neural-cyan' },
-          { label: 'Faturas pagas',           value: '3',         icon: CheckCircle2,  color: 'text-neural-success' },
-        ].map(stat => {
+          {
+            label: 'Valor próxima fatura',
+            value: 'R$ 497',
+            icon: DollarSign,
+            color: 'text-primary',
+          },
+          {
+            label: 'Ciclo de cobrança',
+            value: 'Mensal',
+            icon: Calendar,
+            color: 'text-neural-blue',
+          },
+          {
+            label: 'Conversas restantes',
+            value: '9.153',
+            icon: MessageSquare,
+            color: 'text-neural-cyan',
+          },
+          { label: 'Faturas pagas', value: '3', icon: CheckCircle2, color: 'text-neural-success' },
+        ].map((stat) => {
           const Icon = stat.icon;
           return (
             <div key={stat.label} className="stat-card">
@@ -158,7 +210,7 @@ function PlansTab() {
         Upgrade ou downgrade a qualquer momento. Mudanças são cobradas proporcionalmente.
       </p>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {PLANS.map(plan => (
+        {PLANS.map((plan) => (
           <div
             key={plan.id}
             className={`relative rounded-xl border p-6 flex flex-col gap-4 ${
@@ -180,7 +232,7 @@ function PlansTab() {
               </p>
             </div>
             <ul className="flex-1 space-y-2">
-              {plan.features.map(f => (
+              {plan.features.map((f) => (
                 <li key={f} className="flex items-start gap-2 text-sm text-muted-foreground">
                   <CheckCircle2 className="h-4 w-4 text-neural-success shrink-0 mt-0.5" />
                   {f}
@@ -213,10 +265,34 @@ function PlansTab() {
 /* ── Invoices Tab ── */
 function InvoicesTab() {
   const invoices = [
-    { id: 'INV-2026-10', period: 'Outubro 2026',   amount: 'R$ 497,00', status: 'pending',  date: '01/10/2026' },
-    { id: 'INV-2026-09', period: 'Setembro 2026',  amount: 'R$ 497,00', status: 'paid',     date: '01/09/2026' },
-    { id: 'INV-2026-08', period: 'Agosto 2026',    amount: 'R$ 497,00', status: 'paid',     date: '01/08/2026' },
-    { id: 'INV-2026-07', period: 'Julho 2026',     amount: 'R$ 497,00', status: 'paid',     date: '01/07/2026' },
+    {
+      id: 'INV-2026-10',
+      period: 'Outubro 2026',
+      amount: 'R$ 497,00',
+      status: 'pending',
+      date: '01/10/2026',
+    },
+    {
+      id: 'INV-2026-09',
+      period: 'Setembro 2026',
+      amount: 'R$ 497,00',
+      status: 'paid',
+      date: '01/09/2026',
+    },
+    {
+      id: 'INV-2026-08',
+      period: 'Agosto 2026',
+      amount: 'R$ 497,00',
+      status: 'paid',
+      date: '01/08/2026',
+    },
+    {
+      id: 'INV-2026-07',
+      period: 'Julho 2026',
+      amount: 'R$ 497,00',
+      status: 'paid',
+      date: '01/07/2026',
+    },
   ];
 
   return (
@@ -233,16 +309,22 @@ function InvoicesTab() {
           </tr>
         </thead>
         <tbody>
-          {invoices.map(inv => (
+          {invoices.map((inv) => (
             <tr key={inv.id}>
               <td className="font-mono text-sm text-foreground">{inv.id}</td>
               <td className="text-sm">{inv.period}</td>
               <td className="text-sm font-semibold text-foreground">{inv.amount}</td>
               <td>
-                <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium ${
-                  inv.status === 'paid' ? 'badge-success' : 'badge-warning'
-                }`}>
-                  {inv.status === 'paid' ? <CheckCircle2 className="h-2.5 w-2.5" /> : <Clock className="h-2.5 w-2.5" />}
+                <span
+                  className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium ${
+                    inv.status === 'paid' ? 'badge-success' : 'badge-warning'
+                  }`}
+                >
+                  {inv.status === 'paid' ? (
+                    <CheckCircle2 className="h-2.5 w-2.5" />
+                  ) : (
+                    <Clock className="h-2.5 w-2.5" />
+                  )}
                   {inv.status === 'paid' ? 'Pago' : 'Pendente'}
                 </span>
               </td>
@@ -290,8 +372,11 @@ function PaymentTab() {
           { label: 'Razão social', value: '—' },
           { label: 'E-mail fiscal', value: '—' },
           { label: 'Endereço', value: '—' },
-        ].map(f => (
-          <div key={f.label} className="flex items-center justify-between py-1.5 border-b border-border/40 last:border-0">
+        ].map((f) => (
+          <div
+            key={f.label}
+            className="flex items-center justify-between py-1.5 border-b border-border/40 last:border-0"
+          >
             <span className="text-sm text-muted-foreground">{f.label}</span>
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground italic">{f.value}</span>
@@ -317,9 +402,9 @@ export default function BillingPage() {
 
   const tabContent: Record<BillingTab, React.ReactNode> = {
     overview: <OverviewTab />,
-    plan:     <PlansTab />,
+    plan: <PlansTab />,
     invoices: <InvoicesTab />,
-    payment:  <PaymentTab />,
+    payment: <PaymentTab />,
   };
 
   return (
@@ -340,7 +425,7 @@ export default function BillingPage() {
 
       {/* Tabs */}
       <div className="flex gap-0 border-b border-border">
-        {TABS.map(t => (
+        {TABS.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}

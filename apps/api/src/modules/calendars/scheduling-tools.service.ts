@@ -19,9 +19,9 @@ export interface ToolContext {
 }
 
 export interface MeetingSlot {
-  start: string;   /* ISO 8601 */
-  end: string;     /* ISO 8601 */
-  label: string;   /* Human-readable, e.g. "amanhã às 14h" */
+  start: string /* ISO 8601 */;
+  end: string /* ISO 8601 */;
+  label: string /* Human-readable, e.g. "amanhã às 14h" */;
 }
 
 export interface CreateMeetingInput {
@@ -176,7 +176,9 @@ export class SchedulingToolsService {
         externalEventId = eventResult.id;
         externalMeetUrl = eventResult.meetUrl;
       } catch (err) {
-        this.logger.warn(`Provider event creation failed, saving locally: ${err instanceof Error ? err.message : err}`);
+        this.logger.warn(
+          `Provider event creation failed, saving locally: ${err instanceof Error ? err.message : err}`,
+        );
       }
     }
 
@@ -201,7 +203,9 @@ export class SchedulingToolsService {
         endAt,
         durationMinutes,
         timeZone,
-        attendees: input.contactEmail ? [{ email: input.contactEmail, name: input.contactName }] : [],
+        attendees: input.contactEmail
+          ? [{ email: input.contactEmail, name: input.contactName }]
+          : [],
       })
       .returning();
 
@@ -248,19 +252,13 @@ export class SchedulingToolsService {
       ctx.conversationId
         ? eq(calendarMeetings.conversationId, ctx.conversationId)
         : ctx.contactId
-        ? eq(calendarMeetings.contactId, ctx.contactId)
-        : undefined,
+          ? eq(calendarMeetings.contactId, ctx.contactId)
+          : undefined,
     );
 
-    const rows = await this.db
-      .select()
-      .from(calendarMeetings)
-      .where(whereBase)
-      .limit(10);
+    const rows = await this.db.select().from(calendarMeetings).where(whereBase).limit(10);
 
-    const filtered = statusFilter === 'all'
-      ? rows
-      : rows.filter((m) => m.status === statusFilter);
+    const filtered = statusFilter === 'all' ? rows : rows.filter((m) => m.status === statusFilter);
 
     return {
       meetings: filtered,
@@ -311,16 +309,22 @@ export class SchedulingToolsService {
   ): Promise<unknown> {
     switch (toolName) {
       case 'get_availability':
-        return this.getAvailability(ctx, typeof toolInput['days_ahead'] === 'number' ? toolInput['days_ahead'] : 7);
+        return this.getAvailability(
+          ctx,
+          typeof toolInput['days_ahead'] === 'number' ? toolInput['days_ahead'] : 7,
+        );
 
       case 'create_meeting':
         return this.createMeeting(ctx, {
           startAt: String(toolInput['start_at']),
           endAt: String(toolInput['end_at']),
           title: String(toolInput['title'] ?? 'Reunião'),
-          description: toolInput['description'] != null ? String(toolInput['description']) : undefined,
-          contactName: toolInput['contact_name'] != null ? String(toolInput['contact_name']) : undefined,
-          contactEmail: toolInput['contact_email'] != null ? String(toolInput['contact_email']) : undefined,
+          description:
+            toolInput['description'] != null ? String(toolInput['description']) : undefined,
+          contactName:
+            toolInput['contact_name'] != null ? String(toolInput['contact_name']) : undefined,
+          contactEmail:
+            toolInput['contact_email'] != null ? String(toolInput['contact_email']) : undefined,
           platform: toolInput['platform'] as CreateMeetingInput['platform'],
           timezone: toolInput['timezone'] != null ? String(toolInput['timezone']) : undefined,
         });
@@ -358,7 +362,12 @@ export class SchedulingToolsService {
     const [s] = await this.db
       .select()
       .from(agentCalendarSettings)
-      .where(and(eq(agentCalendarSettings.agentId, agentId), eq(agentCalendarSettings.tenantId, tenantId)))
+      .where(
+        and(
+          eq(agentCalendarSettings.agentId, agentId),
+          eq(agentCalendarSettings.tenantId, tenantId),
+        ),
+      )
       .limit(1);
     return s ?? null;
   }

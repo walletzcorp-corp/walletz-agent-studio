@@ -7,12 +7,7 @@ import { WhatsappController } from './whatsapp.controller';
 import { WhatsappService } from './whatsapp.service';
 
 @Module({
-  imports: [
-    HttpModule.register({ timeout: 15000 }),
-    RbacModule,
-    CryptoModule,
-    LabModule,
-  ],
+  imports: [HttpModule.register({ timeout: 15000 }), RbacModule, CryptoModule, LabModule],
   controllers: [WhatsappController],
   providers: [WhatsappService],
   exports: [WhatsappService],

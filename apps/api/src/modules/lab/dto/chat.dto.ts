@@ -1,4 +1,12 @@
-import { IsString, IsOptional, IsArray, ValidateNested, IsUUID, MaxLength, IsIn } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsArray,
+  ValidateNested,
+  IsUUID,
+  MaxLength,
+  IsIn,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 
@@ -36,7 +44,10 @@ export class LabChatDto {
   @IsString()
   conversationId?: string;
 
-  @ApiProperty({ required: false, description: 'ID do contato/lead (para atualizar status após agendar)' })
+  @ApiProperty({
+    required: false,
+    description: 'ID do contato/lead (para atualizar status após agendar)',
+  })
   @IsOptional()
   @IsString()
   contactId?: string;

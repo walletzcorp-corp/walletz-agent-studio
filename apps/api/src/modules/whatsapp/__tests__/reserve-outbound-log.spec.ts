@@ -5,11 +5,19 @@ type Reservation = { logId: string; deduplicated: boolean };
 
 function build(results: unknown[]) {
   const fake = createFakeDb(results);
-  const service = new WhatsappService(fake.db as never, {} as never, {} as never, {} as never, {} as never);
+  const service = new WhatsappService(
+    fake.db as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+  );
   const reserve = (key?: string) =>
-    (service as unknown as {
-      reserveOutboundLog(...args: unknown[]): Promise<Reservation>;
-    }).reserveOutboundLog('tenant-1', 'wa-1', '+5511999990001', 'text', { text: 'oi' }, key);
+    (
+      service as unknown as {
+        reserveOutboundLog(...args: unknown[]): Promise<Reservation>;
+      }
+    ).reserveOutboundLog('tenant-1', 'wa-1', '+5511999990001', 'text', { text: 'oi' }, key);
   return { fake, reserve };
 }
 
@@ -21,7 +29,11 @@ describe('WhatsappService.reserveOutboundLog', () => {
 
     expect(result.deduplicated).toBe(false);
     expect(fake.inserted).toEqual([
-      expect.objectContaining({ id: result.logId, status: 'pending', idempotencyKey: result.logId }),
+      expect.objectContaining({
+        id: result.logId,
+        status: 'pending',
+        idempotencyKey: result.logId,
+      }),
     ]);
   });
 
@@ -31,7 +43,9 @@ describe('WhatsappService.reserveOutboundLog', () => {
     const result = await reserve('inbox-1');
 
     expect(result.deduplicated).toBe(false);
-    expect(fake.inserted).toEqual([expect.objectContaining({ idempotencyKey: 'inbox-1', tenantId: 'tenant-1' })]);
+    expect(fake.inserted).toEqual([
+      expect.objectContaining({ idempotencyKey: 'inbox-1', tenantId: 'tenant-1' }),
+    ]);
   });
 
   it.each(['pending', 'sent', 'delivered', 'read'])(
@@ -51,6 +65,8 @@ describe('WhatsappService.reserveOutboundLog', () => {
     await expect(reserve('inbox-1')).resolves.toEqual({ logId: 'log-1', deduplicated: false });
 
     expect(fake.inserted).toEqual([]);
-    expect(fake.sets).toEqual([expect.objectContaining({ status: 'pending', errorMessage: null, failedAt: null })]);
+    expect(fake.sets).toEqual([
+      expect.objectContaining({ status: 'pending', errorMessage: null, failedAt: null }),
+    ]);
   });
 });

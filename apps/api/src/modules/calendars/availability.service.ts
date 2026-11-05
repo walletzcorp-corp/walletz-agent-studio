@@ -6,8 +6,8 @@ export interface TimeSlot {
 }
 
 export interface AvailabilityWindow {
-  start: string;  /* HH:mm */
-  end: string;    /* HH:mm */
+  start: string /* HH:mm */;
+  end: string /* HH:mm */;
   enabled: boolean;
 }
 
@@ -39,7 +39,7 @@ export class AvailabilityService {
     bufferMinutes: number,
     rangeStart: Date,
     rangeEnd: Date,
-    _timeZoneOffset = -3, /* UTC-3 default for BRT */
+    _timeZoneOffset = -3 /* UTC-3 default for BRT */,
   ): TimeSlot[] {
     const slotMs = durationMinutes * 60_000;
     const bufferMs = bufferMinutes * 60_000;
@@ -50,8 +50,7 @@ export class AvailabilityService {
     current.setHours(0, 0, 0, 0);
 
     while (current <= rangeEnd) {
-       
-      const dayKey = DAY_KEYS[current.getDay() as 0|1|2|3|4|5|6]!;
+      const dayKey = DAY_KEYS[current.getDay() as 0 | 1 | 2 | 3 | 4 | 5 | 6]!;
       const window = availableHours[dayKey];
 
       if (window?.enabled && window.start && window.end) {
@@ -78,18 +77,14 @@ export class AvailabilityService {
           const slotStart = new Date(cursor);
           const slotEnd = new Date(cursor + slotMs);
 
-          const isBusy = busyBlocks.some(
-            (b) => slotStart < b.end && slotEnd > b.start,
-          );
+          const isBusy = busyBlocks.some((b) => slotStart < b.end && slotEnd > b.start);
 
           if (!isBusy) {
             results.push({ start: slotStart, end: slotEnd });
             cursor += slotMs + bufferMs;
           } else {
             /* Jump past the conflicting block */
-            const conflict = busyBlocks.find(
-              (b) => slotStart < b.end && slotEnd > b.start,
-            );
+            const conflict = busyBlocks.find((b) => slotStart < b.end && slotEnd > b.start);
             cursor = conflict ? conflict.end.getTime() + bufferMs : cursor + 60_000;
           }
         }

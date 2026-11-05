@@ -45,8 +45,18 @@ describe('CampaignsService.launchCampaign', () => {
     expect(result.status).toBe('running');
     expect(fake.sets).toContainEqual(expect.objectContaining({ status: 'running' }));
     expect(fake.inserted).toEqual([
-      expect.objectContaining({ campaignId: 'camp-1', contactId: 'c1', phone: '+5511999990001', status: 'pending' }),
-      expect.objectContaining({ campaignId: 'camp-1', contactId: 'c2', phone: '+5511999990002', status: 'pending' }),
+      expect.objectContaining({
+        campaignId: 'camp-1',
+        contactId: 'c1',
+        phone: '+5511999990001',
+        status: 'pending',
+      }),
+      expect.objectContaining({
+        campaignId: 'camp-1',
+        contactId: 'c2',
+        phone: '+5511999990002',
+        status: 'pending',
+      }),
     ]);
     expect(queue.add).toHaveBeenCalledTimes(2);
     expect(queue.add).toHaveBeenNthCalledWith(
@@ -64,14 +74,18 @@ describe('CampaignsService.launchCampaign', () => {
       },
       { attempts: 3, backoff: { type: 'exponential', delay: 10000 } },
     );
-    expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'campaign.launch', tenantId: 'tenant-1' }));
+    expect(audit.log).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'campaign.launch', tenantId: 'tenant-1' }),
+    );
   });
 
   it('refuses to launch when nobody is eligible and enqueues nothing', async () => {
     const { queue, service } = build([[CAMPAIGN]]);
     jest.spyOn(service, 'checkEligibility').mockResolvedValue(eligibility([]));
 
-    await expect(service.launchCampaign('tenant-1', 'camp-1', 'user-1')).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.launchCampaign('tenant-1', 'camp-1', 'user-1')).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
 
     expect(queue.add).not.toHaveBeenCalled();
   });
@@ -79,16 +93,22 @@ describe('CampaignsService.launchCampaign', () => {
   it('refuses to launch a campaign that is already running', async () => {
     const { queue, service } = build([[{ ...CAMPAIGN, status: 'running' }]]);
 
-    await expect(service.launchCampaign('tenant-1', 'camp-1', 'user-1')).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.launchCampaign('tenant-1', 'camp-1', 'user-1')).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
 
     expect(queue.add).not.toHaveBeenCalled();
   });
 
   it('does not mark the campaign running when the tenant has no WhatsApp account', async () => {
     const { fake, queue, service } = build([[CAMPAIGN], []]);
-    jest.spyOn(service, 'checkEligibility').mockResolvedValue(eligibility([{ contactId: 'c1', phone: '+5511999990001' }]));
+    jest
+      .spyOn(service, 'checkEligibility')
+      .mockResolvedValue(eligibility([{ contactId: 'c1', phone: '+5511999990001' }]));
 
-    await expect(service.launchCampaign('tenant-1', 'camp-1', 'user-1')).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.launchCampaign('tenant-1', 'camp-1', 'user-1')).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
 
     expect(fake.sets).toEqual([]);
     expect(queue.add).not.toHaveBeenCalled();

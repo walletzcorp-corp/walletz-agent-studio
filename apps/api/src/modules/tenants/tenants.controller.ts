@@ -58,10 +58,7 @@ export class TenantsController {
   @UseGuards(RbacGuard)
   @Roles('admin')
   @ApiOperation({ summary: 'Atualizar configurações do tenant' })
-  async updateSettings(
-    @Param('tenantId') tenantId: string,
-    @Body() dto: UpdateTenantSettingsDto,
-  ) {
+  async updateSettings(@Param('tenantId') tenantId: string, @Body() dto: UpdateTenantSettingsDto) {
     return this.tenantsService.updateSettings(tenantId, dto);
   }
 

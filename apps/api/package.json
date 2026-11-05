@@ -94,7 +94,9 @@
       "[\\\\/]node_modules[\\\\/]@nestjs[\\\\/](bullmq|bull-shared|axios)[\\\\/].+\\.js$": "<rootDir>/../jest.esm-transform.cjs",
       "^.+\\.ts$": "ts-jest"
     },
-    "transformIgnorePatterns": ["/node_modules/(?!@nestjs/(bullmq|bull-shared|axios)/)"],
+    "transformIgnorePatterns": [
+      "/node_modules/(?!@nestjs/(bullmq|bull-shared|axios)/)"
+    ],
     "collectCoverageFrom": [
       "**/*.(t|j)s",
       "!**/node_modules/**",

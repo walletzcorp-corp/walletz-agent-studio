@@ -40,17 +40,26 @@ export class EmbeddedSignupDto {
   @IsNotEmpty()
   code!: string;
 
-  @ApiProperty({ description: 'Connection path: existing WhatsApp Business or new number', required: false })
+  @ApiProperty({
+    description: 'Connection path: existing WhatsApp Business or new number',
+    required: false,
+  })
   @IsOptional()
   @IsString()
   path?: 'existing' | 'new';
 
-  @ApiProperty({ description: 'WABA ID from Embedded Signup session info (if provided by Meta)', required: false })
+  @ApiProperty({
+    description: 'WABA ID from Embedded Signup session info (if provided by Meta)',
+    required: false,
+  })
   @IsOptional()
   @IsString()
   wabaId?: string;
 
-  @ApiProperty({ description: 'Phone Number ID from Embedded Signup session info (if provided by Meta)', required: false })
+  @ApiProperty({
+    description: 'Phone Number ID from Embedded Signup session info (if provided by Meta)',
+    required: false,
+  })
   @IsOptional()
   @IsString()
   phoneNumberId?: string;

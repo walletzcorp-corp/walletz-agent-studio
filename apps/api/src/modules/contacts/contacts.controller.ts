@@ -1,6 +1,15 @@
 import {
-  Controller, Get, Post, Delete, Param, Body, Query,
-  UseGuards, HttpCode, UseInterceptors, UploadedFile,
+  Controller,
+  Get,
+  Post,
+  Delete,
+  Param,
+  Body,
+  Query,
+  UseGuards,
+  HttpCode,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
@@ -37,10 +46,7 @@ export class ContactsController {
   @Get(':contactId')
   @Roles('viewer')
   @ApiOperation({ summary: 'Get contact' })
-  get(
-    @Param('tenantId') tenantId: string,
-    @Param('contactId') contactId: string,
-  ) {
+  get(@Param('tenantId') tenantId: string, @Param('contactId') contactId: string) {
     return this.contactsService.getContact(tenantId, contactId);
   }
 
@@ -59,7 +65,9 @@ export class ContactsController {
   @Roles('manager')
   @UseInterceptors(FileInterceptor('file'))
   @ApiConsumes('multipart/form-data')
-  @ApiBody({ schema: { type: 'object', properties: { file: { type: 'string', format: 'binary' } } } })
+  @ApiBody({
+    schema: { type: 'object', properties: { file: { type: 'string', format: 'binary' } } },
+  })
   @ApiOperation({ summary: 'Import contacts from CSV/XLSX' })
   async importCsv(
     @Param('tenantId') tenantId: string,
@@ -76,7 +84,8 @@ export class ContactsController {
 
     const mapped: ImportContactDto[] = rows.map((r) => ({
       firstName: r['nome'] ?? r['first_name'] ?? r['nome_completo']?.split(' ')[0],
-      lastName: r['sobrenome'] ?? r['last_name'] ?? r['nome_completo']?.split(' ').slice(1).join(' '),
+      lastName:
+        r['sobrenome'] ?? r['last_name'] ?? r['nome_completo']?.split(' ').slice(1).join(' '),
       company: r['empresa'] ?? r['company'],
       phone: r['telefone'] ?? r['phone'] ?? r['celular'] ?? r['whatsapp'],
       email: r['email'],
@@ -84,17 +93,39 @@ export class ContactsController {
       segment: r['segmento'] ?? r['segment'],
       tags: r['tags'] ? (r['tags'] as string).split(',').map((t) => t.trim()) : [],
       observation: r['observacao'] ?? r['observation'],
-      hasWhatsappConsent: ['sim', 'yes', 'true', '1'].includes((r['consentimento_whatsapp'] ?? '').toLowerCase()),
+      hasWhatsappConsent: ['sim', 'yes', 'true', '1'].includes(
+        (r['consentimento_whatsapp'] ?? '').toLowerCase(),
+      ),
       consentDate: r['data_consentimento'],
       consentOrigin: r['origem_consentimento'] ?? r['consent_origin'],
       customFields: Object.fromEntries(
-        Object.entries(r).filter(([k]) =>
-          !['nome', 'sobrenome', 'empresa', 'telefone', 'celular', 'whatsapp', 'email',
-            'origem', 'segmento', 'tags', 'observacao', 'consentimento_whatsapp',
-            'data_consentimento', 'origem_consentimento', 'first_name', 'last_name',
-            'company', 'phone', 'origin', 'segment', 'observation',
-            'nome_completo'].includes(k)
-        )
+        Object.entries(r).filter(
+          ([k]) =>
+            ![
+              'nome',
+              'sobrenome',
+              'empresa',
+              'telefone',
+              'celular',
+              'whatsapp',
+              'email',
+              'origem',
+              'segmento',
+              'tags',
+              'observacao',
+              'consentimento_whatsapp',
+              'data_consentimento',
+              'origem_consentimento',
+              'first_name',
+              'last_name',
+              'company',
+              'phone',
+              'origin',
+              'segment',
+              'observation',
+              'nome_completo',
+            ].includes(k),
+        ),
       ),
     }));
 

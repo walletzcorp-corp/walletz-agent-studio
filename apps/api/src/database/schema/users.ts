@@ -1,12 +1,4 @@
-import {
-  pgTable,
-  text,
-  timestamp,
-  jsonb,
-  pgEnum,
-  uniqueIndex,
-  index,
-} from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, jsonb, pgEnum, uniqueIndex, index } from 'drizzle-orm/pg-core';
 import { createId } from '../utils/id';
 import { tenants } from './tenants';
 
@@ -19,11 +11,7 @@ export const membershipRoleEnum = pgEnum('membership_role', [
   'viewer',
 ]);
 
-export const membershipStatusEnum = pgEnum('membership_status', [
-  'active',
-  'invited',
-  'suspended',
-]);
+export const membershipStatusEnum = pgEnum('membership_status', ['active', 'invited', 'suspended']);
 
 export const users = pgTable(
   'users',

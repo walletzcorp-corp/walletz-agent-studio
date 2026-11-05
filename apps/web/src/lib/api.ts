@@ -87,11 +87,14 @@ export const tenantsApi = {
     api.post('/tenants', data),
 
   myTenants: () =>
-    api.get<Array<{ tenantId: string; tenantName: string; tenantSlug: string; role: string }>>('/tenants/my'),
+    api.get<Array<{ tenantId: string; tenantName: string; tenantSlug: string; role: string }>>(
+      '/tenants/my',
+    ),
 
   getOne: (tenantId: string) => api.get(`/tenants/${tenantId}`),
 
-  updateSettings: (tenantId: string, data: object) => api.patch(`/tenants/${tenantId}/settings`, data),
+  updateSettings: (tenantId: string, data: object) =>
+    api.patch(`/tenants/${tenantId}/settings`, data),
 
   getMembers: (tenantId: string) => api.get(`/tenants/${tenantId}/members`),
 

@@ -14,8 +14,6 @@ import { RbacModule } from '../../shared/rbac/rbac.module';
 })
 export class TenantsModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer
-      .apply(TenantContextMiddleware)
-      .forRoutes({ path: 'v1/*', method: RequestMethod.ALL });
+    consumer.apply(TenantContextMiddleware).forRoutes({ path: 'v1/*', method: RequestMethod.ALL });
   }
 }

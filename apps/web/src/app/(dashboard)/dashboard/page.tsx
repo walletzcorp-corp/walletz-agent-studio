@@ -9,9 +9,24 @@ import { Bot, BookOpen, MessageSquare, Users, ArrowRight } from 'lucide-react';
 
 const QUICK_ACTIONS = [
   { href: '/agentes', label: 'Criar Agente', desc: 'Configure um novo agente de IA', icon: Bot },
-  { href: '/ensinar', label: 'Ensinar IA', desc: 'Adicione conhecimento ao seu agente', icon: BookOpen },
-  { href: '/conversas', label: 'Ver Conversas', desc: 'Monitore as interações em andamento', icon: MessageSquare },
-  { href: '/contatos', label: 'Gerenciar Contatos', desc: 'Importe e organize sua base de leads', icon: Users },
+  {
+    href: '/ensinar',
+    label: 'Ensinar IA',
+    desc: 'Adicione conhecimento ao seu agente',
+    icon: BookOpen,
+  },
+  {
+    href: '/conversas',
+    label: 'Ver Conversas',
+    desc: 'Monitore as interações em andamento',
+    icon: MessageSquare,
+  },
+  {
+    href: '/contatos',
+    label: 'Gerenciar Contatos',
+    desc: 'Importe e organize sua base de leads',
+    icon: Users,
+  },
 ];
 
 export default function DashboardPage() {
@@ -22,7 +37,9 @@ export default function DashboardPage() {
       <div className="p-8 space-y-6">
         <Skeleton className="h-8 w-64" />
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-32" />)}
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-32" />
+          ))}
         </div>
       </div>
     );
@@ -79,7 +96,9 @@ export default function DashboardPage() {
       <Card>
         <CardHeader>
           <CardTitle>Começando</CardTitle>
-          <CardDescription>Siga estes passos para ter seu primeiro agente funcionando</CardDescription>
+          <CardDescription>
+            Siga estes passos para ter seu primeiro agente funcionando
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <ol className="space-y-3">
@@ -93,7 +112,10 @@ export default function DashboardPage() {
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
                   {item.step}
                 </span>
-                <Link href={item.href} className="text-sm text-foreground hover:text-primary hover:underline">
+                <Link
+                  href={item.href}
+                  className="text-sm text-foreground hover:text-primary hover:underline"
+                >
                   {item.label}
                 </Link>
               </li>

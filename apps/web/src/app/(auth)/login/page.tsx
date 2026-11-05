@@ -43,7 +43,9 @@ export default function LoginPage() {
       await login(DEV_EMAIL, DEV_PASSWORD);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setError(typeof msg === 'string' ? msg : 'Crie o usuário dev primeiro: POST /api/v1/auth/register');
+      setError(
+        typeof msg === 'string' ? msg : 'Crie o usuário dev primeiro: POST /api/v1/auth/register',
+      );
     }
   };
 
@@ -102,7 +104,10 @@ export default function LoginPage() {
           )}
 
           {error && (
-            <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">
+            <p
+              className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive"
+              role="alert"
+            >
               {error}
             </p>
           )}

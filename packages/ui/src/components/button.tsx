@@ -7,11 +7,15 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: 'bg-primary text-primary-foreground hover:bg-primary/90 focus-visible:ring-primary',
-        outline: 'border border-border bg-background hover:bg-accent hover:text-accent-foreground focus-visible:ring-primary',
+        default:
+          'bg-primary text-primary-foreground hover:bg-primary/90 focus-visible:ring-primary',
+        outline:
+          'border border-border bg-background hover:bg-accent hover:text-accent-foreground focus-visible:ring-primary',
         ghost: 'hover:bg-accent hover:text-accent-foreground focus-visible:ring-primary',
-        destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive/90 focus-visible:ring-destructive',
-        secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80 focus-visible:ring-primary',
+        destructive:
+          'bg-destructive text-destructive-foreground hover:bg-destructive/90 focus-visible:ring-destructive',
+        secondary:
+          'bg-secondary text-secondary-foreground hover:bg-secondary/80 focus-visible:ring-primary',
         link: 'text-primary underline-offset-4 hover:underline focus-visible:ring-primary',
       },
       size: {
@@ -45,8 +49,19 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       >
         {loading && (
           <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            <circle
+              className="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              strokeWidth="4"
+            />
+            <path
+              className="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+            />
           </svg>
         )}
         {children}

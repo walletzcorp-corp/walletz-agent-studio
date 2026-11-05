@@ -17,25 +17,32 @@ function NeuralWMark({ size = 40, className }: { size?: number; className?: stri
     >
       <defs>
         {/* Ribbon gradient: violet → blue → cyan */}
-        <linearGradient id={`${id}-ribbon`} x1="0" y1="0" x2="100" y2="0" gradientUnits="userSpaceOnUse">
-          <stop offset="0%"   stopColor="#6D4AFF" />
-          <stop offset="45%"  stopColor="#4F6AFF" />
+        <linearGradient
+          id={`${id}-ribbon`}
+          x1="0"
+          y1="0"
+          x2="100"
+          y2="0"
+          gradientUnits="userSpaceOnUse"
+        >
+          <stop offset="0%" stopColor="#6D4AFF" />
+          <stop offset="45%" stopColor="#4F6AFF" />
           <stop offset="100%" stopColor="#22D3EE" />
         </linearGradient>
 
         {/* Sphere: violet */}
         <radialGradient id={`${id}-sv`} cx="38%" cy="32%" r="60%">
-          <stop offset="0%"   stopColor="#A080FF" />
+          <stop offset="0%" stopColor="#A080FF" />
           <stop offset="100%" stopColor="#4825CC" />
         </radialGradient>
         {/* Sphere: mid-violet */}
         <radialGradient id={`${id}-sm`} cx="38%" cy="32%" r="60%">
-          <stop offset="0%"   stopColor="#8070FF" />
+          <stop offset="0%" stopColor="#8070FF" />
           <stop offset="100%" stopColor="#3820B8" />
         </radialGradient>
         {/* Sphere: cyan */}
         <radialGradient id={`${id}-sc`} cx="38%" cy="32%" r="60%">
-          <stop offset="0%"   stopColor="#60EEFF" />
+          <stop offset="0%" stopColor="#60EEFF" />
           <stop offset="100%" stopColor="#00A0CC" />
         </radialGradient>
       </defs>
@@ -86,7 +93,12 @@ const MARK_SIZES: Record<NonNullable<WalletzLogoProps['size']>, number> = {
  * Full Walletz logo: Neural W mark + wordmark + Agent Studio.
  * Use `variant="mark"` (or `collapsed`) for icon-only.
  */
-export function WalletzLogo({ variant = 'full', size = 'md', className, collapsed }: WalletzLogoProps) {
+export function WalletzLogo({
+  variant = 'full',
+  size = 'md',
+  className,
+  collapsed,
+}: WalletzLogoProps) {
   const markPx = MARK_SIZES[size];
   const showMark = collapsed || variant === 'mark';
 

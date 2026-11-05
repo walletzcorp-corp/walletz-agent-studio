@@ -1,7 +1,12 @@
 import { Injectable, Inject, NotFoundException } from '@nestjs/common';
 import { eq, and } from 'drizzle-orm';
 import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';
-import { contacts, contactIdentities, consents, suppressions } from '../../database/schema/contacts';
+import {
+  contacts,
+  contactIdentities,
+  consents,
+  suppressions,
+} from '../../database/schema/contacts';
 import { conversations, messages } from '../../database/schema/conversations';
 import { AuditService } from '../../shared/audit/audit.service';
 
@@ -40,10 +45,21 @@ export class PrivacyService {
 
     const [identityRows, consentRows, suppressionRows, convRows] = await Promise.all([
       this.db.select().from(contactIdentities).where(eq(contactIdentities.contactId, contactId)),
-      this.db.select().from(consents).where(and(eq(consents.contactId, contactId), eq(consents.tenantId, tenantId))),
-      this.db.select().from(suppressions).where(and(eq(suppressions.tenantId, tenantId))),
       this.db
-        .select({ id: conversations.id, channel: conversations.channel, status: conversations.status, createdAt: conversations.createdAt })
+        .select()
+        .from(consents)
+        .where(and(eq(consents.contactId, contactId), eq(consents.tenantId, tenantId))),
+      this.db
+        .select()
+        .from(suppressions)
+        .where(and(eq(suppressions.tenantId, tenantId))),
+      this.db
+        .select({
+          id: conversations.id,
+          channel: conversations.channel,
+          status: conversations.status,
+          createdAt: conversations.createdAt,
+        })
         .from(conversations)
         .where(and(eq(conversations.contactId, contactId), eq(conversations.tenantId, tenantId))),
     ]);
@@ -110,9 +126,7 @@ export class PrivacyService {
       .where(and(eq(contacts.id, contactId), eq(contacts.tenantId, tenantId)));
 
     // Remove identity records (phone, email)
-    await this.db
-      .delete(contactIdentities)
-      .where(eq(contactIdentities.contactId, contactId));
+    await this.db.delete(contactIdentities).where(eq(contactIdentities.contactId, contactId));
 
     // Revoke all consents
     await this.db
@@ -134,12 +148,15 @@ export class PrivacyService {
 
   // ─── LGPD Art. 18 — Consentimentos do tenant ──────────────────────────────
 
-  async listConsentsByTenant(tenantId: string, params?: {
-    channel?: string;
-    status?: string;
-    limit?: number;
-    offset?: number;
-  }) {
+  async listConsentsByTenant(
+    tenantId: string,
+    params?: {
+      channel?: string;
+      status?: string;
+      limit?: number;
+      offset?: number;
+    },
+  ) {
     const limit = params?.limit ?? 50;
     const offset = params?.offset ?? 0;
 

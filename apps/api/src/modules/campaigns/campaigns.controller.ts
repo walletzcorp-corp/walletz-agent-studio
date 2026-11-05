@@ -1,6 +1,4 @@
-import {
-  Controller, Get, Post, Delete, Param, Body, UseGuards, HttpCode,
-} from '@nestjs/common';
+import { Controller, Get, Post, Delete, Param, Body, UseGuards, HttpCode } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { IsString, IsOptional, IsNotEmpty, IsArray, IsDateString } from 'class-validator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -55,10 +53,7 @@ export class CampaignsController {
   @Delete('tenants/:tenantId/segments/:segmentId')
   @Roles('admin')
   @HttpCode(204)
-  deleteSegment(
-    @Param('tenantId') tenantId: string,
-    @Param('segmentId') segmentId: string,
-  ) {
+  deleteSegment(@Param('tenantId') tenantId: string, @Param('segmentId') segmentId: string) {
     return this.campaignsService.deleteSegment(tenantId, segmentId);
   }
 
@@ -72,10 +67,7 @@ export class CampaignsController {
 
   @Get('tenants/:tenantId/campaigns/:campaignId')
   @Roles('viewer')
-  getCampaign(
-    @Param('tenantId') tenantId: string,
-    @Param('campaignId') campaignId: string,
-  ) {
+  getCampaign(@Param('tenantId') tenantId: string, @Param('campaignId') campaignId: string) {
     return this.campaignsService.getCampaign(tenantId, campaignId);
   }
 
@@ -92,10 +84,7 @@ export class CampaignsController {
   @Get('tenants/:tenantId/campaigns/:campaignId/eligibility')
   @Roles('manager')
   @ApiOperation({ summary: 'Send Policy Gateway — check eligible recipients' })
-  checkEligibility(
-    @Param('tenantId') tenantId: string,
-    @Param('campaignId') campaignId: string,
-  ) {
+  checkEligibility(@Param('tenantId') tenantId: string, @Param('campaignId') campaignId: string) {
     return this.campaignsService.checkEligibility(tenantId, campaignId);
   }
 

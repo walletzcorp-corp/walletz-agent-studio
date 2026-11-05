@@ -29,17 +29,29 @@ export class MailService {
 
   async sendEmailVerification(to: string, token: string, baseUrl: string): Promise<void> {
     const url = `${baseUrl}/auth/verify-email?token=${token}`;
-    await this.send(to, 'Verifique seu email — Walletz Agent Studio', this.verificationTemplate(url));
+    await this.send(
+      to,
+      'Verifique seu email — Walletz Agent Studio',
+      this.verificationTemplate(url),
+    );
   }
 
   async sendPasswordReset(to: string, token: string, baseUrl: string): Promise<void> {
     const url = `${baseUrl}/auth/reset-password?token=${token}`;
-    await this.send(to, 'Redefinição de senha — Walletz Agent Studio', this.passwordResetTemplate(url));
+    await this.send(
+      to,
+      'Redefinição de senha — Walletz Agent Studio',
+      this.passwordResetTemplate(url),
+    );
   }
 
   async sendInvite(to: string, tenantName: string, token: string, baseUrl: string): Promise<void> {
     const url = `${baseUrl}/auth/accept-invite?token=${token}`;
-    await this.send(to, `Convite para ${tenantName} — Walletz Agent Studio`, this.inviteTemplate(tenantName, url));
+    await this.send(
+      to,
+      `Convite para ${tenantName} — Walletz Agent Studio`,
+      this.inviteTemplate(tenantName, url),
+    );
   }
 
   private async send(to: string, subject: string, html: string): Promise<void> {

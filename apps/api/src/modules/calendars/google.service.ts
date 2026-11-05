@@ -105,7 +105,9 @@ export class GoogleCalendarService {
     };
   }
 
-  async refreshAccessToken(refreshToken: string): Promise<Omit<GoogleTokens, 'email' | 'displayName' | 'scopes'>> {
+  async refreshAccessToken(
+    refreshToken: string,
+  ): Promise<Omit<GoogleTokens, 'email' | 'displayName' | 'scopes'>> {
     this.assertCredentials();
     const res = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
@@ -176,7 +178,12 @@ export class GoogleCalendarService {
       attendees: (event.attendeeEmails ?? []).map((email) => ({ email })),
     };
     if (event.addMeet) {
-      body.conferenceData = { createRequest: { requestId: crypto.randomUUID(), conferenceSolutionKey: { type: 'hangoutsMeet' } } };
+      body.conferenceData = {
+        createRequest: {
+          requestId: crypto.randomUUID(),
+          conferenceSolutionKey: { type: 'hangoutsMeet' },
+        },
+      };
     }
     const params = new URLSearchParams(event.addMeet ? { conferenceDataVersion: '1' } : {});
     const res = await fetch(

@@ -1,4 +1,10 @@
-import { Injectable, Inject, NotFoundException, BadRequestException, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  Inject,
+  NotFoundException,
+  BadRequestException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { eq, and, inArray } from 'drizzle-orm';
 import { createHash, randomBytes } from 'crypto';
 import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';
@@ -29,7 +35,11 @@ export class PcConnectorService {
     return { token, expiresAt };
   }
 
-  async pairDevice(token: string, deviceName: string, platform: string): Promise<{ deviceId: string; deviceSecret: string }> {
+  async pairDevice(
+    token: string,
+    deviceName: string,
+    platform: string,
+  ): Promise<{ deviceId: string; deviceSecret: string }> {
     const [device] = await this.db
       .select()
       .from(pcDevices)
@@ -102,7 +112,11 @@ export class PcConnectorService {
     await this.db.delete(pcDevices).where(eq(pcDevices.id, deviceId));
   }
 
-  async updateCapabilities(tenantId: string, deviceId: string, capabilities: Record<string, unknown>) {
+  async updateCapabilities(
+    tenantId: string,
+    deviceId: string,
+    capabilities: Record<string, unknown>,
+  ) {
     const [device] = await this.db
       .select({ id: pcDevices.id })
       .from(pcDevices)
@@ -131,7 +145,9 @@ export class PcConnectorService {
     if (!device.pairedAt) throw new BadRequestException('Device not paired');
 
     if (!device.lastSeenAt || Date.now() - device.lastSeenAt.getTime() > 30_000) {
-      throw new BadRequestException('Device appears offline. Make sure Walletz PC Connector is running.');
+      throw new BadRequestException(
+        'Device appears offline. Make sure Walletz PC Connector is running.',
+      );
     }
 
     const riskLevel = this.getRiskLevel(toolName);
@@ -171,13 +187,11 @@ export class PcConnectorService {
   private async waitForResult(commandId: string): Promise<PcCommandResult> {
     const deadline = Date.now() + COMMAND_TIMEOUT_MS;
     while (Date.now() < deadline) {
-      const [cmd] = await this.db
-        .select()
-        .from(pcCommands)
-        .where(eq(pcCommands.id, commandId));
+      const [cmd] = await this.db.select().from(pcCommands).where(eq(pcCommands.id, commandId));
 
       if (!cmd) throw new NotFoundException('Command not found');
-      if (cmd.status === 'completed') return { success: true, result: cmd.result as Record<string, unknown> };
+      if (cmd.status === 'completed')
+        return { success: true, result: cmd.result as Record<string, unknown> };
       if (cmd.status === 'failed') return { success: false, error: cmd.error ?? 'Unknown error' };
 
       await sleep(500);
@@ -191,7 +205,11 @@ export class PcConnectorService {
     return { success: false, error: 'Command timed out — PC Connector did not respond in 30s' };
   }
 
-  async approveCommand(tenantId: string, commandId: string, approved: boolean): Promise<{ commandId: string; status: string }> {
+  async approveCommand(
+    tenantId: string,
+    commandId: string,
+    approved: boolean,
+  ): Promise<{ commandId: string; status: string }> {
     const [cmd] = await this.db
       .select()
       .from(pcCommands)
@@ -199,7 +217,9 @@ export class PcConnectorService {
 
     if (!cmd) throw new NotFoundException('Command not found');
     if (cmd.status !== 'awaiting_approval') {
-      throw new BadRequestException(`Command is in '${cmd.status}' state — only awaiting_approval commands can be reviewed`);
+      throw new BadRequestException(
+        `Command is in '${cmd.status}' state — only awaiting_approval commands can be reviewed`,
+      );
     }
 
     if (!approved) {
@@ -227,7 +247,8 @@ export class PcConnectorService {
       .where(eq(pcDevices.id, deviceId));
     if (!device?.deviceSecretHash) throw new UnauthorizedException('Device not paired');
     const incoming = createHash('sha256').update(secret).digest('hex');
-    if (incoming !== device.deviceSecretHash) throw new UnauthorizedException('Invalid device secret');
+    if (incoming !== device.deviceSecretHash)
+      throw new UnauthorizedException('Invalid device secret');
   }
 
   async getPendingCommands(deviceId: string, deviceSecret: string | undefined) {
@@ -281,7 +302,7 @@ export class PcConnectorService {
 }
 
 function sleep(ms: number) {
-  return new Promise<void>(r => setTimeout(r, ms));
+  return new Promise<void>((r) => setTimeout(r, ms));
 }
 
 export interface PcCommandResult {

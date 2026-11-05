@@ -8,7 +8,10 @@ export class UpdateAgentCalendarSettingsDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(1) @Max(20) maxMeetingsPerDay?: number;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(0) minLeadTimeMinutes?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() defaultPlatform?: string;
-  @ApiPropertyOptional() @IsOptional() availableHours?: Record<string, { start: string | null; end: string | null; enabled: boolean }>;
+  @ApiPropertyOptional() @IsOptional() availableHours?: Record<
+    string,
+    { start: string | null; end: string | null; enabled: boolean }
+  >;
   @ApiPropertyOptional() @IsOptional() @IsString() connectionId?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() timeZone?: string;
 }

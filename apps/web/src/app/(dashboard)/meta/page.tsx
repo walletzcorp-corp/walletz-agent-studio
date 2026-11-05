@@ -2,33 +2,75 @@
 
 import { useState } from 'react';
 import {
-  Facebook, Smartphone, FileText, DollarSign,
-  Activity, Webhook, Settings, CheckCircle2,
-  XCircle, AlertTriangle, ExternalLink, ChevronRight,
-  BarChart3, TrendingUp, MessageSquare, 
+  Facebook,
+  Smartphone,
+  FileText,
+  DollarSign,
+  Activity,
+  Webhook,
+  Settings,
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
+  ExternalLink,
+  ChevronRight,
+  BarChart3,
+  TrendingUp,
+  MessageSquare,
   Shield,
 } from 'lucide-react';
 import Link from 'next/link';
 
-type MetaTab = 'overview' | 'whatsapp' | 'templates' | 'costs' | 'consumption' | 'webhooks' | 'settings';
+type MetaTab =
+  | 'overview'
+  | 'whatsapp'
+  | 'templates'
+  | 'costs'
+  | 'consumption'
+  | 'webhooks'
+  | 'settings';
 
 const TABS: { id: MetaTab; label: string; icon: React.ElementType }[] = [
-  { id: 'overview',     label: 'Visão Geral',  icon: BarChart3 },
-  { id: 'whatsapp',     label: 'WhatsApp',     icon: Smartphone },
-  { id: 'templates',    label: 'Templates',    icon: FileText },
-  { id: 'costs',        label: 'Custos',       icon: DollarSign },
-  { id: 'consumption',  label: 'Consumo',      icon: Activity },
-  { id: 'webhooks',     label: 'Webhooks',     icon: Webhook },
-  { id: 'settings',     label: 'Configurações',icon: Settings },
+  { id: 'overview', label: 'Visão Geral', icon: BarChart3 },
+  { id: 'whatsapp', label: 'WhatsApp', icon: Smartphone },
+  { id: 'templates', label: 'Templates', icon: FileText },
+  { id: 'costs', label: 'Custos', icon: DollarSign },
+  { id: 'consumption', label: 'Consumo', icon: Activity },
+  { id: 'webhooks', label: 'Webhooks', icon: Webhook },
+  { id: 'settings', label: 'Configurações', icon: Settings },
 ];
 
 /* ── Overview Tab ── */
 function OverviewTab() {
   const stats = [
-    { label: 'WhatsApp',       value: 'Não conectado', status: 'disconnected', icon: Smartphone,    color: 'text-muted-foreground' },
-    { label: 'Templates',      value: '0 aprovados',   status: 'neutral',      icon: FileText,      color: 'text-muted-foreground' },
-    { label: 'Webhooks',       value: 'Não conf.',     status: 'disconnected', icon: Webhook,       color: 'text-muted-foreground' },
-    { label: 'Mensagens hoje', value: '—',             status: 'neutral',      icon: MessageSquare, color: 'text-muted-foreground' },
+    {
+      label: 'WhatsApp',
+      value: 'Não conectado',
+      status: 'disconnected',
+      icon: Smartphone,
+      color: 'text-muted-foreground',
+    },
+    {
+      label: 'Templates',
+      value: '0 aprovados',
+      status: 'neutral',
+      icon: FileText,
+      color: 'text-muted-foreground',
+    },
+    {
+      label: 'Webhooks',
+      value: 'Não conf.',
+      status: 'disconnected',
+      icon: Webhook,
+      color: 'text-muted-foreground',
+    },
+    {
+      label: 'Mensagens hoje',
+      value: '—',
+      status: 'neutral',
+      icon: MessageSquare,
+      color: 'text-muted-foreground',
+    },
   ];
 
   return (
@@ -61,7 +103,7 @@ function OverviewTab() {
 
       {/* KPI grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {stats.map(s => {
+        {stats.map((s) => {
           const Icon = s.icon;
           return (
             <div key={s.label} className="stat-card">
@@ -80,11 +122,35 @@ function OverviewTab() {
         <h3 className="text-sm font-semibold text-foreground">Ações rápidas</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {[
-            { href: '/canais/whatsapp', label: 'Conectar WhatsApp',        desc: 'Configure seu número oficial',         icon: Smartphone, color: 'bg-[#25D366]/10 text-[#25D366]' },
-            { href: '/meta/templates',  label: 'Gerenciar Templates',       desc: 'Crie e envie templates para aprovação', icon: FileText,   color: 'bg-primary/10 text-primary' },
-            { href: '/campanhas',       label: 'Criar Campanha',            desc: 'Envie mensagens em massa',              icon: TrendingUp, color: 'bg-neural-blue/10 text-neural-blue' },
-            { href: '/meta?tab=costs',  label: 'Ver Custos Meta',           desc: 'Acompanhe gastos por campanha',         icon: DollarSign, color: 'bg-neural-warning/10 text-neural-warning' },
-          ].map(action => {
+            {
+              href: '/canais/whatsapp',
+              label: 'Conectar WhatsApp',
+              desc: 'Configure seu número oficial',
+              icon: Smartphone,
+              color: 'bg-[#25D366]/10 text-[#25D366]',
+            },
+            {
+              href: '/meta/templates',
+              label: 'Gerenciar Templates',
+              desc: 'Crie e envie templates para aprovação',
+              icon: FileText,
+              color: 'bg-primary/10 text-primary',
+            },
+            {
+              href: '/campanhas',
+              label: 'Criar Campanha',
+              desc: 'Envie mensagens em massa',
+              icon: TrendingUp,
+              color: 'bg-neural-blue/10 text-neural-blue',
+            },
+            {
+              href: '/meta?tab=costs',
+              label: 'Ver Custos Meta',
+              desc: 'Acompanhe gastos por campanha',
+              icon: DollarSign,
+              color: 'bg-neural-warning/10 text-neural-warning',
+            },
+          ].map((action) => {
             const Icon = action.icon;
             return (
               <Link
@@ -92,7 +158,9 @@ function OverviewTab() {
                 href={action.href}
                 className="flex items-center gap-3 rounded-lg border border-border bg-surface-1 px-4 py-3 hover:border-border/60 hover:bg-surface-2 transition-all group"
               >
-                <div className={`flex h-9 w-9 items-center justify-center rounded-lg shrink-0 ${action.color}`}>
+                <div
+                  className={`flex h-9 w-9 items-center justify-center rounded-lg shrink-0 ${action.color}`}
+                >
                   <Icon className="h-4 w-4" />
                 </div>
                 <div>
@@ -110,17 +178,18 @@ function OverviewTab() {
       <div className="neural-card p-5 space-y-3">
         <h3 className="text-sm font-semibold text-foreground">Pré-requisitos Meta</h3>
         {[
-          { label: 'Conta Meta Business Manager',   done: false },
+          { label: 'Conta Meta Business Manager', done: false },
           { label: 'WhatsApp Business Account (WABA)', done: false },
-          { label: 'Número verificado',             done: false },
-          { label: 'Webhook configurado',           done: false },
+          { label: 'Número verificado', done: false },
+          { label: 'Webhook configurado', done: false },
           { label: 'Política de privacidade aprovada', done: false },
-        ].map(req => (
+        ].map((req) => (
           <div key={req.label} className="flex items-center gap-3">
-            {req.done
-              ? <CheckCircle2 className="h-4 w-4 text-neural-success shrink-0" />
-              : <div className="h-4 w-4 rounded-full border-2 border-border shrink-0" />
-            }
+            {req.done ? (
+              <CheckCircle2 className="h-4 w-4 text-neural-success shrink-0" />
+            ) : (
+              <div className="h-4 w-4 rounded-full border-2 border-border shrink-0" />
+            )}
             <span className={`text-sm ${req.done ? 'text-foreground' : 'text-muted-foreground'}`}>
               {req.label}
             </span>
@@ -151,9 +220,12 @@ function WhatsAppTab() {
           <Smartphone className="h-8 w-8 text-[#25D366]" />
         </div>
         <div>
-          <h3 className="text-base font-display font-semibold text-foreground mb-1">WhatsApp não conectado</h3>
+          <h3 className="text-base font-display font-semibold text-foreground mb-1">
+            WhatsApp não conectado
+          </h3>
           <p className="text-sm text-muted-foreground max-w-md">
-            Configure seu número oficial do WhatsApp Business para que seus agentes possam enviar e receber mensagens.
+            Configure seu número oficial do WhatsApp Business para que seus agentes possam enviar e
+            receber mensagens.
           </p>
         </div>
         <Link
@@ -174,7 +246,7 @@ function WhatsAppTab() {
           { n: 4, label: 'Webhook', desc: 'O Walletz configura o webhook automaticamente' },
           { n: 5, label: 'Template', desc: 'Crie templates para iniciar conversas' },
           { n: 6, label: 'Agente', desc: 'Associe um agente ao número conectado' },
-        ].map(step => (
+        ].map((step) => (
           <div key={step.n} className="flex items-center gap-3">
             <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-bold shrink-0">
               {step.n}
@@ -200,8 +272,8 @@ function CostsTab() {
           <div>
             <p className="text-sm font-semibold text-foreground mb-1">Cobrança Meta é separada</p>
             <p className="text-sm text-muted-foreground">
-              Os custos do WhatsApp Business são cobrados diretamente pela Meta na sua conta.
-              O Walletz não intermedia esses valores — você paga a Meta diretamente.
+              Os custos do WhatsApp Business são cobrados diretamente pela Meta na sua conta. O
+              Walletz não intermedia esses valores — você paga a Meta diretamente.
             </p>
           </div>
         </div>
@@ -218,11 +290,31 @@ function CostsTab() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {[
-          { label: 'Conversas iniciadas pela empresa', value: '—', period: 'Este mês', color: 'text-neural-blue' },
-          { label: 'Conversas iniciadas pelo cliente',  value: '—', period: 'Este mês', color: 'text-neural-cyan' },
-          { label: 'Total estimado Meta',               value: '—', period: 'Este mês', color: 'text-neural-warning' },
-          { label: 'Limite configurado',                value: 'Sem limite', period: 'Configurar alerta', color: 'text-muted-foreground' },
-        ].map(item => (
+          {
+            label: 'Conversas iniciadas pela empresa',
+            value: '—',
+            period: 'Este mês',
+            color: 'text-neural-blue',
+          },
+          {
+            label: 'Conversas iniciadas pelo cliente',
+            value: '—',
+            period: 'Este mês',
+            color: 'text-neural-cyan',
+          },
+          {
+            label: 'Total estimado Meta',
+            value: '—',
+            period: 'Este mês',
+            color: 'text-neural-warning',
+          },
+          {
+            label: 'Limite configurado',
+            value: 'Sem limite',
+            period: 'Configurar alerta',
+            color: 'text-muted-foreground',
+          },
+        ].map((item) => (
           <div key={item.label} className="stat-card">
             <p className="text-xs text-muted-foreground mb-3">{item.label}</p>
             <p className={`text-xl font-display font-semibold ${item.color}`}>{item.value}</p>
@@ -238,12 +330,15 @@ function CostsTab() {
         </p>
         <div className="space-y-2">
           {[
-            { cat: 'Marketing',      desc: 'Promoções e anúncios',    price: '~R$ 0,12/conversa' },
-            { cat: 'Utility',        desc: 'Confirmações e alertas',  price: '~R$ 0,04/conversa' },
-            { cat: 'Authentication', desc: 'Senhas e verificação',    price: '~R$ 0,04/conversa' },
-            { cat: 'Service',        desc: 'Resposta ao cliente',     price: 'Gratuita (24h)' },
-          ].map(r => (
-            <div key={r.cat} className="flex items-center justify-between py-2 border-b border-border/40 last:border-0">
+            { cat: 'Marketing', desc: 'Promoções e anúncios', price: '~R$ 0,12/conversa' },
+            { cat: 'Utility', desc: 'Confirmações e alertas', price: '~R$ 0,04/conversa' },
+            { cat: 'Authentication', desc: 'Senhas e verificação', price: '~R$ 0,04/conversa' },
+            { cat: 'Service', desc: 'Resposta ao cliente', price: 'Gratuita (24h)' },
+          ].map((r) => (
+            <div
+              key={r.cat}
+              className="flex items-center justify-between py-2 border-b border-border/40 last:border-0"
+            >
               <div>
                 <p className="text-sm font-medium text-foreground">{r.cat}</p>
                 <p className="text-xs text-muted-foreground">{r.desc}</p>
@@ -276,7 +371,9 @@ function WebhooksTab() {
           <label className="text-xs text-muted-foreground">URL do Webhook</label>
           <div className="flex items-center gap-2">
             <div className="flex-1 rounded-lg border border-border bg-surface-2 px-3 py-2.5 font-mono text-xs text-muted-foreground select-all">
-              {typeof window !== 'undefined' ? `${window.location.origin}/api/v1/webhooks/meta` : 'https://sua-api.walletz.app/api/v1/webhooks/meta'}
+              {typeof window !== 'undefined'
+                ? `${window.location.origin}/api/v1/webhooks/meta`
+                : 'https://sua-api.walletz.app/api/v1/webhooks/meta'}
             </div>
             <button className="btn-ghost rounded-lg px-3 py-2.5 text-xs">Copiar</button>
           </div>
@@ -298,11 +395,11 @@ function WebhooksTab() {
       <div className="neural-card p-5 space-y-3">
         <h3 className="text-sm font-semibold text-foreground">Eventos monitorados</h3>
         {[
-          { event: 'messages',              status: 'pending', desc: 'Mensagens recebidas' },
-          { event: 'message_deliveries',    status: 'pending', desc: 'Confirmações de entrega' },
-          { event: 'message_reads',         status: 'pending', desc: 'Leituras de mensagem' },
-          { event: 'messaging_handovers',   status: 'pending', desc: 'Transferência de conversa' },
-        ].map(ev => (
+          { event: 'messages', status: 'pending', desc: 'Mensagens recebidas' },
+          { event: 'message_deliveries', status: 'pending', desc: 'Confirmações de entrega' },
+          { event: 'message_reads', status: 'pending', desc: 'Leituras de mensagem' },
+          { event: 'messaging_handovers', status: 'pending', desc: 'Transferência de conversa' },
+        ].map((ev) => (
           <div key={ev.event} className="flex items-center justify-between">
             <div>
               <p className="text-xs font-mono text-foreground">{ev.event}</p>
@@ -331,8 +428,11 @@ function SettingsTab() {
             { label: 'App Secret', value: '••••••••' },
             { label: 'Versão da API', value: 'v20.0' },
             { label: 'Business Account ID', value: 'Não conectado' },
-          ].map(field => (
-            <div key={field.label} className="flex items-center justify-between py-2 border-b border-border/40 last:border-0">
+          ].map((field) => (
+            <div
+              key={field.label}
+              className="flex items-center justify-between py-2 border-b border-border/40 last:border-0"
+            >
               <span className="text-sm text-muted-foreground">{field.label}</span>
               <span className="text-sm font-mono text-foreground">{field.value}</span>
             </div>
@@ -345,7 +445,8 @@ function SettingsTab() {
           <h3 className="text-sm font-semibold text-foreground">Política de privacidade</h3>
         </div>
         <p className="text-xs text-muted-foreground">
-          A Meta exige URL de política de privacidade para aprovar templates. Configure antes de enviar.
+          A Meta exige URL de política de privacidade para aprovar templates. Configure antes de
+          enviar.
         </p>
         <input
           disabled
@@ -362,28 +463,33 @@ export default function MetaPage() {
   const [tab, setTab] = useState<MetaTab>('overview');
 
   const tabContent: Record<MetaTab, React.ReactNode> = {
-    overview:    <OverviewTab />,
-    whatsapp:    <WhatsAppTab />,
-    templates:   (
+    overview: <OverviewTab />,
+    whatsapp: <WhatsAppTab />,
+    templates: (
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <p className="text-sm text-muted-foreground">Gerencie templates na página dedicada.</p>
-          <Link href="/meta/templates" className="btn-primary rounded-lg px-4 py-2 text-sm flex items-center gap-2">
+          <Link
+            href="/meta/templates"
+            className="btn-primary rounded-lg px-4 py-2 text-sm flex items-center gap-2"
+          >
             <FileText className="h-4 w-4" />
             Abrir Template Manager
           </Link>
         </div>
       </div>
     ),
-    costs:       <CostsTab />,
+    costs: <CostsTab />,
     consumption: (
       <div className="neural-card p-8 flex flex-col items-center text-center gap-3">
         <Activity className="h-10 w-10 text-muted-foreground/30" />
-        <p className="text-sm font-medium text-muted-foreground">Dados de consumo disponíveis após conectar WhatsApp</p>
+        <p className="text-sm font-medium text-muted-foreground">
+          Dados de consumo disponíveis após conectar WhatsApp
+        </p>
       </div>
     ),
-    webhooks:    <WebhooksTab />,
-    settings:    <SettingsTab />,
+    webhooks: <WebhooksTab />,
+    settings: <SettingsTab />,
   };
 
   return (
@@ -398,7 +504,7 @@ export default function MetaPage() {
 
       {/* Tabs */}
       <div className="flex gap-0 border-b border-border overflow-x-auto no-scrollbar">
-        {TABS.map(t => {
+        {TABS.map((t) => {
           const Icon = t.icon;
           return (
             <button

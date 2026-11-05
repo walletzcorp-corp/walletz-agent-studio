@@ -43,12 +43,21 @@ function splitIntoChunks(text: string, source: string): ParsedChunk[] {
     });
   }
 
-  return chunks.length > 0 ? chunks : [{ content: text.trim(), chunkIndex: 0, tokenCount: Math.ceil(text.length / CHARS_PER_TOKEN), metadata: { source } }];
+  return chunks.length > 0
+    ? chunks
+    : [
+        {
+          content: text.trim(),
+          chunkIndex: 0,
+          tokenCount: Math.ceil(text.length / CHARS_PER_TOKEN),
+          metadata: { source },
+        },
+      ];
 }
 
 export async function parsePdf(buffer: Buffer, filename: string): Promise<ParsedChunk[]> {
   const mod = await import('pdf-parse');
-   
+
   const pdfParse = (mod.default ?? mod) as unknown as (buf: Buffer) => Promise<{ text: string }>;
   const data = await pdfParse(buffer);
   return splitIntoChunks(data.text, filename);
@@ -79,7 +88,8 @@ export async function parseByMimeType(
   filename: string,
 ): Promise<ParsedChunk[]> {
   if (mimeType === 'application/pdf') return parsePdf(buffer, filename);
-  if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') return parseDocx(buffer, filename);
+  if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+    return parseDocx(buffer, filename);
   if (mimeType === 'text/csv' || mimeType === 'application/csv') return parseCsv(buffer, filename);
   if (mimeType.startsWith('text/')) return parseTxt(buffer, filename);
   // Fallback: attempt plain text

@@ -1,6 +1,17 @@
 import {
-  Controller, Get, Post, Delete, Param, Body, Query,
-  UseGuards, Headers, RawBodyRequest, Req, HttpCode, Logger,
+  Controller,
+  Get,
+  Post,
+  Delete,
+  Param,
+  Body,
+  Query,
+  UseGuards,
+  Headers,
+  RawBodyRequest,
+  Req,
+  HttpCode,
+  Logger,
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
@@ -40,7 +51,11 @@ export class WhatsappController {
     @Headers('x-hub-signature-256') signature: string,
     @Req() req: RawBodyRequest<Request>,
   ): Promise<{ status: string }> {
-    await this.whatsappService.handleWebhookEvent(payload, signature, req.rawBody ?? Buffer.alloc(0));
+    await this.whatsappService.handleWebhookEvent(
+      payload,
+      signature,
+      req.rawBody ?? Buffer.alloc(0),
+    );
     return { status: 'ok' };
   }
 
@@ -60,10 +75,7 @@ export class WhatsappController {
   @ApiBearerAuth()
   @Roles('viewer')
   @ApiOperation({ summary: 'Get WhatsApp account details' })
-  getAccount(
-    @Param('tenantId') tenantId: string,
-    @Param('accountId') accountId: string,
-  ) {
+  getAccount(@Param('tenantId') tenantId: string, @Param('accountId') accountId: string) {
     return this.whatsappService.getAccount(tenantId, accountId);
   }
 
@@ -71,7 +83,9 @@ export class WhatsappController {
   @UseGuards(JwtAuthGuard, RbacGuard)
   @ApiBearerAuth()
   @Roles('admin', 'owner')
-  @ApiOperation({ summary: 'Complete WhatsApp connection via Meta Embedded Signup (code exchange on backend)' })
+  @ApiOperation({
+    summary: 'Complete WhatsApp connection via Meta Embedded Signup (code exchange on backend)',
+  })
   embeddedSignup(
     @Param('tenantId') tenantId: string,
     @Body() dto: EmbeddedSignupDto,
@@ -140,10 +154,7 @@ export class WhatsappController {
   @Roles('admin', 'owner')
   @HttpCode(204)
   @ApiOperation({ summary: 'Sync templates from Meta' })
-  syncTemplates(
-    @Param('tenantId') tenantId: string,
-    @Param('accountId') accountId: string,
-  ) {
+  syncTemplates(@Param('tenantId') tenantId: string, @Param('accountId') accountId: string) {
     return this.whatsappService.syncTemplates(accountId, tenantId);
   }
 
@@ -152,10 +163,7 @@ export class WhatsappController {
   @ApiBearerAuth()
   @Roles('viewer')
   @ApiOperation({ summary: 'List approved templates' })
-  listTemplates(
-    @Param('tenantId') tenantId: string,
-    @Param('accountId') accountId: string,
-  ) {
+  listTemplates(@Param('tenantId') tenantId: string, @Param('accountId') accountId: string) {
     return this.whatsappService.listTemplates(tenantId, accountId);
   }
 
@@ -164,10 +172,7 @@ export class WhatsappController {
   @ApiBearerAuth()
   @Roles('viewer')
   @ApiOperation({ summary: 'Get message statistics for account' })
-  getStats(
-    @Param('tenantId') tenantId: string,
-    @Param('accountId') accountId: string,
-  ) {
+  getStats(@Param('tenantId') tenantId: string, @Param('accountId') accountId: string) {
     return this.whatsappService.getStats(tenantId, accountId);
   }
 }

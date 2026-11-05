@@ -31,7 +31,11 @@ export class TeachController {
   @Get()
   @Roles('viewer')
   @ApiOperation({ summary: 'Listar itens de conhecimento ensinados' })
-  @ApiQuery({ name: 'type', required: false, enum: ['fact', 'guidance', 'procedure', 'permission', 'example'] })
+  @ApiQuery({
+    name: 'type',
+    required: false,
+    enum: ['fact', 'guidance', 'procedure', 'permission', 'example'],
+  })
   @ApiQuery({ name: 'agentId', required: false })
   @ApiQuery({ name: 'approved', required: false, type: Boolean })
   findAll(

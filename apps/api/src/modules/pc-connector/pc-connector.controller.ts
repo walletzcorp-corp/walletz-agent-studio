@@ -109,6 +109,13 @@ export class PcConnectorPublicController {
     @Headers('x-device-secret') deviceSecret: string | undefined,
     @Body() body: { success: boolean; result?: Record<string, unknown>; error?: string },
   ) {
-    return this.svc.postCommandResult(deviceId, commandId, body.success, body.result, body.error, deviceSecret);
+    return this.svc.postCommandResult(
+      deviceId,
+      commandId,
+      body.success,
+      body.result,
+      body.error,
+      deviceSecret,
+    );
   }
 }

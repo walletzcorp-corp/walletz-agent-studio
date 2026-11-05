@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 
 interface CachedToken {
   token: string;
-  expiresAt: number; /* ms epoch */
+  expiresAt: number /* ms epoch */;
 }
 
 /**
@@ -46,7 +46,10 @@ export class MicrosoftGraphAuthService {
   /* ── App-only (Client Credentials) ── */
 
   async getAppOnlyToken(): Promise<string> {
-    if (this.appTokenCache && this.appTokenCache.expiresAt > Date.now() + MicrosoftGraphAuthService.EXPIRY_BUFFER_MS) {
+    if (
+      this.appTokenCache &&
+      this.appTokenCache.expiresAt > Date.now() + MicrosoftGraphAuthService.EXPIRY_BUFFER_MS
+    ) {
       return this.appTokenCache.token;
     }
 
@@ -110,7 +113,9 @@ export class MicrosoftGraphAuthService {
     if (!res.ok) {
       const body = await res.text();
       this.logger.error(`Delegated token refresh failed: ${res.status}`);
-      throw new ServiceUnavailableException(`Microsoft token refresh failed: ${res.status} — ${body}`);
+      throw new ServiceUnavailableException(
+        `Microsoft token refresh failed: ${res.status} — ${body}`,
+      );
     }
 
     const data = (await res.json()) as {

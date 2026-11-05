@@ -154,11 +154,17 @@ export class TenantsService {
       .returning();
 
     // Send invite email (best-effort — don't fail the invite if mail fails)
-    const [tenant] = await this.db.select({ name: tenants.name }).from(tenants).where(eq(tenants.id, tenantId)).limit(1);
+    const [tenant] = await this.db
+      .select({ name: tenants.name })
+      .from(tenants)
+      .where(eq(tenants.id, tenantId))
+      .limit(1);
     const appUrl = this.config.get<string>('APP_URL', 'http://localhost:3000');
     this.mailService
       .sendInvite(dto.email.toLowerCase(), tenant?.name ?? 'Walletz', inviteToken, appUrl)
-      .catch((err: unknown) => this.logger.error(`Failed to send invite email to ${dto.email}: ${String(err)}`));
+      .catch((err: unknown) =>
+        this.logger.error(`Failed to send invite email to ${dto.email}: ${String(err)}`),
+      );
 
     return membership!;
   }
@@ -169,7 +175,13 @@ export class TenantsService {
     role: string,
     requestingUserId: string,
   ): Promise<Membership> {
-    const validRoles: Membership['role'][] = ['viewer', 'analyst', 'agent_operator', 'manager', 'admin'];
+    const validRoles: Membership['role'][] = [
+      'viewer',
+      'analyst',
+      'agent_operator',
+      'manager',
+      'admin',
+    ];
     if (!validRoles.includes(role as Membership['role'])) {
       throw new BadRequestException(`Invalid role. Allowed: ${validRoles.join(', ')}`);
     }
@@ -181,7 +193,7 @@ export class TenantsService {
       .limit(1);
 
     if (!target) throw new NotFoundException('Membership not found');
-    if (target.role === 'owner') throw new ForbiddenException('Cannot change the owner\'s role');
+    if (target.role === 'owner') throw new ForbiddenException("Cannot change the owner's role");
 
     const [requester] = await this.db
       .select()

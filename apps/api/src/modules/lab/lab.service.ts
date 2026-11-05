@@ -145,7 +145,9 @@ export class LabService {
     const [agent] = await this.db
       .select()
       .from(agents)
-      .where(and(eq(agents.id, dto.agentId), eq(agents.tenantId, tenantId), isNull(agents.deletedAt)))
+      .where(
+        and(eq(agents.id, dto.agentId), eq(agents.tenantId, tenantId), isNull(agents.deletedAt)),
+      )
       .limit(1);
 
     if (!agent) throw new NotFoundException('Agent not found');
@@ -173,7 +175,8 @@ export class LabService {
     /* Check for connected PC devices for this tenant */
     const pcDevicesList = await this.pcConnector.listDevices(tenantId);
     const onlineDevice = pcDevicesList.find(
-      (d: { pairedAt: Date | null; lastSeenAt: Date | null }) => d.pairedAt && d.lastSeenAt && Date.now() - d.lastSeenAt.getTime() < 30_000,
+      (d: { pairedAt: Date | null; lastSeenAt: Date | null }) =>
+        d.pairedAt && d.lastSeenAt && Date.now() - d.lastSeenAt.getTime() < 30_000,
     ) as (typeof pcDevicesList)[0] | undefined;
     const pcEnabled = !!onlineDevice;
 
@@ -197,7 +200,9 @@ export class LabService {
 
     const tools: Anthropic.Tool[] = [
       ...(schedulingEnabled ? SCHEDULING_TOOLS : []),
-      ...(pcEnabled ? buildPcTools(onlineDevice!.id, onlineDevice!.capabilities as Record<string, unknown>) : []),
+      ...(pcEnabled
+        ? buildPcTools(onlineDevice!.id, onlineDevice!.capabilities as Record<string, unknown>)
+        : []),
     ];
     const toolCtx: ToolContext = {
       tenantId,
@@ -291,7 +296,11 @@ export class LabService {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`LLM call failed: ${msg}`);
 
-      if (msg.includes('authentication') || msg.includes('invalid') || msg.includes('placeholder')) {
+      if (
+        msg.includes('authentication') ||
+        msg.includes('invalid') ||
+        msg.includes('placeholder')
+      ) {
         throw new BadRequestException(
           'ANTHROPIC_API_KEY não está configurada. Configure uma chave real no .env.local para usar o laboratório.',
         );
@@ -352,15 +361,30 @@ export class LabService {
   }
 
   private buildSystemPrompt(
-    agent: { name: string; objective: string | null; tone: string | null; language: string | null; persona: unknown },
+    agent: {
+      name: string;
+      objective: string | null;
+      tone: string | null;
+      language: string | null;
+      persona: unknown;
+    },
     knowledgeItemsList: Array<{ type: string; content: string; context: string | null }>,
     chunks: Array<{ content: string; sourceName: string }>,
-    schedulingSettings: { defaultDurationMinutes: number; defaultPlatform: string; timeZone: string } | null,
-    pcDevice: { deviceName: string; authorizedPaths: unknown; authorizedApps: unknown } | null = null,
+    schedulingSettings: {
+      defaultDurationMinutes: number;
+      defaultPlatform: string;
+      timeZone: string;
+    } | null,
+    pcDevice: {
+      deviceName: string;
+      authorizedPaths: unknown;
+      authorizedApps: unknown;
+    } | null = null,
   ): string {
-    const persona = typeof agent.persona === 'object' && agent.persona !== null
-      ? (agent.persona as { name?: string; description?: string })
-      : {};
+    const persona =
+      typeof agent.persona === 'object' && agent.persona !== null
+        ? (agent.persona as { name?: string; description?: string })
+        : {};
 
     const parts: string[] = [`Você é ${persona.name ?? agent.name}, um assistente de IA.`];
 
@@ -405,10 +429,17 @@ Você pode agendar reuniões reais usando as ferramentas disponíveis. Siga SEMP
       const procedures = knowledgeItemsList.filter((i) => i.type === 'procedure');
       const permissions = knowledgeItemsList.filter((i) => i.type === 'permission');
 
-      if (facts.length > 0) parts.push('### Fatos\n' + facts.map((i) => `- ${i.content}${i.context ? ` (${i.context})` : ''}`).join('\n'));
-      if (guidance.length > 0) parts.push('### Diretrizes\n' + guidance.map((i) => `- ${i.content}`).join('\n'));
-      if (procedures.length > 0) parts.push('### Procedimentos\n' + procedures.map((i) => `- ${i.content}`).join('\n'));
-      if (permissions.length > 0) parts.push('### Permissões\n' + permissions.map((i) => `- ${i.content}`).join('\n'));
+      if (facts.length > 0)
+        parts.push(
+          '### Fatos\n' +
+            facts.map((i) => `- ${i.content}${i.context ? ` (${i.context})` : ''}`).join('\n'),
+        );
+      if (guidance.length > 0)
+        parts.push('### Diretrizes\n' + guidance.map((i) => `- ${i.content}`).join('\n'));
+      if (procedures.length > 0)
+        parts.push('### Procedimentos\n' + procedures.map((i) => `- ${i.content}`).join('\n'));
+      if (permissions.length > 0)
+        parts.push('### Permissões\n' + permissions.map((i) => `- ${i.content}`).join('\n'));
     }
 
     if (chunks.length > 0) {
@@ -419,8 +450,12 @@ Você pode agendar reuniões reais usando as ferramentas disponíveis. Siga SEMP
     }
 
     if (pcDevice) {
-      const paths = Array.isArray(pcDevice.authorizedPaths) ? (pcDevice.authorizedPaths as string[]).join(', ') : '';
-      const apps = Array.isArray(pcDevice.authorizedApps) ? (pcDevice.authorizedApps as string[]).join(', ') : '';
+      const paths = Array.isArray(pcDevice.authorizedPaths)
+        ? (pcDevice.authorizedPaths as string[]).join(', ')
+        : '';
+      const apps = Array.isArray(pcDevice.authorizedApps)
+        ? (pcDevice.authorizedApps as string[]).join(', ')
+        : '';
       parts.push(`
 ## Acesso ao Computador
 
@@ -457,7 +492,10 @@ function buildPcTools(deviceId: string, capabilities: Record<string, unknown>): 
       input_schema: {
         type: 'object' as const,
         properties: {
-          path: { type: 'string', description: 'Caminho do diretório a listar (deve estar dentro das pastas autorizadas)' },
+          path: {
+            type: 'string',
+            description: 'Caminho do diretório a listar (deve estar dentro das pastas autorizadas)',
+          },
           device_id: { type: 'string', description: 'ID do dispositivo', default: deviceId },
         },
         required: ['path'],
@@ -481,7 +519,8 @@ function buildPcTools(deviceId: string, capabilities: Record<string, unknown>): 
   if (files.create !== false) {
     tools.push({
       name: 'pc.createFile',
-      description: 'Cria um arquivo de texto no computador conectado dentro de uma pasta autorizada.',
+      description:
+        'Cria um arquivo de texto no computador conectado dentro de uma pasta autorizada.',
       input_schema: {
         type: 'object' as const,
         properties: {
@@ -546,7 +585,10 @@ function buildPcTools(deviceId: string, capabilities: Record<string, unknown>): 
       input_schema: {
         type: 'object' as const,
         properties: {
-          app: { type: 'string', description: 'Nome do executável (ex: notepad.exe, calc.exe, msedge.exe)' },
+          app: {
+            type: 'string',
+            description: 'Nome do executável (ex: notepad.exe, calc.exe, msedge.exe)',
+          },
           device_id: { type: 'string', description: 'ID do dispositivo', default: deviceId },
         },
         required: ['app'],

@@ -2,10 +2,21 @@
 
 import { useState } from 'react';
 import {
-  Brain, CheckCircle2, XCircle, AlertTriangle,
-  Eye, EyeOff, Save, Zap, DollarSign,
-  BarChart3, Shield, ChevronDown, Info,
-  Activity, ArrowLeft,
+  Brain,
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
+  Eye,
+  EyeOff,
+  Save,
+  Zap,
+  DollarSign,
+  BarChart3,
+  Shield,
+  ChevronDown,
+  Info,
+  Activity,
+  ArrowLeft,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -36,9 +47,25 @@ const PROVIDERS: ProviderConfig[] = [
     color: '#D97706',
     bgClass: 'bg-[#D97706]/10 text-[#D97706]',
     models: [
-      { id: 'claude-sonnet-4-6',        name: 'Claude Sonnet 4.6',   context: '200K',  cost: '~R$ 0,12/1K tokens', recommended: true },
-      { id: 'claude-haiku-4-5',         name: 'Claude Haiku 4.5',    context: '200K',  cost: '~R$ 0,02/1K tokens' },
-      { id: 'claude-opus-5-5',          name: 'Claude Opus 5.5',     context: '200K',  cost: '~R$ 0,75/1K tokens' },
+      {
+        id: 'claude-sonnet-4-6',
+        name: 'Claude Sonnet 4.6',
+        context: '200K',
+        cost: '~R$ 0,12/1K tokens',
+        recommended: true,
+      },
+      {
+        id: 'claude-haiku-4-5',
+        name: 'Claude Haiku 4.5',
+        context: '200K',
+        cost: '~R$ 0,02/1K tokens',
+      },
+      {
+        id: 'claude-opus-5-5',
+        name: 'Claude Opus 5.5',
+        context: '200K',
+        cost: '~R$ 0,75/1K tokens',
+      },
     ],
   },
   {
@@ -51,9 +78,15 @@ const PROVIDERS: ProviderConfig[] = [
     color: '#4285F4',
     bgClass: 'bg-[#4285F4]/10 text-[#4285F4]',
     models: [
-      { id: 'gemini-1.5-flash',      name: 'Gemini 1.5 Flash',    context: '1M',    cost: 'Gratuito (quota)', recommended: true },
-      { id: 'gemini-1.5-pro',        name: 'Gemini 1.5 Pro',      context: '2M',    cost: '~R$ 0,04/1K tokens' },
-      { id: 'gemini-2.0-flash',      name: 'Gemini 2.0 Flash',    context: '1M',    cost: 'Gratuito (quota)' },
+      {
+        id: 'gemini-1.5-flash',
+        name: 'Gemini 1.5 Flash',
+        context: '1M',
+        cost: 'Gratuito (quota)',
+        recommended: true,
+      },
+      { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', context: '2M', cost: '~R$ 0,04/1K tokens' },
+      { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', context: '1M', cost: 'Gratuito (quota)' },
     ],
   },
   {
@@ -66,8 +99,14 @@ const PROVIDERS: ProviderConfig[] = [
     color: '#10A37F',
     bgClass: 'bg-[#10A37F]/10 text-[#10A37F]',
     models: [
-      { id: 'gpt-4o-mini', name: 'GPT-4o mini', context: '128K', cost: '~R$ 0,03/1K tokens', recommended: true },
-      { id: 'gpt-4o',      name: 'GPT-4o',      context: '128K', cost: '~R$ 0,25/1K tokens' },
+      {
+        id: 'gpt-4o-mini',
+        name: 'GPT-4o mini',
+        context: '128K',
+        cost: '~R$ 0,03/1K tokens',
+        recommended: true,
+      },
+      { id: 'gpt-4o', name: 'GPT-4o', context: '128K', cost: '~R$ 0,25/1K tokens' },
     ],
   },
   {
@@ -80,16 +119,46 @@ const PROVIDERS: ProviderConfig[] = [
     color: '#94A3B8',
     bgClass: 'bg-surface-2 text-muted-foreground',
     models: [
-      { id: 'llama3.2',  name: 'Llama 3.2',   context: '128K', cost: 'Gratuito (local)', recommended: true },
-      { id: 'mistral',   name: 'Mistral 7B',  context: '32K',  cost: 'Gratuito (local)' },
+      {
+        id: 'llama3.2',
+        name: 'Llama 3.2',
+        context: '128K',
+        cost: 'Gratuito (local)',
+        recommended: true,
+      },
+      { id: 'mistral', name: 'Mistral 7B', context: '32K', cost: 'Gratuito (local)' },
     ],
   },
 ];
 
-const STRATEGIES: { id: AIStrategy; label: string; desc: string; icon: React.ElementType; color: string }[] = [
-  { id: 'economy',  label: 'Econômico',    desc: 'Usa o modelo mais barato disponível',       icon: DollarSign, color: 'text-neural-success' },
-  { id: 'balanced', label: 'Equilibrado',  desc: 'Balanceia custo e qualidade de resposta',   icon: Zap,        color: 'text-neural-blue' },
-  { id: 'quality',  label: 'Qualidade',    desc: 'Usa sempre o melhor modelo disponível',     icon: Brain,      color: 'text-primary' },
+const STRATEGIES: {
+  id: AIStrategy;
+  label: string;
+  desc: string;
+  icon: React.ElementType;
+  color: string;
+}[] = [
+  {
+    id: 'economy',
+    label: 'Econômico',
+    desc: 'Usa o modelo mais barato disponível',
+    icon: DollarSign,
+    color: 'text-neural-success',
+  },
+  {
+    id: 'balanced',
+    label: 'Equilibrado',
+    desc: 'Balanceia custo e qualidade de resposta',
+    icon: Zap,
+    color: 'text-neural-blue',
+  },
+  {
+    id: 'quality',
+    label: 'Qualidade',
+    desc: 'Usa sempre o melhor modelo disponível',
+    icon: Brain,
+    color: 'text-primary',
+  },
 ];
 
 /* ── Provider card ── */
@@ -104,43 +173,61 @@ function ProviderCard({
 }) {
   const [expanded, setExpanded] = useState(isDefault);
   const [showKey, setShowKey] = useState(false);
-  const [keyValue, setKeyValue] = useState(provider.status === 'connected' ? '••••••••••••••••••••••••••' : '');
-  const [selectedModel, setSelectedModel] = useState(provider.models.find(m => m.recommended)?.id ?? provider.models[0]?.id ?? '');
+  const [keyValue, setKeyValue] = useState(
+    provider.status === 'connected' ? '••••••••••••••••••••••••••' : '',
+  );
+  const [selectedModel, setSelectedModel] = useState(
+    provider.models.find((m) => m.recommended)?.id ?? provider.models[0]?.id ?? '',
+  );
 
   const statusConfig = {
-    connected:    { label: 'Conectado', className: 'badge-success', icon: CheckCircle2 },
-    disconnected: { label: 'Não configurado', className: 'bg-surface-2 text-muted-foreground border border-border', icon: XCircle },
-    error:        { label: 'Erro', className: 'badge-danger', icon: AlertTriangle },
+    connected: { label: 'Conectado', className: 'badge-success', icon: CheckCircle2 },
+    disconnected: {
+      label: 'Não configurado',
+      className: 'bg-surface-2 text-muted-foreground border border-border',
+      icon: XCircle,
+    },
+    error: { label: 'Erro', className: 'badge-danger', icon: AlertTriangle },
   }[provider.status];
 
   const StatusIcon = statusConfig.icon;
 
   return (
-    <div className={`neural-card overflow-hidden transition-all ${isDefault ? 'border-primary/40' : ''}`}>
+    <div
+      className={`neural-card overflow-hidden transition-all ${isDefault ? 'border-primary/40' : ''}`}
+    >
       <div
         className="flex items-center justify-between px-5 py-4 cursor-pointer hover:bg-surface-2/30 transition-colors"
         onClick={() => setExpanded(!expanded)}
       >
         <div className="flex items-center gap-3">
-          <div className={`flex h-10 w-10 items-center justify-center rounded-xl border border-border shrink-0 ${provider.bgClass}`}>
+          <div
+            className={`flex h-10 w-10 items-center justify-center rounded-xl border border-border shrink-0 ${provider.bgClass}`}
+          >
             <Brain className="h-5 w-5" />
           </div>
           <div>
             <div className="flex items-center gap-2">
               <p className="text-sm font-semibold text-foreground">{provider.name}</p>
               {isDefault && (
-                <span className="badge-primary text-[10px] px-2 py-0.5 rounded-full font-semibold">Padrão</span>
+                <span className="badge-primary text-[10px] px-2 py-0.5 rounded-full font-semibold">
+                  Padrão
+                </span>
               )}
             </div>
             <p className="text-xs text-muted-foreground">{provider.description}</p>
           </div>
         </div>
         <div className="flex items-center gap-3 shrink-0">
-          <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium ${statusConfig.className}`}>
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium ${statusConfig.className}`}
+          >
             <StatusIcon className="h-2.5 w-2.5" />
             {statusConfig.label}
           </span>
-          <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${expanded ? 'rotate-180' : ''}`} />
+          <ChevronDown
+            className={`h-4 w-4 text-muted-foreground transition-transform ${expanded ? 'rotate-180' : ''}`}
+          />
         </div>
       </div>
 
@@ -155,8 +242,10 @@ function ProviderCard({
               <input
                 type={showKey ? 'text' : 'password'}
                 value={keyValue}
-                onChange={e => setKeyValue(e.target.value)}
-                placeholder={provider.id === 'ollama' ? 'http://localhost:11434' : `${provider.keyPrefix}…`}
+                onChange={(e) => setKeyValue(e.target.value)}
+                placeholder={
+                  provider.id === 'ollama' ? 'http://localhost:11434' : `${provider.keyPrefix}…`
+                }
                 className="flex-1 rounded-lg border border-border bg-surface-1 px-3 py-2.5 text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50"
               />
               <button
@@ -169,7 +258,12 @@ function ProviderCard({
             <p className="text-[11px] text-muted-foreground/60 flex items-center gap-1">
               <Shield className="h-3 w-3" />
               Chave criptografada com AES-256. Nunca visível em logs.
-              <a href={provider.docsUrl} target="_blank" rel="noopener noreferrer" className="text-neural-blue hover:underline ml-1">
+              <a
+                href={provider.docsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-neural-blue hover:underline ml-1"
+              >
                 Obter chave
               </a>
             </p>
@@ -179,7 +273,7 @@ function ProviderCard({
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-muted-foreground">Modelo</label>
             <div className="space-y-1.5">
-              {provider.models.map(model => (
+              {provider.models.map((model) => (
                 <label
                   key={model.id}
                   className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-colors ${
@@ -201,7 +295,9 @@ function ProviderCard({
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-medium text-foreground">{model.name}</p>
                         {model.recommended && (
-                          <span className="text-[10px] text-neural-success font-medium">Recomendado</span>
+                          <span className="text-[10px] text-neural-success font-medium">
+                            Recomendado
+                          </span>
                         )}
                       </div>
                       <p className="text-xs text-muted-foreground">Contexto: {model.context}</p>
@@ -240,17 +336,22 @@ export default function AIConfigPage() {
   const [fallbackProvider, setFallbackProvider] = useState<AIProvider | 'none'>('none');
   const [strategy, setStrategy] = useState<AIStrategy>('balanced');
 
-  const connectedProviders = PROVIDERS.filter(p => p.status === 'connected');
+  const connectedProviders = PROVIDERS.filter((p) => p.status === 'connected');
 
   return (
     <div className="page-container space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Link href="/configuracoes" className="text-muted-foreground hover:text-foreground transition-colors">
+        <Link
+          href="/configuracoes"
+          className="text-muted-foreground hover:text-foreground transition-colors"
+        >
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <div>
-          <h1 className="text-2xl font-display font-semibold text-foreground">Configurações de IA</h1>
+          <h1 className="text-2xl font-display font-semibold text-foreground">
+            Configurações de IA
+          </h1>
           <p className="mt-0.5 text-sm text-muted-foreground">
             Gerencie provedores, modelos, estratégias e consumo de IA.
           </p>
@@ -260,11 +361,21 @@ export default function AIConfigPage() {
       {/* Usage stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: 'Tokens hoje',          value: '12.4K',   icon: Activity, color: 'text-primary' },
-          { label: 'Custo estimado (mês)', value: 'R$ 3,20', icon: DollarSign, color: 'text-neural-warning' },
-          { label: 'Provedores ativos',    value: connectedProviders.length.toString(), icon: Brain, color: 'text-neural-success' },
-          { label: 'Chamadas hoje',        value: '87',      icon: BarChart3, color: 'text-neural-blue' },
-        ].map(stat => {
+          { label: 'Tokens hoje', value: '12.4K', icon: Activity, color: 'text-primary' },
+          {
+            label: 'Custo estimado (mês)',
+            value: 'R$ 3,20',
+            icon: DollarSign,
+            color: 'text-neural-warning',
+          },
+          {
+            label: 'Provedores ativos',
+            value: connectedProviders.length.toString(),
+            icon: Brain,
+            color: 'text-neural-success',
+          },
+          { label: 'Chamadas hoje', value: '87', icon: BarChart3, color: 'text-neural-blue' },
+        ].map((stat) => {
           const Icon = stat.icon;
           return (
             <div key={stat.label} className="stat-card">
@@ -287,7 +398,7 @@ export default function AIConfigPage() {
           </div>
         </div>
         <div className="grid grid-cols-3 gap-2">
-          {STRATEGIES.map(s => {
+          {STRATEGIES.map((s) => {
             const Icon = s.icon;
             return (
               <button
@@ -319,10 +430,10 @@ export default function AIConfigPage() {
             <label className="text-xs font-medium text-muted-foreground">Provider padrão</label>
             <select
               value={defaultProvider}
-              onChange={e => setDefaultProvider(e.target.value as AIProvider)}
+              onChange={(e) => setDefaultProvider(e.target.value as AIProvider)}
               className="w-full rounded-lg border border-border bg-surface-1 px-3 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50"
             >
-              {PROVIDERS.map(p => (
+              {PROVIDERS.map((p) => (
                 <option key={p.id} value={p.id} disabled={p.status !== 'connected'}>
                   {p.name} {p.status !== 'connected' ? '(não configurado)' : ''}
                 </option>
@@ -333,11 +444,11 @@ export default function AIConfigPage() {
             <label className="text-xs font-medium text-muted-foreground">Fallback</label>
             <select
               value={fallbackProvider}
-              onChange={e => setFallbackProvider(e.target.value as AIProvider | 'none')}
+              onChange={(e) => setFallbackProvider(e.target.value as AIProvider | 'none')}
               className="w-full rounded-lg border border-border bg-surface-1 px-3 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50"
             >
               <option value="none">Sem fallback</option>
-              {PROVIDERS.filter(p => p.id !== defaultProvider).map(p => (
+              {PROVIDERS.filter((p) => p.id !== defaultProvider).map((p) => (
                 <option key={p.id} value={p.id} disabled={p.status !== 'connected'}>
                   {p.name} {p.status !== 'connected' ? '(não configurado)' : ''}
                 </option>
@@ -349,7 +460,9 @@ export default function AIConfigPage() {
         <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-surface-1">
           <div>
             <p className="text-sm font-medium text-foreground">Modo de teste (Gemini grátis)</p>
-            <p className="text-xs text-muted-foreground">Usa Gemini Flash no laboratório para economizar créditos</p>
+            <p className="text-xs text-muted-foreground">
+              Usa Gemini Flash no laboratório para economizar créditos
+            </p>
           </div>
           <button className="relative h-6 w-11 rounded-full bg-surface-3 transition-colors">
             <span className="absolute top-1 left-1 h-4 w-4 rounded-full bg-muted-foreground shadow transition-transform" />
@@ -360,7 +473,7 @@ export default function AIConfigPage() {
       {/* Provider cards */}
       <div className="space-y-3">
         <h3 className="text-sm font-semibold text-foreground">Provedores</h3>
-        {PROVIDERS.map(provider => (
+        {PROVIDERS.map((provider) => (
           <ProviderCard
             key={provider.id}
             provider={provider}
@@ -376,8 +489,9 @@ export default function AIConfigPage() {
         <div>
           <p className="text-sm font-semibold text-foreground mb-1">BYOK — Bring Your Own Key</p>
           <p className="text-xs text-muted-foreground">
-            Cada empresa pode configurar suas próprias chaves de API por segurança e controle de custos.
-            As chaves são criptografadas com AES-256-GCM, isoladas por tenant e jamais aparecem em logs ou no frontend completas.
+            Cada empresa pode configurar suas próprias chaves de API por segurança e controle de
+            custos. As chaves são criptografadas com AES-256-GCM, isoladas por tenant e jamais
+            aparecem em logs ou no frontend completas.
           </p>
         </div>
       </div>

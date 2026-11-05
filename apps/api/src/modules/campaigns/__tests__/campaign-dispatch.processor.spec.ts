@@ -17,12 +17,19 @@ const JOB_DATA: CampaignDispatchJobData = {
 };
 
 function jobAt(attemptsMade: number, attempts = 3): Job<CampaignDispatchJobData> {
-  return { data: JOB_DATA, attemptsMade, opts: { attempts } } as unknown as Job<CampaignDispatchJobData>;
+  return {
+    data: JOB_DATA,
+    attemptsMade,
+    opts: { attempts },
+  } as unknown as Job<CampaignDispatchJobData>;
 }
 
 function build(sendTemplateMessage: jest.Mock) {
   const fake = createFakeDb();
-  const processor = new CampaignDispatchProcessor(fake.db as never, { sendTemplateMessage } as never);
+  const processor = new CampaignDispatchProcessor(
+    fake.db as never,
+    { sendTemplateMessage } as never,
+  );
   return { fake, processor };
 }
 
@@ -66,7 +73,11 @@ describe('CampaignDispatchProcessor', () => {
 
   it('treats a job without an attempts option as a single, final attempt', async () => {
     const { fake, processor } = build(jest.fn().mockRejectedValue(new Error('boom')));
-    const noAttempts = { data: JOB_DATA, attemptsMade: 0, opts: {} } as unknown as Job<CampaignDispatchJobData>;
+    const noAttempts = {
+      data: JOB_DATA,
+      attemptsMade: 0,
+      opts: {},
+    } as unknown as Job<CampaignDispatchJobData>;
 
     await expect(processor.process(noAttempts)).rejects.toThrow('boom');
 

@@ -1,6 +1,11 @@
 import {
-  Injectable, Inject, Logger, NotFoundException,
-  BadRequestException, ConflictException, UnauthorizedException,
+  Injectable,
+  Inject,
+  Logger,
+  NotFoundException,
+  BadRequestException,
+  ConflictException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
@@ -8,29 +13,47 @@ import * as crypto from 'crypto';
 import { eq, and, isNull, ne } from 'drizzle-orm';
 import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';
 import {
-  whatsappAccounts, whatsappMessageLogs, whatsappTemplates,
+  whatsappAccounts,
+  whatsappMessageLogs,
+  whatsappTemplates,
   type WhatsappAccount,
 } from '../../database/schema/whatsapp';
+import { conversations, messages } from '../../database/schema/conversations';
 import {
-  conversations, messages,
-} from '../../database/schema/conversations';
-import {
-  contacts, contactIdentities, consents, suppressions,
+  contacts,
+  contactIdentities,
+  consents,
+  suppressions,
 } from '../../database/schema/contacts';
 import { agents } from '../../database/schema/agents';
 import { AuditService } from '../../shared/audit/audit.service';
 import { EncryptionService } from '../../shared/crypto/encryption.service';
 import { createId } from '../../database/utils/id';
 import { LabService } from '../lab/lab.service';
-import type { ConnectWhatsappDto, EmbeddedSignupDto, SendMessageDto } from './dto/connect-account.dto';
+import type {
+  ConnectWhatsappDto,
+  EmbeddedSignupDto,
+  SendMessageDto,
+} from './dto/connect-account.dto';
 
 const META_GRAPH_URL = 'https://graph.facebook.com/v22.0';
 
 // Keywords that trigger opt-out (case-insensitive, trimmed)
 const OPT_OUT_KEYWORDS = new Set([
-  'stop', 'sair', 'cancelar', 'pare', 'parar', 'remover', 'descadastrar',
-  'desinscrever', 'não quero', 'nao quero', 'opt out', 'optout',
-  'unsubscribe', 'cancel',
+  'stop',
+  'sair',
+  'cancelar',
+  'pare',
+  'parar',
+  'remover',
+  'descadastrar',
+  'desinscrever',
+  'não quero',
+  'nao quero',
+  'opt out',
+  'optout',
+  'unsubscribe',
+  'cancel',
 ]);
 
 function isOptOutMessage(text: string): boolean {
@@ -80,11 +103,13 @@ export class WhatsappService {
     const [account] = await this.db
       .select(this.accountPublicColumns)
       .from(whatsappAccounts)
-      .where(and(
-        eq(whatsappAccounts.id, accountId),
-        eq(whatsappAccounts.tenantId, tenantId),
-        isNull(whatsappAccounts.deletedAt),
-      ));
+      .where(
+        and(
+          eq(whatsappAccounts.id, accountId),
+          eq(whatsappAccounts.tenantId, tenantId),
+          isNull(whatsappAccounts.deletedAt),
+        ),
+      );
     if (!account) throw new NotFoundException('WhatsApp account not found');
     return account;
   }
@@ -93,16 +118,22 @@ export class WhatsappService {
     const [account] = await this.db
       .select()
       .from(whatsappAccounts)
-      .where(and(
-        eq(whatsappAccounts.id, accountId),
-        eq(whatsappAccounts.tenantId, tenantId),
-        isNull(whatsappAccounts.deletedAt),
-      ));
+      .where(
+        and(
+          eq(whatsappAccounts.id, accountId),
+          eq(whatsappAccounts.tenantId, tenantId),
+          isNull(whatsappAccounts.deletedAt),
+        ),
+      );
     if (!account) throw new NotFoundException('WhatsApp account not found');
     return account;
   }
 
-  async connectAccount(dto: ConnectWhatsappDto, tenantId: string, userId: string): Promise<WhatsappAccount> {
+  async connectAccount(
+    dto: ConnectWhatsappDto,
+    tenantId: string,
+    userId: string,
+  ): Promise<WhatsappAccount> {
     const [existing] = await this.db
       .select()
       .from(whatsappAccounts)
@@ -131,7 +162,9 @@ export class WhatsappService {
     }
 
     const encryptedToken = this.encryptionService.encrypt(dto.accessToken);
-    const encryptedAppSecret = dto.appSecret ? this.encryptionService.encrypt(dto.appSecret) : undefined;
+    const encryptedAppSecret = dto.appSecret
+      ? this.encryptionService.encrypt(dto.appSecret)
+      : undefined;
 
     const [account] = await this.db
       .insert(whatsappAccounts)
@@ -181,7 +214,11 @@ export class WhatsappService {
 
   // ─── Embedded Signup ─────────────────────────────────────────────────────────
 
-  async embeddedSignup(dto: EmbeddedSignupDto, tenantId: string, userId: string): Promise<WhatsappAccount> {
+  async embeddedSignup(
+    dto: EmbeddedSignupDto,
+    tenantId: string,
+    userId: string,
+  ): Promise<WhatsappAccount> {
     const appId = process.env.META_APP_ID;
     const appSecret = process.env.META_APP_SECRET;
     if (!appId || !appSecret) {
@@ -208,7 +245,9 @@ export class WhatsappService {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`Embedded Signup token exchange failed: ${msg}`);
-      throw new BadRequestException('Não foi possível concluir a autorização com a Meta. Tente novamente.');
+      throw new BadRequestException(
+        'Não foi possível concluir a autorização com a Meta. Tente novamente.',
+      );
     }
 
     // 2. Resolve WABA ID and Phone Number ID
@@ -225,10 +264,14 @@ export class WhatsappService {
             params: { access_token: accessToken, fields: 'whatsapp_business_accounts' },
           }),
         );
-        const bizData = wabaResp.data as { data?: Array<{ whatsapp_business_accounts?: { data?: Array<{ id: string }> } }> };
+        const bizData = wabaResp.data as {
+          data?: Array<{ whatsapp_business_accounts?: { data?: Array<{ id: string }> } }>;
+        };
         wabaId = bizData.data?.[0]?.whatsapp_business_accounts?.data?.[0]?.id;
       } catch (err) {
-        this.logger.warn(`Could not auto-resolve WABA ID: ${err instanceof Error ? err.message : err}`);
+        this.logger.warn(
+          `Could not auto-resolve WABA ID: ${err instanceof Error ? err.message : err}`,
+        );
       }
     }
 
@@ -236,10 +279,20 @@ export class WhatsappService {
       try {
         const phoneResp = await firstValueFrom(
           this.httpService.get(`${META_GRAPH_URL}/${wabaId}/phone_numbers`, {
-            params: { access_token: accessToken, fields: 'display_phone_number,verified_name,id,status' },
+            params: {
+              access_token: accessToken,
+              fields: 'display_phone_number,verified_name,id,status',
+            },
           }),
         );
-        const phoneData = phoneResp.data as { data?: Array<{ id: string; display_phone_number?: string; verified_name?: string; status?: string }> };
+        const phoneData = phoneResp.data as {
+          data?: Array<{
+            id: string;
+            display_phone_number?: string;
+            verified_name?: string;
+            status?: string;
+          }>;
+        };
         const firstPhone = phoneData.data?.[0];
         if (firstPhone) {
           phoneNumberId = firstPhone.id;
@@ -247,12 +300,16 @@ export class WhatsappService {
           displayName = firstPhone.verified_name;
         }
       } catch (err) {
-        this.logger.warn(`Could not auto-resolve Phone Number ID: ${err instanceof Error ? err.message : err}`);
+        this.logger.warn(
+          `Could not auto-resolve Phone Number ID: ${err instanceof Error ? err.message : err}`,
+        );
       }
     }
 
     if (!phoneNumberId || !wabaId) {
-      throw new BadRequestException('Não conseguimos identificar o número de WhatsApp autorizado. Tente novamente.');
+      throw new BadRequestException(
+        'Não conseguimos identificar o número de WhatsApp autorizado. Tente novamente.',
+      );
     }
 
     // 3. If display info still missing, fetch it directly
@@ -266,14 +323,18 @@ export class WhatsappService {
         const infoData = infoResp.data as { display_phone_number?: string; verified_name?: string };
         phoneNumber = phoneNumber ?? infoData.display_phone_number;
         displayName = displayName ?? infoData.verified_name;
-      } catch { /* use what we have */ }
+      } catch {
+        /* use what we have */
+      }
     }
 
     // 4. Cross-tenant ownership check before persisting
     const [existingForPhone] = await this.db
       .select({ id: whatsappAccounts.id, tenantId: whatsappAccounts.tenantId })
       .from(whatsappAccounts)
-      .where(and(eq(whatsappAccounts.phoneNumberId, phoneNumberId), isNull(whatsappAccounts.deletedAt)))
+      .where(
+        and(eq(whatsappAccounts.phoneNumberId, phoneNumberId), isNull(whatsappAccounts.deletedAt)),
+      )
       .limit(1);
 
     if (existingForPhone && existingForPhone.tenantId !== tenantId) {
@@ -281,9 +342,10 @@ export class WhatsappService {
     }
 
     // 5. Persist — internal verify token is always generated by us, never exposed to user
-    const verifyToken = existingForPhone?.tenantId === tenantId
-      ? undefined  // keep existing verifyToken on reconnect
-      : crypto.randomBytes(32).toString('hex');
+    const verifyToken =
+      existingForPhone?.tenantId === tenantId
+        ? undefined // keep existing verifyToken on reconnect
+        : crypto.randomBytes(32).toString('hex');
     const encryptedAccessToken = this.encryptionService.encrypt(accessToken);
 
     const [account] = await this.db
@@ -376,11 +438,13 @@ export class WhatsappService {
    * and marks the account as needing reconnection.
    */
   private async handleApiError(err: unknown, accountId: string, tenantId: string): Promise<void> {
-    const body = (err as { response?: { data?: { error?: { code?: number } } } })
-      ?.response?.data?.error;
+    const body = (err as { response?: { data?: { error?: { code?: number } } } })?.response?.data
+      ?.error;
     const tokenExpiryCodes = [190, 102, 463, 467];
     if (body?.code && tokenExpiryCodes.includes(body.code)) {
-      this.logger.warn(`Token expired/invalid for account ${accountId} (code ${body.code}) — marking for reconnection`);
+      this.logger.warn(
+        `Token expired/invalid for account ${accountId} (code ${body.code}) — marking for reconnection`,
+      );
       await this.db
         .update(whatsappAccounts)
         .set({ status: 'error', updatedAt: new Date() })
@@ -414,7 +478,12 @@ export class WhatsappService {
     }
 
     const reservation = await this.reserveOutboundLog(
-      tenantId, accountId, dto.to, 'text', { text: dto.text }, dto.idempotencyKey,
+      tenantId,
+      accountId,
+      dto.to,
+      'text',
+      { text: dto.text },
+      dto.idempotencyKey,
     );
     if (reservation.deduplicated) return { messageId: reservation.logId, status: 'deduplicated' };
     const logId = reservation.logId;
@@ -471,10 +540,12 @@ export class WhatsappService {
       const [existing] = await this.db
         .select({ id: whatsappMessageLogs.id, status: whatsappMessageLogs.status })
         .from(whatsappMessageLogs)
-        .where(and(
-          eq(whatsappMessageLogs.tenantId, tenantId),
-          eq(whatsappMessageLogs.idempotencyKey, idempotencyKey),
-        ))
+        .where(
+          and(
+            eq(whatsappMessageLogs.tenantId, tenantId),
+            eq(whatsappMessageLogs.idempotencyKey, idempotencyKey),
+          ),
+        )
         .limit(1);
 
       if (existing && existing.status !== 'failed') {
@@ -522,7 +593,10 @@ export class WhatsappService {
     }
 
     const reservation = await this.reserveOutboundLog(
-      tenantId, accountId, dto.to, 'template',
+      tenantId,
+      accountId,
+      dto.to,
+      'template',
       { templateName: dto.templateName, components: dto.templateComponents },
       dto.idempotencyKey,
     );
@@ -586,10 +660,12 @@ export class WhatsappService {
     const [dup] = await this.db
       .select({ id: whatsappMessageLogs.id })
       .from(whatsappMessageLogs)
-      .where(and(
-        eq(whatsappMessageLogs.tenantId, account.tenantId),
-        eq(whatsappMessageLogs.idempotencyKey, idempotencyKey),
-      ))
+      .where(
+        and(
+          eq(whatsappMessageLogs.tenantId, account.tenantId),
+          eq(whatsappMessageLogs.idempotencyKey, idempotencyKey),
+        ),
+      )
       .limit(1);
     if (dup) return;
 
@@ -648,7 +724,6 @@ export class WhatsappService {
         .update(messages)
         .set({ status: 'sent', sentAt: new Date() })
         .where(and(eq(messages.traceId, traceId), eq(messages.conversationId, conversationId)));
-
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`AI reply send failed: ${msg}`);
@@ -683,8 +758,10 @@ export class WhatsappService {
         throw new UnauthorizedException('Webhook signature required');
       }
       const expected = `sha256=${this.encryptionService.hmacSha256(appSecret, rawBody)}`;
-      if (signature.length !== expected.length ||
-          !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) {
+      if (
+        signature.length !== expected.length ||
+        !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))
+      ) {
         this.logger.warn('Webhook rejected: signature mismatch');
         throw new UnauthorizedException('Invalid webhook signature');
       }
@@ -700,7 +777,11 @@ export class WhatsappService {
         const value = change.value;
 
         for (const message of value.messages ?? []) {
-          await this.processInboundMessage(value.metadata?.phone_number_id, message, value.contacts?.[0]);
+          await this.processInboundMessage(
+            value.metadata?.phone_number_id,
+            message,
+            value.contacts?.[0],
+          );
         }
 
         for (const status of value.statuses ?? []) {
@@ -735,17 +816,20 @@ export class WhatsappService {
     const normalizedPhone = message.from.startsWith('+') ? message.from : `+${message.from}`;
 
     // ── Store raw log (idempotent on provider message ID) ──
-    await this.db.insert(whatsappMessageLogs).values({
-      tenantId,
-      accountId: account.id,
-      direction: 'inbound',
-      status: 'delivered',
-      providerMessageId: message.id,
-      from: normalizedPhone,
-      messageType: message.type,
-      content,
-      idempotencyKey: message.id,
-    }).onConflictDoNothing();
+    await this.db
+      .insert(whatsappMessageLogs)
+      .values({
+        tenantId,
+        accountId: account.id,
+        direction: 'inbound',
+        status: 'delivered',
+        providerMessageId: message.id,
+        from: normalizedPhone,
+        messageType: message.type,
+        content,
+        idempotencyKey: message.id,
+      })
+      .onConflictDoNothing();
 
     this.logger.log(`Inbound message from ${normalizedPhone} (${message.type})`);
 
@@ -756,12 +840,14 @@ export class WhatsappService {
     const [existingConv] = await this.db
       .select()
       .from(conversations)
-      .where(and(
-        eq(conversations.tenantId, tenantId),
-        eq(conversations.contactId, contactId),
-        eq(conversations.channel, 'whatsapp'),
-        ne(conversations.status, 'resolved'),
-      ))
+      .where(
+        and(
+          eq(conversations.tenantId, tenantId),
+          eq(conversations.contactId, contactId),
+          eq(conversations.channel, 'whatsapp'),
+          ne(conversations.status, 'resolved'),
+        ),
+      )
       .limit(1);
 
     let conversationId: string;
@@ -811,12 +897,14 @@ export class WhatsappService {
     }
 
     // ── Trigger AI response if conversation is not paused ──
-    const conv = existingConv ?? (await this.db
-      .select()
-      .from(conversations)
-      .where(eq(conversations.id, conversationId))
-      .limit(1)
-      .then((r) => r[0]));
+    const conv =
+      existingConv ??
+      (await this.db
+        .select()
+        .from(conversations)
+        .where(eq(conversations.id, conversationId))
+        .limit(1)
+        .then((r) => r[0]));
 
     if (conv?.aiPausedAt) {
       this.logger.log(`AI is paused for conversation ${conversationId}, skipping response`);
@@ -826,7 +914,14 @@ export class WhatsappService {
     // Only respond to text messages
     if (message.type !== 'text' || !message.text?.body) return;
 
-    void this.triggerAiResponse(account, conversationId, contactId, normalizedPhone, message.text.body, tenantId);
+    void this.triggerAiResponse(
+      account,
+      conversationId,
+      contactId,
+      normalizedPhone,
+      message.text.body,
+      tenantId,
+    );
   }
 
   private async handleOptOut(
@@ -899,11 +994,13 @@ export class WhatsappService {
     const [identity] = await this.db
       .select({ contactId: contactIdentities.contactId })
       .from(contactIdentities)
-      .where(and(
-        eq(contactIdentities.tenantId, tenantId),
-        eq(contactIdentities.channel, 'whatsapp'),
-        eq(contactIdentities.normalizedValue, normalizedPhone),
-      ))
+      .where(
+        and(
+          eq(contactIdentities.tenantId, tenantId),
+          eq(contactIdentities.channel, 'whatsapp'),
+          eq(contactIdentities.normalizedValue, normalizedPhone),
+        ),
+      )
       .limit(1);
 
     if (identity) return identity.contactId;
@@ -945,11 +1042,9 @@ export class WhatsappService {
     const [agent] = await this.db
       .select({ id: agents.id })
       .from(agents)
-      .where(and(
-        eq(agents.tenantId, tenantId),
-        isNull(agents.deletedAt),
-        ne(agents.status, 'archived'),
-      ))
+      .where(
+        and(eq(agents.tenantId, tenantId), isNull(agents.deletedAt), ne(agents.status, 'archived')),
+      )
       .limit(1);
 
     if (!agent) {
@@ -975,7 +1070,9 @@ export class WhatsappService {
         result.traceId,
       );
 
-      this.logger.log(`AI reply sent for conversation ${conversationId} (trace: ${result.traceId})`);
+      this.logger.log(
+        `AI reply sent for conversation ${conversationId} (trace: ${result.traceId})`,
+      );
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`AI response pipeline failed: ${msg}`);
@@ -986,8 +1083,10 @@ export class WhatsappService {
     const updateData: Record<string, unknown> = {};
 
     if (status.status === 'sent') updateData['sentAt'] = new Date(Number(status.timestamp) * 1000);
-    else if (status.status === 'delivered') updateData['deliveredAt'] = new Date(Number(status.timestamp) * 1000);
-    else if (status.status === 'read') updateData['readAt'] = new Date(Number(status.timestamp) * 1000);
+    else if (status.status === 'delivered')
+      updateData['deliveredAt'] = new Date(Number(status.timestamp) * 1000);
+    else if (status.status === 'read')
+      updateData['readAt'] = new Date(Number(status.timestamp) * 1000);
     else if (status.status === 'failed') {
       updateData['failedAt'] = new Date();
       updateData['errorCode'] = status.errors?.[0]?.code?.toString() ?? '';
@@ -999,7 +1098,7 @@ export class WhatsappService {
     const safeStatus = status.status as 'pending' | 'sent' | 'delivered' | 'read' | 'failed';
     await this.db
       .update(whatsappMessageLogs)
-      .set({ status: safeStatus, ...updateData as Record<string, Date | string | null> })
+      .set({ status: safeStatus, ...(updateData as Record<string, Date | string | null>) })
       .where(eq(whatsappMessageLogs.providerMessageId, status.id));
   }
 
@@ -1060,20 +1159,21 @@ export class WhatsappService {
     return this.db
       .select()
       .from(whatsappTemplates)
-      .where(and(
-        eq(whatsappTemplates.tenantId, tenantId),
-        eq(whatsappTemplates.accountId, accountId),
-      ));
+      .where(
+        and(eq(whatsappTemplates.tenantId, tenantId), eq(whatsappTemplates.accountId, accountId)),
+      );
   }
 
   async getStats(tenantId: string, accountId: string) {
     const logs = await this.db
       .select()
       .from(whatsappMessageLogs)
-      .where(and(
-        eq(whatsappMessageLogs.tenantId, tenantId),
-        eq(whatsappMessageLogs.accountId, accountId),
-      ));
+      .where(
+        and(
+          eq(whatsappMessageLogs.tenantId, tenantId),
+          eq(whatsappMessageLogs.accountId, accountId),
+        ),
+      );
 
     const sent = logs.filter((l) => l.direction === 'outbound').length;
     const received = logs.filter((l) => l.direction === 'inbound').length;
@@ -1115,7 +1215,10 @@ interface WebhookPayload {
   }>;
 }
 
-interface WaContact { profile?: { name: string }; wa_id: string }
+interface WaContact {
+  profile?: { name: string };
+  wa_id: string;
+}
 
 interface WaMessage {
   id: string;

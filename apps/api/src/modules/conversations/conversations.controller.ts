@@ -1,7 +1,4 @@
-import {
-  Controller, Get, Post, Param, Body, Query,
-  UseGuards, HttpCode,
-} from '@nestjs/common';
+import { Controller, Get, Post, Param, Body, Query, UseGuards, HttpCode } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { IsString, MaxLength, IsNotEmpty } from 'class-validator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -11,7 +8,9 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { ConversationsService } from './conversations.service';
 
 class SendMessageBody {
-  @IsString() @IsNotEmpty() @MaxLength(4096)
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(4096)
   text!: string;
 }
 
@@ -33,15 +32,17 @@ export class ConversationsController {
     @Query('limit') limit = 50,
     @Query('offset') offset = 0,
   ) {
-    return this.conversationsService.listConversations(tenantId, { status, agentId, limit: +limit, offset: +offset });
+    return this.conversationsService.listConversations(tenantId, {
+      status,
+      agentId,
+      limit: +limit,
+      offset: +offset,
+    });
   }
 
   @Get(':conversationId')
   @Roles('viewer')
-  get(
-    @Param('tenantId') tenantId: string,
-    @Param('conversationId') conversationId: string,
-  ) {
+  get(@Param('tenantId') tenantId: string, @Param('conversationId') conversationId: string) {
     return this.conversationsService.getConversation(tenantId, conversationId);
   }
 
@@ -79,20 +80,14 @@ export class ConversationsController {
   @Post(':conversationId/return-to-ai')
   @Roles('agent_operator')
   @HttpCode(200)
-  returnToAi(
-    @Param('tenantId') tenantId: string,
-    @Param('conversationId') conversationId: string,
-  ) {
+  returnToAi(@Param('tenantId') tenantId: string, @Param('conversationId') conversationId: string) {
     return this.conversationsService.returnToAi(tenantId, conversationId);
   }
 
   @Post(':conversationId/resolve')
   @Roles('agent_operator')
   @HttpCode(200)
-  resolve(
-    @Param('tenantId') tenantId: string,
-    @Param('conversationId') conversationId: string,
-  ) {
+  resolve(@Param('tenantId') tenantId: string, @Param('conversationId') conversationId: string) {
     return this.conversationsService.resolveConversation(tenantId, conversationId);
   }
 }

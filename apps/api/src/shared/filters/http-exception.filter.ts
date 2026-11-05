@@ -1,10 +1,4 @@
-import {
-  ExceptionFilter,
-  Catch,
-  ArgumentsHost,
-  HttpException,
-  HttpStatus,
-} from '@nestjs/common';
+import { ExceptionFilter, Catch, ArgumentsHost, HttpException, HttpStatus } from '@nestjs/common';
 import type { Response, Request } from 'express';
 import { createLogger } from '../telemetry/logger';
 import { v7 as uuidv7 } from 'uuid';
@@ -23,19 +17,20 @@ export class HttpExceptionFilter implements ExceptionFilter {
       exception instanceof HttpException ? exception.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
 
     const message =
-      exception instanceof HttpException
-        ? exception.getResponse()
-        : 'Internal server error';
+      exception instanceof HttpException ? exception.getResponse() : 'Internal server error';
 
     if (status >= 500) {
-      logger.error({
-        errorId,
-        path: request.url,
-        method: request.method,
-        status,
-        error: exception instanceof Error ? exception.message : String(exception),
-        stack: exception instanceof Error ? exception.stack : undefined,
-      }, 'Unhandled exception');
+      logger.error(
+        {
+          errorId,
+          path: request.url,
+          method: request.method,
+          status,
+          error: exception instanceof Error ? exception.message : String(exception),
+          stack: exception instanceof Error ? exception.stack : undefined,
+        },
+        'Unhandled exception',
+      );
     }
 
     response.status(status).json({

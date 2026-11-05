@@ -53,7 +53,10 @@ export const whatsappApi = {
     api.post<WhatsappAccount>(`/tenants/${tenantId}/whatsapp/accounts`, payload),
 
   reconnectAccount: (tenantId: string, accountId: string, payload: EmbeddedSignupPayload) =>
-    api.post<WhatsappAccount>(`/tenants/${tenantId}/whatsapp/accounts/${accountId}/reconnect`, payload),
+    api.post<WhatsappAccount>(
+      `/tenants/${tenantId}/whatsapp/accounts/${accountId}/reconnect`,
+      payload,
+    ),
 
   disconnectAccount: (tenantId: string, accountId: string) =>
     api.delete(`/tenants/${tenantId}/whatsapp/accounts/${accountId}`),

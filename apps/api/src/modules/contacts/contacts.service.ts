@@ -1,6 +1,4 @@
-import {
-  Injectable, Inject, NotFoundException,
-} from '@nestjs/common';
+import { Injectable, Inject, NotFoundException } from '@nestjs/common';
 import { eq, and, isNull, desc, ilike, or, inArray } from 'drizzle-orm';
 import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';
 import { contacts, contactIdentities, consents } from '../../database/schema/contacts';
@@ -40,7 +38,10 @@ export class ContactsService {
     private readonly auditService: AuditService,
   ) {}
 
-  async listContacts(tenantId: string, params?: { search?: string; segment?: string; limit?: number; offset?: number }) {
+  async listContacts(
+    tenantId: string,
+    params?: { search?: string; segment?: string; limit?: number; offset?: number },
+  ) {
     const limit = params?.limit ?? 50;
     const offset = params?.offset ?? 0;
 
@@ -78,7 +79,13 @@ export class ContactsService {
     const [row] = await this.db
       .select()
       .from(contacts)
-      .where(and(eq(contacts.id, contactId), eq(contacts.tenantId, tenantId), isNull(contacts.deletedAt)))
+      .where(
+        and(
+          eq(contacts.id, contactId),
+          eq(contacts.tenantId, tenantId),
+          isNull(contacts.deletedAt),
+        ),
+      )
       .limit(1);
     if (!row) throw new NotFoundException('Contact not found');
     return row;
@@ -141,23 +148,29 @@ export class ContactsService {
         contactId = contact!.id;
 
         if (phone) {
-          await this.db.insert(contactIdentities).values({
-            contactId: contactId,
-            tenantId,
-            channel: 'whatsapp',
-            value: row.phone!,
-            normalizedValue: phone,
-          }).onConflictDoNothing();
+          await this.db
+            .insert(contactIdentities)
+            .values({
+              contactId: contactId,
+              tenantId,
+              channel: 'whatsapp',
+              value: row.phone!,
+              normalizedValue: phone,
+            })
+            .onConflictDoNothing();
         }
 
         if (row.email) {
-          await this.db.insert(contactIdentities).values({
-            contactId: contactId,
-            tenantId,
-            channel: 'email',
-            value: row.email,
-            normalizedValue: row.email.toLowerCase(),
-          }).onConflictDoNothing();
+          await this.db
+            .insert(contactIdentities)
+            .values({
+              contactId: contactId,
+              tenantId,
+              channel: 'email',
+              value: row.email,
+              normalizedValue: row.email.toLowerCase(),
+            })
+            .onConflictDoNothing();
         }
 
         // Add consent if provided
@@ -175,7 +188,9 @@ export class ContactsService {
 
         imported++;
       } catch (err) {
-        errors.push(`Linha ${imported + skipped + 1}: ${err instanceof Error ? err.message : String(err)}`);
+        errors.push(
+          `Linha ${imported + skipped + 1}: ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
     }
 

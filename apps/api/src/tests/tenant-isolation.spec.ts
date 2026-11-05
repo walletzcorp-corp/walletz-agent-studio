@@ -8,7 +8,7 @@
  */
 
 import { Test, type TestingModule } from '@nestjs/testing';
-import type { INestApplication} from '@nestjs/common';
+import type { INestApplication } from '@nestjs/common';
 import { ValidationPipe, VersioningType } from '@nestjs/common';
 import request from 'supertest';
 import { AppModule } from '../app.module';
@@ -16,16 +16,27 @@ import { AppModule } from '../app.module';
 const TENANT_A = { name: 'Tenant Alpha', slug: `test-alpha-${Date.now()}` };
 const TENANT_B = { name: 'Tenant Beta', slug: `test-beta-${Date.now()}` };
 
-const USER_A = { email: `user-a-${Date.now()}@isolation.test`, password: 'IsolationTest1!', firstName: 'Alice' };
-const USER_B = { email: `user-b-${Date.now()}@isolation.test`, password: 'IsolationTest2!', firstName: 'Bob' };
+const USER_A = {
+  email: `user-a-${Date.now()}@isolation.test`,
+  password: 'IsolationTest1!',
+  firstName: 'Alice',
+};
+const USER_B = {
+  email: `user-b-${Date.now()}@isolation.test`,
+  password: 'IsolationTest2!',
+  firstName: 'Bob',
+};
 
-interface AuthTokens { accessToken: string; refreshToken: string }
+interface AuthTokens {
+  accessToken: string;
+  refreshToken: string;
+}
 
-async function registerAndLogin(app: INestApplication, user: typeof USER_A): Promise<{ tokens: AuthTokens; userId: string }> {
-  await request(app.getHttpServer())
-    .post('/v1/auth/register')
-    .send(user)
-    .expect(201);
+async function registerAndLogin(
+  app: INestApplication,
+  user: typeof USER_A,
+): Promise<{ tokens: AuthTokens; userId: string }> {
+  await request(app.getHttpServer()).post('/v1/auth/register').send(user).expect(201);
 
   const { body } = await request(app.getHttpServer())
     .post('/v1/auth/login')
@@ -63,7 +74,9 @@ describe('Tenant Isolation (TC01-TC25)', () => {
 
     app = module.createNestApplication();
     app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
-    app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
+    app.useGlobalPipes(
+      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+    );
     await app.init();
 
     const resA = await registerAndLogin(app, USER_A);

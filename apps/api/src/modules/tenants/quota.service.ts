@@ -14,7 +14,12 @@ export interface PlanLimits {
 const PLAN_LIMITS: Record<string, PlanLimits> = {
   starter: { maxAgents: 1, maxMembers: 3, maxKnowledgeSources: 10, maxMessagesPerMonth: 1_000 },
   growth: { maxAgents: 5, maxMembers: 10, maxKnowledgeSources: 50, maxMessagesPerMonth: 10_000 },
-  professional: { maxAgents: 20, maxMembers: 30, maxKnowledgeSources: 200, maxMessagesPerMonth: 50_000 },
+  professional: {
+    maxAgents: 20,
+    maxMembers: 30,
+    maxKnowledgeSources: 200,
+    maxMessagesPerMonth: 50_000,
+  },
   enterprise: { maxAgents: -1, maxMembers: -1, maxKnowledgeSources: -1, maxMessagesPerMonth: -1 },
 };
 
@@ -52,7 +57,9 @@ export class QuotaService {
     const value = memberRows[0]?.value ?? 0;
 
     if (value >= limits.maxMembers) {
-      throw new ForbiddenException(`Limite de ${limits.maxMembers} membros atingido no plano atual`);
+      throw new ForbiddenException(
+        `Limite de ${limits.maxMembers} membros atingido no plano atual`,
+      );
     }
   }
 }

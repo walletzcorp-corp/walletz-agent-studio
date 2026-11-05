@@ -35,20 +35,14 @@ export class KnowledgeController {
   @Get()
   @Roles('viewer')
   @ApiOperation({ summary: 'Listar fontes de conhecimento do tenant' })
-  findAll(
-    @Param('tenantId') tenantId: string,
-    @Query('agentId') agentId?: string,
-  ) {
+  findAll(@Param('tenantId') tenantId: string, @Query('agentId') agentId?: string) {
     return this.knowledgeService.listSources(tenantId, agentId);
   }
 
   @Get(':sourceId')
   @Roles('viewer')
   @ApiOperation({ summary: 'Detalhes da fonte de conhecimento' })
-  findOne(
-    @Param('tenantId') tenantId: string,
-    @Param('sourceId') sourceId: string,
-  ) {
+  findOne(@Param('tenantId') tenantId: string, @Param('sourceId') sourceId: string) {
     return this.knowledgeService.getSource(sourceId, tenantId);
   }
 
@@ -98,10 +92,7 @@ export class KnowledgeController {
   @Roles('manager')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Reprocessar fonte com falha' })
-  retry(
-    @Param('tenantId') tenantId: string,
-    @Param('sourceId') sourceId: string,
-  ) {
+  retry(@Param('tenantId') tenantId: string, @Param('sourceId') sourceId: string) {
     return this.knowledgeService.retryProcessing(sourceId, tenantId);
   }
 

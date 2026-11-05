@@ -1,7 +1,17 @@
 import {
-  Controller, Get, Post, Patch, Delete,
-  Param, Body, Query, Req, Res, UseGuards,
-  HttpCode, HttpStatus,
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Param,
+  Body,
+  Query,
+  Req,
+  Res,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiHeader, ApiQuery } from '@nestjs/swagger';
 import type { Response } from 'express';
@@ -86,11 +96,7 @@ export class CalendarsCallbackController {
       return res.redirect(`/agendas?error=${encodeURIComponent(error)}`);
     }
     try {
-      await this.svc.handleCallback(
-        code,
-        state,
-        req.user?.sub ?? null,
-      );
+      await this.svc.handleCallback(code, state, req.user?.sub ?? null);
       const appUrl = process.env['APP_URL'] ?? 'http://localhost:3000';
       return res.redirect(`${appUrl}/agendas?connected=${provider}`);
     } catch (err) {
@@ -182,10 +188,7 @@ export class CalendarsAvailabilityController {
   @Get('agents/:agentId/settings')
   @Roles('viewer')
   @ApiOperation({ summary: 'Obter configurações de agendamento do agente' })
-  getAgentSettings(
-    @Param('tenantId') tenantId: string,
-    @Param('agentId') agentId: string,
-  ) {
+  getAgentSettings(@Param('tenantId') tenantId: string, @Param('agentId') agentId: string) {
     return this.svc.getAgentSettings(tenantId, agentId);
   }
 

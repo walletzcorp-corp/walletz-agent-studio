@@ -5,8 +5,20 @@ import { useAuth } from '../../../hooks/use-auth';
 import { api } from '../../../lib/api';
 import { Button, Badge } from '@walletz/ui';
 import {
-  MessageSquare, Bot, User, PhoneCall, CheckCheck, Check, Clock, AlertCircle,
-  Send, ArrowLeft, Pause, Play, XCircle, RefreshCw,
+  MessageSquare,
+  Bot,
+  User,
+  PhoneCall,
+  CheckCheck,
+  Check,
+  Clock,
+  AlertCircle,
+  Send,
+  ArrowLeft,
+  Pause,
+  Play,
+  XCircle,
+  RefreshCw,
 } from 'lucide-react';
 
 interface Conversation {
@@ -37,20 +49,34 @@ interface Message {
 function DeliveryStatus({ status, reason }: { status: string; reason?: string | null }) {
   if (status === 'failed') {
     return (
-      <span className="inline-flex items-center gap-0.5 font-semibold text-red-300" title={reason ?? 'Falha no envio'}>
+      <span
+        className="inline-flex items-center gap-0.5 font-semibold text-red-300"
+        title={reason ?? 'Falha no envio'}
+      >
         <AlertCircle className="h-3 w-3" aria-hidden /> Falhou
       </span>
     );
   }
   if (status === 'pending') {
-    return <span title="Enviando…"><Clock className="h-2.5 w-2.5" aria-label="Enviando" /></span>;
+    return (
+      <span title="Enviando…">
+        <Clock className="h-2.5 w-2.5" aria-label="Enviando" />
+      </span>
+    );
   }
   if (status === 'sent') {
-    return <span title="Enviada"><Check className="h-2.5 w-2.5" aria-label="Enviada" /></span>;
+    return (
+      <span title="Enviada">
+        <Check className="h-2.5 w-2.5" aria-label="Enviada" />
+      </span>
+    );
   }
   return (
     <span title={status === 'read' ? 'Lida' : 'Entregue'}>
-      <CheckCheck className={`h-2.5 w-2.5 ${status === 'read' ? 'text-sky-300' : ''}`} aria-label={status === 'read' ? 'Lida' : 'Entregue'} />
+      <CheckCheck
+        className={`h-2.5 w-2.5 ${status === 'read' ? 'text-sky-300' : ''}`}
+        aria-label={status === 'read' ? 'Lida' : 'Entregue'}
+      />
     </span>
   );
 }
@@ -77,30 +103,45 @@ export default function ConversasPage() {
   const selectedRef = useRef<Conversation | null>(null);
   selectedRef.current = selected;
 
-  const loadConversations = useCallback(async (silent = false) => {
-    if (!tenantId) return;
-    try {
-      const { data } = await api.get<Conversation[]>(`/tenants/${tenantId}/conversations`);
-      setConversations(data);
-      // Update selected if it changed server-side
-      if (selectedRef.current) {
-        const updated = data.find((c) => c.id === selectedRef.current!.id);
-        if (updated) setSelected(updated);
+  const loadConversations = useCallback(
+    async (silent = false) => {
+      if (!tenantId) return;
+      try {
+        const { data } = await api.get<Conversation[]>(`/tenants/${tenantId}/conversations`);
+        setConversations(data);
+        // Update selected if it changed server-side
+        if (selectedRef.current) {
+          const updated = data.find((c) => c.id === selectedRef.current!.id);
+          if (updated) setSelected(updated);
+        }
+      } catch {
+        /* silent */
+      } finally {
+        if (!silent) setLoading(false);
       }
-    } catch { /* silent */ }
-    finally { if (!silent) setLoading(false); }
-  }, [tenantId]);
+    },
+    [tenantId],
+  );
 
-  const loadMessages = useCallback(async (convId: string) => {
-    if (!tenantId) return;
-    try {
-      const { data } = await api.get<Message[]>(`/tenants/${tenantId}/conversations/${convId}/messages`);
-      setMessages(data.slice().reverse());
-    } catch { /* silent */ }
-  }, [tenantId]);
+  const loadMessages = useCallback(
+    async (convId: string) => {
+      if (!tenantId) return;
+      try {
+        const { data } = await api.get<Message[]>(
+          `/tenants/${tenantId}/conversations/${convId}/messages`,
+        );
+        setMessages(data.slice().reverse());
+      } catch {
+        /* silent */
+      }
+    },
+    [tenantId],
+  );
 
   // Initial load
-  useEffect(() => { void loadConversations(); }, [loadConversations]);
+  useEffect(() => {
+    void loadConversations();
+  }, [loadConversations]);
 
   // Poll conversations every 5s
   useEffect(() => {
@@ -135,8 +176,11 @@ export default function ConversasPage() {
       });
       setReply('');
       await loadMessages(selected.id);
-    } catch { /* silent */ }
-    finally { setSending(false); }
+    } catch {
+      /* silent */
+    } finally {
+      setSending(false);
+    }
   };
 
   const handleAssume = async () => {
@@ -147,7 +191,9 @@ export default function ConversasPage() {
       );
       setSelected(data);
       setConversations((prev) => prev.map((c) => (c.id === data.id ? data : c)));
-    } catch { /* silent */ }
+    } catch {
+      /* silent */
+    }
   };
 
   const handleReturnToAi = async () => {
@@ -158,7 +204,9 @@ export default function ConversasPage() {
       );
       setSelected(data);
       setConversations((prev) => prev.map((c) => (c.id === data.id ? data : c)));
-    } catch { /* silent */ }
+    } catch {
+      /* silent */
+    }
   };
 
   const handleResolve = async () => {
@@ -169,7 +217,9 @@ export default function ConversasPage() {
       );
       setSelected(data);
       setConversations((prev) => prev.map((c) => (c.id === data.id ? data : c)));
-    } catch { /* silent */ }
+    } catch {
+      /* silent */
+    }
   };
 
   const isAiPaused = !!selected?.aiPausedAt;
@@ -177,14 +227,18 @@ export default function ConversasPage() {
   return (
     <div className="flex h-[calc(100vh-4rem)]">
       {/* Conversation list */}
-      <div className={`flex flex-col border-r border-border ${selected ? 'hidden md:flex w-80' : 'flex flex-1 md:flex-none md:w-80'}`}>
+      <div
+        className={`flex flex-col border-r border-border ${selected ? 'hidden md:flex w-80' : 'flex flex-1 md:flex-none md:w-80'}`}
+      >
         <div className="flex items-center justify-between p-4 border-b border-border">
           <h1 className="font-semibold flex items-center gap-2">
             <MessageSquare className="h-4 w-4" />
             Conversas
           </h1>
           <div className="flex items-center gap-2">
-            <span title="Atualizando automaticamente"><RefreshCw className="h-3 w-3 text-muted-foreground animate-spin opacity-40" /></span>
+            <span title="Atualizando automaticamente">
+              <RefreshCw className="h-3 w-3 text-muted-foreground animate-spin opacity-40" />
+            </span>
             <Badge variant="outline" className="text-xs">
               {conversations.filter((c) => c.status === 'open').length} abertas
             </Badge>
@@ -199,7 +253,9 @@ export default function ConversasPage() {
               <MessageSquare className="h-8 w-8 opacity-30" />
               <div>
                 <p className="font-medium text-sm">Nenhuma conversa</p>
-                <p className="text-xs mt-1">As conversas aparecerão aqui quando chegarem mensagens</p>
+                <p className="text-xs mt-1">
+                  As conversas aparecerão aqui quando chegarem mensagens
+                </p>
               </div>
             </div>
           ) : (
@@ -221,7 +277,9 @@ export default function ConversasPage() {
                           {conv.contactId.slice(0, 8)}…
                         </span>
                       </div>
-                      <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${STATUS_COLORS[conv.status] ?? 'bg-gray-100 text-gray-600'}`}>
+                      <span
+                        className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${STATUS_COLORS[conv.status] ?? 'bg-gray-100 text-gray-600'}`}
+                      >
                         {conv.status.replace('_', ' ')}
                       </span>
                     </div>
@@ -229,7 +287,10 @@ export default function ConversasPage() {
                       <span className="text-xs text-muted-foreground">{conv.channel}</span>
                       {conv.lastMessageAt && (
                         <span className="text-[10px] text-muted-foreground">
-                          {new Date(conv.lastMessageAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                          {new Date(conv.lastMessageAt).toLocaleTimeString('pt-BR', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
                         </span>
                       )}
                     </div>
@@ -292,7 +353,7 @@ export default function ConversasPage() {
               const isOut = msg.direction === 'outbound';
               const text =
                 typeof msg.content === 'object' && msg.content !== null
-                  ? (msg.content as { text?: string }).text ?? JSON.stringify(msg.content)
+                  ? ((msg.content as { text?: string }).text ?? JSON.stringify(msg.content))
                   : String(msg.content);
               return (
                 <div key={msg.id} className={`flex ${isOut ? 'justify-end' : 'justify-start'}`}>
@@ -304,10 +365,15 @@ export default function ConversasPage() {
                     }`}
                   >
                     <p className="whitespace-pre-line">{text}</p>
-                    <div className={`flex items-center gap-1 mt-1 text-[10px] ${isOut ? 'text-primary-foreground/70 justify-end' : 'text-muted-foreground'}`}>
+                    <div
+                      className={`flex items-center gap-1 mt-1 text-[10px] ${isOut ? 'text-primary-foreground/70 justify-end' : 'text-muted-foreground'}`}
+                    >
                       {msg.isAiGenerated && <Bot className="h-2.5 w-2.5" />}
                       {!msg.isAiGenerated && msg.sentByUserId && <User className="h-2.5 w-2.5" />}
-                      {new Date(msg.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                      {new Date(msg.createdAt).toLocaleTimeString('pt-BR', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
                       {isOut && <DeliveryStatus status={msg.status} reason={msg.failureReason} />}
                     </div>
                   </div>
@@ -321,13 +387,20 @@ export default function ConversasPage() {
           <div className="shrink-0 flex gap-2 p-4 border-t border-border bg-card">
             <textarea
               className="flex-1 resize-none rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring min-h-[44px] max-h-28"
-              placeholder={isAiPaused ? 'Responder como humano…' : 'IA está ativa. Clique em "Assumir" para responder.'}
+              placeholder={
+                isAiPaused
+                  ? 'Responder como humano…'
+                  : 'IA está ativa. Clique em "Assumir" para responder.'
+              }
               value={reply}
               onChange={(e) => setReply(e.target.value)}
               disabled={!isAiPaused || sending}
               rows={1}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void handleSend(); }
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  void handleSend();
+                }
               }}
             />
             <Button

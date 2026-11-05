@@ -38,11 +38,12 @@ export class AuditService {
     };
 
     // Fire-and-forget: audit log failure must NOT break the main flow
-    this.db.insert(auditLogs).values(entry).catch((err: unknown) => {
-      // Log to stderr only — never throw
-      process.stderr.write(
-        `[AuditService] Failed to write audit log: ${String(err)}\n`,
-      );
-    });
+    this.db
+      .insert(auditLogs)
+      .values(entry)
+      .catch((err: unknown) => {
+        // Log to stderr only — never throw
+        process.stderr.write(`[AuditService] Failed to write audit log: ${String(err)}\n`);
+      });
   }
 }

@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 
-export const metadata: Metadata = { title: { template: '%s — Walletz Agent Studio', default: 'Walletz Agent Studio' } };
+export const metadata: Metadata = {
+  title: { template: '%s — Walletz Agent Studio', default: 'Walletz Agent Studio' },
+};
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -9,8 +11,19 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         <div className="mb-8 text-center">
           <div className="inline-flex items-center gap-2 mb-3">
             <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-              <svg className="h-5 w-5 text-primary-foreground" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+              <svg
+                className="h-5 w-5 text-primary-foreground"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+              >
+                <path
+                  d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  fill="none"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
               </svg>
             </div>
             <span className="text-lg font-bold text-foreground">Walletz Agent Studio</span>

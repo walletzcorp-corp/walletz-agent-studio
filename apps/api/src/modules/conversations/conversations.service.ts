@@ -50,12 +50,7 @@ export class ConversationsService {
       .orderBy(desc(messages.createdAt));
   }
 
-  async sendHumanMessage(
-    tenantId: string,
-    conversationId: string,
-    text: string,
-    userId: string,
-  ) {
+  async sendHumanMessage(tenantId: string, conversationId: string, text: string, userId: string) {
     const conv = await this.getConversation(tenantId, conversationId);
 
     const [msg] = await this.db

@@ -12,10 +12,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       style={{ background: 'hsl(var(--background))' }}
     >
       {/* Background neural glow */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none fixed inset-0 overflow-hidden"
-      >
+      <div aria-hidden="true" className="pointer-events-none fixed inset-0 overflow-hidden">
         <div
           className="absolute -top-40 left-1/2 -translate-x-1/2 h-[600px] w-[600px] rounded-full opacity-10 blur-3xl"
           style={{ background: 'radial-gradient(circle, #6D4AFF 0%, transparent 70%)' }}

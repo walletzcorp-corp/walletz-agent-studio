@@ -1,0 +1,11 @@
+# Documentação em prosa
+docs/
+*.md
+
+# Gerados por ferramentas
+pnpm-lock.yaml
+**/migrations/meta/
+.next/
+.next-build/
+dist/
+coverage/

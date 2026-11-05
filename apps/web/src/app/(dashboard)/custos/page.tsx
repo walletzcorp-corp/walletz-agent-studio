@@ -2,18 +2,25 @@
 
 import { useState } from 'react';
 import {
-  DollarSign, AlertTriangle, ExternalLink,
-  Shield, Calendar, CreditCard, Zap, Smartphone,
-  ChevronRight, Info, 
+  DollarSign,
+  AlertTriangle,
+  ExternalLink,
+  Shield,
+  Calendar,
+  CreditCard,
+  Zap,
+  Smartphone,
+  ChevronRight,
+  Info,
 } from 'lucide-react';
 import Link from 'next/link';
 
 type Period = 'month' | 'quarter' | 'year';
 
 const PERIODS: { id: Period; label: string }[] = [
-  { id: 'month',   label: 'Este mês' },
+  { id: 'month', label: 'Este mês' },
   { id: 'quarter', label: 'Trimestre' },
-  { id: 'year',    label: '12 meses' },
+  { id: 'year', label: '12 meses' },
 ];
 
 /* ── Cost item ── */
@@ -112,8 +119,8 @@ function MiniBar({ value, total, color }: { value: number; total: number; color:
 export default function CustosPage() {
   const [period, setPeriod] = useState<Period>('month');
 
-  const wallettzCost  = 497 + 3.20;
-  const externalCost  = 0; // whatsapp not connected
+  const wallettzCost = 497 + 3.2;
+  const externalCost = 0; // whatsapp not connected
   const totalEstimate = wallettzCost + externalCost;
 
   return (
@@ -127,12 +134,14 @@ export default function CustosPage() {
           </p>
         </div>
         <div className="flex items-center gap-1 p-1 rounded-lg border border-border bg-surface-1">
-          {PERIODS.map(p => (
+          {PERIODS.map((p) => (
             <button
               key={p.id}
               onClick={() => setPeriod(p.id)}
               className={`px-4 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                period === p.id ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground'
+                period === p.id
+                  ? 'bg-primary/15 text-primary'
+                  : 'text-muted-foreground hover:text-foreground'
               }`}
             >
               {p.label}
@@ -177,30 +186,36 @@ export default function CustosPage() {
       <div className="rounded-lg border border-border bg-surface-1 p-4 flex items-start gap-3">
         <Info className="h-4 w-4 text-neural-blue shrink-0 mt-0.5" />
         <p className="text-sm text-muted-foreground">
-          <span className="text-foreground font-medium">Transparência de custos: </span>
-          O Walletz cobra somente a assinatura do plano e tokens de IA (quando não BYOK).
-          Custos de WhatsApp (Meta), Google APIs e Microsoft 365 são cobrados <strong>diretamente pelos fornecedores</strong> na conta do cliente — não passam pelo Walletz.
+          <span className="text-foreground font-medium">Transparência de custos: </span>O Walletz
+          cobra somente a assinatura do plano e tokens de IA (quando não BYOK). Custos de WhatsApp
+          (Meta), Google APIs e Microsoft 365 são cobrados{' '}
+          <strong>diretamente pelos fornecedores</strong> na conta do cliente — não passam pelo
+          Walletz.
         </p>
       </div>
 
       {/* Cost breakdown */}
       <div className="space-y-3">
         <h3 className="text-sm font-semibold text-foreground">Detalhamento</h3>
-        {COSTS.map(item => {
+        {COSTS.map((item) => {
           const Icon = item.icon;
           return (
             <div key={item.id} className="neural-card p-5 flex items-center gap-4">
-              <div className={`flex h-10 w-10 items-center justify-center rounded-xl shrink-0 ${item.bg}`}>
+              <div
+                className={`flex h-10 w-10 items-center justify-center rounded-xl shrink-0 ${item.bg}`}
+              >
                 <Icon className={`h-5 w-5 ${item.color}`} />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-0.5">
                   <p className="text-sm font-medium text-foreground">{item.label}</p>
-                  <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
-                    item.chargedBy === 'walletz'
-                      ? 'bg-primary/10 text-primary'
-                      : 'bg-surface-3 text-muted-foreground'
-                  }`}>
+                  <span
+                    className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
+                      item.chargedBy === 'walletz'
+                        ? 'bg-primary/10 text-primary'
+                        : 'bg-surface-3 text-muted-foreground'
+                    }`}
+                  >
                     {item.chargedBy === 'walletz' ? 'via Walletz' : `via ${item.provider}`}
                   </span>
                 </div>
@@ -208,17 +223,24 @@ export default function CustosPage() {
               </div>
               <div className="flex items-center gap-3 shrink-0">
                 <div className="text-right">
-                  <p className={`text-base font-display font-semibold ${item.value === '—' ? 'text-muted-foreground' : item.color}`}>
+                  <p
+                    className={`text-base font-display font-semibold ${item.value === '—' ? 'text-muted-foreground' : item.color}`}
+                  >
                     {item.value}
                   </p>
                   {item.trend && (
-                    <p className={`text-[11px] ${item.trendUp ? 'text-neural-warning' : 'text-neural-success'}`}>
+                    <p
+                      className={`text-[11px] ${item.trendUp ? 'text-neural-warning' : 'text-neural-success'}`}
+                    >
                       {item.trend} vs mês anterior
                     </p>
                   )}
                 </div>
                 {item.href && (
-                  <Link href={item.href} className="btn-ghost rounded-md px-2.5 py-2 text-xs flex items-center gap-1">
+                  <Link
+                    href={item.href}
+                    className="btn-ghost rounded-md px-2.5 py-2 text-xs flex items-center gap-1"
+                  >
                     Ver
                     <ChevronRight className="h-3 w-3" />
                   </Link>
@@ -248,7 +270,7 @@ export default function CustosPage() {
           <span className="text-xs text-muted-foreground w-24 shrink-0">Assinatura 99%</span>
         </div>
         <div className="flex items-center gap-3">
-          <MiniBar value={3.20} total={wallettzCost} color="bg-neural-blue" />
+          <MiniBar value={3.2} total={wallettzCost} color="bg-neural-blue" />
           <span className="text-xs text-muted-foreground w-24 shrink-0">IA 1%</span>
         </div>
         <p className="text-xs text-muted-foreground/60 pt-1">
@@ -259,10 +281,20 @@ export default function CustosPage() {
       {/* Quick links */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {[
-          { href: '/billing',          label: 'Billing Walletz',   desc: 'Plano e faturas',             icon: CreditCard },
-          { href: '/configuracoes/ia', label: 'Config. IA',        desc: 'Tokens e provedores',         icon: Zap },
-          { href: '/meta?tab=costs',   label: 'Custos Meta',       desc: 'WhatsApp e templates',        icon: Smartphone },
-        ].map(link => {
+          { href: '/billing', label: 'Billing Walletz', desc: 'Plano e faturas', icon: CreditCard },
+          {
+            href: '/configuracoes/ia',
+            label: 'Config. IA',
+            desc: 'Tokens e provedores',
+            icon: Zap,
+          },
+          {
+            href: '/meta?tab=costs',
+            label: 'Custos Meta',
+            desc: 'WhatsApp e templates',
+            icon: Smartphone,
+          },
+        ].map((link) => {
           const Icon = link.icon;
           return (
             <Link

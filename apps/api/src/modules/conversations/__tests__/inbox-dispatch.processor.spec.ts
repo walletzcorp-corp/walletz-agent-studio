@@ -12,7 +12,10 @@ const JOB_DATA: InboxDispatchJobData = {
 
 const job = { data: JOB_DATA } as unknown as Job<InboxDispatchJobData>;
 
-function build(results: unknown[], sendTextMessage = jest.fn().mockResolvedValue({ status: 'sent' })) {
+function build(
+  results: unknown[],
+  sendTextMessage = jest.fn().mockResolvedValue({ status: 'sent' }),
+) {
   const fake = createFakeDb(results);
   const processor = new InboxDispatchProcessor(fake.db as never, { sendTextMessage } as never);
   return { fake, processor, sendTextMessage };
@@ -20,7 +23,10 @@ function build(results: unknown[], sendTextMessage = jest.fn().mockResolvedValue
 
 describe('InboxDispatchProcessor', () => {
   it('marks the message sent after delivering through the tenant WhatsApp account', async () => {
-    const { fake, processor, sendTextMessage } = build([[{ id: 'wa-1' }], [{ phone: '+5511999990001' }]]);
+    const { fake, processor, sendTextMessage } = build([
+      [{ id: 'wa-1' }],
+      [{ phone: '+5511999990001' }],
+    ]);
 
     await processor.process(job);
 
@@ -56,10 +62,15 @@ describe('InboxDispatchProcessor', () => {
 
   it('records the provider error and rethrows so BullMQ retries', async () => {
     const sendTextMessage = jest.fn().mockRejectedValue(new Error('Meta 500'));
-    const { fake, processor } = build([[{ id: 'wa-1' }], [{ phone: '+5511999990001' }]], sendTextMessage);
+    const { fake, processor } = build(
+      [[{ id: 'wa-1' }], [{ phone: '+5511999990001' }]],
+      sendTextMessage,
+    );
 
     await expect(processor.process(job)).rejects.toThrow('Meta 500');
 
-    expect(fake.sets).toEqual([expect.objectContaining({ status: 'failed', failureReason: 'Meta 500' })]);
+    expect(fake.sets).toEqual([
+      expect.objectContaining({ status: 'failed', failureReason: 'Meta 500' }),
+    ]);
   });
 });

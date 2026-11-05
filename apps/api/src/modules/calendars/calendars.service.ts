@@ -43,10 +43,14 @@ export class CalendarsService {
   ) {
     const raw = this.config.get<string>('CALENDAR_ENCRYPTION_KEY', '');
     if (!raw && this.config.get('NODE_ENV') === 'production') {
-      throw new Error('CALENDAR_ENCRYPTION_KEY must be set in production — stored OAuth tokens cannot be decrypted without it');
+      throw new Error(
+        'CALENDAR_ENCRYPTION_KEY must be set in production — stored OAuth tokens cannot be decrypted without it',
+      );
     }
     if (!raw) {
-      this.logger.warn('CALENDAR_ENCRYPTION_KEY not set — using ephemeral key (tokens will be lost on restart). Set CALENDAR_ENCRYPTION_KEY in .env.local for persistent tokens.');
+      this.logger.warn(
+        'CALENDAR_ENCRYPTION_KEY not set — using ephemeral key (tokens will be lost on restart). Set CALENDAR_ENCRYPTION_KEY in .env.local for persistent tokens.',
+      );
     }
     this.encKey = raw ? Buffer.from(raw, 'hex') : crypto.randomBytes(32);
   }
@@ -81,7 +85,8 @@ export class CalendarsService {
    */
   async getValidMsToken(conn: CalendarConnection): Promise<string> {
     const BUFFER_MS = 5 * 60 * 1000; // 5 minutes
-    const isExpired = !conn.tokenExpiresAt || conn.tokenExpiresAt.getTime() < Date.now() + BUFFER_MS;
+    const isExpired =
+      !conn.tokenExpiresAt || conn.tokenExpiresAt.getTime() < Date.now() + BUFFER_MS;
 
     if (!isExpired) {
       return this.decrypt(conn.encryptedAccessToken);
@@ -109,14 +114,19 @@ export class CalendarsService {
       })
       .where(eq(calendarConnections.id, conn.id));
 
-    this.logger.log(`MS token refreshed for ${conn.email}, expires ${refreshed.expiresAt.toISOString()}`);
+    this.logger.log(
+      `MS token refreshed for ${conn.email}, expires ${refreshed.expiresAt.toISOString()}`,
+    );
     return refreshed.accessToken;
   }
 
   /* ── OAuth ── */
 
   private signOAuthState(payload: string): string {
-    const secret = this.config.get<string>('CALENDAR_OAUTH_STATE_SECRET', 'dev-state-secret-change-in-prod');
+    const secret = this.config.get<string>(
+      'CALENDAR_OAUTH_STATE_SECRET',
+      'dev-state-secret-change-in-prod',
+    );
     return crypto.createHmac('sha256', secret).update(payload).digest('hex');
   }
 
@@ -180,7 +190,9 @@ export class CalendarsService {
         .update(calendarConnections)
         .set({
           encryptedAccessToken: this.encrypt(tokens.accessToken),
-          encryptedRefreshToken: tokens.refreshToken ? this.encrypt(tokens.refreshToken) : undefined,
+          encryptedRefreshToken: tokens.refreshToken
+            ? this.encrypt(tokens.refreshToken)
+            : undefined,
           tokenExpiresAt: tokens.expiresAt,
           scopes: tokens.scopes,
           displayName: tokens.displayName ?? null,
@@ -216,11 +228,15 @@ export class CalendarsService {
 
   /* ── Connections CRUD ── */
 
-  async listConnections(tenantId: string): Promise<Omit<CalendarConnection, 'encryptedAccessToken' | 'encryptedRefreshToken'>[]> {
+  async listConnections(
+    tenantId: string,
+  ): Promise<Omit<CalendarConnection, 'encryptedAccessToken' | 'encryptedRefreshToken'>[]> {
     const rows = await this.db
       .select()
       .from(calendarConnections)
-      .where(and(eq(calendarConnections.tenantId, tenantId), isNull(calendarConnections.deletedAt)));
+      .where(
+        and(eq(calendarConnections.tenantId, tenantId), isNull(calendarConnections.deletedAt)),
+      );
 
     return rows.map(({ encryptedAccessToken: _a, encryptedRefreshToken: _b, ...rest }) => rest);
   }
@@ -229,7 +245,9 @@ export class CalendarsService {
     const [conn] = await this.db
       .select()
       .from(calendarConnections)
-      .where(and(eq(calendarConnections.id, connectionId), eq(calendarConnections.tenantId, tenantId)))
+      .where(
+        and(eq(calendarConnections.id, connectionId), eq(calendarConnections.tenantId, tenantId)),
+      )
       .limit(1);
 
     if (!conn) throw new NotFoundException('Calendar connection not found');
@@ -253,14 +271,18 @@ export class CalendarsService {
     const conns = await this.db
       .select()
       .from(calendarConnections)
-      .where(and(eq(calendarConnections.tenantId, tenantId), isNull(calendarConnections.deletedAt)));
+      .where(
+        and(eq(calendarConnections.tenantId, tenantId), isNull(calendarConnections.deletedAt)),
+      );
 
     /* Mark all as pending; actual sync would be done by a background worker */
     if (conns.length > 0) {
       await this.db
         .update(calendarConnections)
         .set({ syncStatus: 'pending', updatedAt: new Date() })
-        .where(and(eq(calendarConnections.tenantId, tenantId), isNull(calendarConnections.deletedAt)));
+        .where(
+          and(eq(calendarConnections.tenantId, tenantId), isNull(calendarConnections.deletedAt)),
+        );
     }
 
     return { queued: conns.length };
@@ -276,7 +298,12 @@ export class CalendarsService {
     const [settings] = await this.db
       .select()
       .from(agentCalendarSettings)
-      .where(and(eq(agentCalendarSettings.tenantId, tenantId), eq(agentCalendarSettings.agentId, agentId)))
+      .where(
+        and(
+          eq(agentCalendarSettings.tenantId, tenantId),
+          eq(agentCalendarSettings.agentId, agentId),
+        ),
+      )
       .limit(1);
 
     if (!settings?.canSchedule) return [];
@@ -308,26 +335,34 @@ export class CalendarsService {
       const [conn] = await this.db
         .select()
         .from(calendarConnections)
-        .where(and(eq(calendarConnections.id, settings.connectionId), isNull(calendarConnections.deletedAt)))
+        .where(
+          and(
+            eq(calendarConnections.id, settings.connectionId),
+            isNull(calendarConnections.deletedAt),
+          ),
+        )
         .limit(1);
 
       if (conn) {
         try {
-          const token = conn.provider === 'microsoft'
-            ? await this.getValidMsToken(conn)
-            : this.decrypt(conn.encryptedAccessToken);
+          const token =
+            conn.provider === 'microsoft'
+              ? await this.getValidMsToken(conn)
+              : this.decrypt(conn.encryptedAccessToken);
           const externalEvents =
             conn.provider === 'google'
               ? await this.googleService.listEvents(token, now, rangeEnd)
               : await this.microsoftService.listEvents(token, now, rangeEnd);
 
           for (const ev of externalEvents) {
-            const start = conn.provider === 'google'
-              ? new Date((ev as { start: { dateTime: string } }).start.dateTime)
-              : new Date((ev as { start: { dateTime: string } }).start.dateTime);
-            const end = conn.provider === 'google'
-              ? new Date((ev as { end: { dateTime: string } }).end.dateTime)
-              : new Date((ev as { end: { dateTime: string } }).end.dateTime);
+            const start =
+              conn.provider === 'google'
+                ? new Date((ev as { start: { dateTime: string } }).start.dateTime)
+                : new Date((ev as { start: { dateTime: string } }).start.dateTime);
+            const end =
+              conn.provider === 'google'
+                ? new Date((ev as { end: { dateTime: string } }).end.dateTime)
+                : new Date((ev as { end: { dateTime: string } }).end.dateTime);
             busyBlocks.push({ start, end });
           }
         } catch (err) {
@@ -339,7 +374,9 @@ export class CalendarsService {
     const merged = this.availabilityService.mergeBusyBlocks(busyBlocks);
     const slots = this.availabilityService.computeFreeSlots(
       merged,
-      (settings.availableHours ?? {}) as Parameters<typeof this.availabilityService.computeFreeSlots>[1],
+      (settings.availableHours ?? {}) as Parameters<
+        typeof this.availabilityService.computeFreeSlots
+      >[1],
       settings.defaultDurationMinutes,
       settings.bufferMinutes,
       now,
@@ -351,7 +388,11 @@ export class CalendarsService {
 
   /* ── Meetings ── */
 
-  async createMeeting(tenantId: string, userId: string, dto: CreateMeetingDto): Promise<CalendarMeeting> {
+  async createMeeting(
+    tenantId: string,
+    userId: string,
+    dto: CreateMeetingDto,
+  ): Promise<CalendarMeeting> {
     const startAt = new Date(dto.startAt);
     const endAt = new Date(dto.endAt);
 
@@ -365,8 +406,8 @@ export class CalendarsService {
         and(
           eq(calendarMeetings.tenantId, tenantId),
           isNull(calendarMeetings.deletedAt),
-          lt(calendarMeetings.startAt, endAt),   // existing starts before new ends
-          gte(calendarMeetings.endAt, startAt),  // existing ends after new starts
+          lt(calendarMeetings.startAt, endAt), // existing starts before new ends
+          gte(calendarMeetings.endAt, startAt), // existing ends after new starts
         ),
       )
       .limit(1);
@@ -383,13 +424,20 @@ export class CalendarsService {
       const [conn] = await this.db
         .select()
         .from(calendarConnections)
-        .where(and(eq(calendarConnections.id, dto.connectionId), eq(calendarConnections.tenantId, tenantId), isNull(calendarConnections.deletedAt)))
+        .where(
+          and(
+            eq(calendarConnections.id, dto.connectionId),
+            eq(calendarConnections.tenantId, tenantId),
+            isNull(calendarConnections.deletedAt),
+          ),
+        )
         .limit(1);
 
       if (conn) {
-        const token = conn.provider === 'microsoft'
-          ? await this.getValidMsToken(conn)
-          : this.decrypt(conn.encryptedAccessToken);
+        const token =
+          conn.provider === 'microsoft'
+            ? await this.getValidMsToken(conn)
+            : this.decrypt(conn.encryptedAccessToken);
         const attendeeEmails = dto.contactEmail ? [dto.contactEmail] : [];
         if (conn.provider === 'google') {
           const ev = await this.googleService.createEvent(token, {
@@ -469,7 +517,13 @@ export class CalendarsService {
     const [meeting] = await this.db
       .select()
       .from(calendarMeetings)
-      .where(and(eq(calendarMeetings.id, meetingId), eq(calendarMeetings.tenantId, tenantId), isNull(calendarMeetings.deletedAt)))
+      .where(
+        and(
+          eq(calendarMeetings.id, meetingId),
+          eq(calendarMeetings.tenantId, tenantId),
+          isNull(calendarMeetings.deletedAt),
+        ),
+      )
       .limit(1);
 
     if (!meeting) throw new NotFoundException('Meeting not found');
@@ -503,13 +557,20 @@ export class CalendarsService {
       const [conn] = await this.db
         .select()
         .from(calendarConnections)
-        .where(and(eq(calendarConnections.id, meeting.connectionId), eq(calendarConnections.tenantId, tenantId), isNull(calendarConnections.deletedAt)))
+        .where(
+          and(
+            eq(calendarConnections.id, meeting.connectionId),
+            eq(calendarConnections.tenantId, tenantId),
+            isNull(calendarConnections.deletedAt),
+          ),
+        )
         .limit(1);
 
       if (conn) {
-        const token = conn.provider === 'microsoft'
-          ? await this.getValidMsToken(conn)
-          : this.decrypt(conn.encryptedAccessToken);
+        const token =
+          conn.provider === 'microsoft'
+            ? await this.getValidMsToken(conn)
+            : this.decrypt(conn.encryptedAccessToken);
 
         if (conn.provider === 'google') {
           await this.googleService.updateEvent(token, meeting.externalEventId, {
@@ -579,7 +640,13 @@ export class CalendarsService {
     const [meeting] = await this.db
       .select()
       .from(calendarMeetings)
-      .where(and(eq(calendarMeetings.id, meetingId), eq(calendarMeetings.tenantId, tenantId), isNull(calendarMeetings.deletedAt)))
+      .where(
+        and(
+          eq(calendarMeetings.id, meetingId),
+          eq(calendarMeetings.tenantId, tenantId),
+          isNull(calendarMeetings.deletedAt),
+        ),
+      )
       .limit(1);
 
     if (!meeting) throw new NotFoundException('Meeting not found');
@@ -594,9 +661,10 @@ export class CalendarsService {
 
       if (conn) {
         try {
-          const token = conn.provider === 'microsoft'
-            ? await this.getValidMsToken(conn)
-            : this.decrypt(conn.encryptedAccessToken);
+          const token =
+            conn.provider === 'microsoft'
+              ? await this.getValidMsToken(conn)
+              : this.decrypt(conn.encryptedAccessToken);
           if (conn.provider === 'google') {
             await this.googleService.deleteEvent(token, meeting.externalEventId);
           } else {
@@ -644,7 +712,12 @@ export class CalendarsService {
     const [settings] = await this.db
       .select()
       .from(agentCalendarSettings)
-      .where(and(eq(agentCalendarSettings.tenantId, tenantId), eq(agentCalendarSettings.agentId, agentId)))
+      .where(
+        and(
+          eq(agentCalendarSettings.tenantId, tenantId),
+          eq(agentCalendarSettings.agentId, agentId),
+        ),
+      )
       .limit(1);
     return settings ?? null;
   }
@@ -663,7 +736,9 @@ export class CalendarsService {
       bufferMinutes: dto.bufferMinutes,
       maxMeetingsPerDay: dto.maxMeetingsPerDay,
       minLeadTimeMinutes: dto.minLeadTimeMinutes,
-      defaultPlatform: dto.defaultPlatform as ('google_meet' | 'teams' | 'presencial' | 'phone') | undefined,
+      defaultPlatform: dto.defaultPlatform as
+        | ('google_meet' | 'teams' | 'presencial' | 'phone')
+        | undefined,
       availableHours: dto.availableHours,
       connectionId: dto.connectionId,
       timeZone: dto.timeZone,
@@ -724,9 +799,10 @@ export class CalendarsService {
 
     if (!conn) throw new NotFoundException('Calendar connection not found');
 
-    const token = conn.provider === 'microsoft'
-      ? await this.getValidMsToken(conn)
-      : this.decrypt(conn.encryptedAccessToken);
+    const token =
+      conn.provider === 'microsoft'
+        ? await this.getValidMsToken(conn)
+        : this.decrypt(conn.encryptedAccessToken);
 
     if (conn.provider === 'google') {
       const ev = await this.googleService.createEvent(token, {
@@ -749,7 +825,14 @@ export class CalendarsService {
         attendeeEmails: params.attendeeEmails ?? [],
         addTeams: params.addTeams ?? false,
       });
-      return { id: ev.id, meetUrl: (ev as { onlineMeeting?: { joinUrl?: string }; webLink?: string }).onlineMeeting?.joinUrl ?? (ev as { webLink?: string }).webLink ?? undefined };
+      return {
+        id: ev.id,
+        meetUrl:
+          (ev as { onlineMeeting?: { joinUrl?: string }; webLink?: string }).onlineMeeting
+            ?.joinUrl ??
+          (ev as { webLink?: string }).webLink ??
+          undefined,
+      };
     }
   }
 }

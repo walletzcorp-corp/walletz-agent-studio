@@ -86,19 +86,26 @@ export function useAuth() {
     void loadUser();
   }, [loadUser]);
 
-  const login = useCallback(async (email: string, password: string, mfaCode?: string) => {
-    const { data } = await authApi.login({ email, password, mfaCode });
-    if (data.requiresMfa) {
-      return { requiresMfa: true, mfaToken: data.mfaToken };
-    }
-    storeTokens(data, data.sessionId);
-    await loadUser();
-    router.push('/');
-    return { requiresMfa: false };
-  }, [storeTokens, loadUser, router]);
+  const login = useCallback(
+    async (email: string, password: string, mfaCode?: string) => {
+      const { data } = await authApi.login({ email, password, mfaCode });
+      if (data.requiresMfa) {
+        return { requiresMfa: true, mfaToken: data.mfaToken };
+      }
+      storeTokens(data, data.sessionId);
+      await loadUser();
+      router.push('/');
+      return { requiresMfa: false };
+    },
+    [storeTokens, loadUser, router],
+  );
 
   const logout = useCallback(async () => {
-    try { await authApi.logout(); } catch { /* ignore */ }
+    try {
+      await authApi.logout();
+    } catch {
+      /* ignore */
+    }
     clearTokens();
     setState({ ...INITIAL_STATE, isLoading: false });
     router.push('/auth/login');

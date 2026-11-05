@@ -1,15 +1,25 @@
-import {
-  Injectable, Inject, NotFoundException, BadRequestException,
-} from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import { eq, and, isNull, desc, gte, or } from 'drizzle-orm';
 import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';
 import { segments, campaigns, campaignRecipients } from '../../database/schema/campaigns';
-import { contacts, contactIdentities, consents, suppressions } from '../../database/schema/contacts';
-import { whatsappAccounts, whatsappTemplates, whatsappMessageLogs } from '../../database/schema/whatsapp';
+import {
+  contacts,
+  contactIdentities,
+  consents,
+  suppressions,
+} from '../../database/schema/contacts';
+import {
+  whatsappAccounts,
+  whatsappTemplates,
+  whatsappMessageLogs,
+} from '../../database/schema/whatsapp';
 import { AuditService } from '../../shared/audit/audit.service';
-import { CAMPAIGN_DISPATCH_QUEUE, type CampaignDispatchJobData } from './campaign-dispatch.processor';
+import {
+  CAMPAIGN_DISPATCH_QUEUE,
+  type CampaignDispatchJobData,
+} from './campaign-dispatch.processor';
 
 // Frequency-cap window: a contact may receive at most 1 outbound campaign message per window
 const FREQUENCY_CAP_HOURS = 24;
@@ -30,7 +40,8 @@ export class CampaignsService {
   constructor(
     @Inject(DRIZZLE_TOKEN) private readonly db: DrizzleDB,
     private readonly auditService: AuditService,
-    @InjectQueue(CAMPAIGN_DISPATCH_QUEUE) private readonly campaignQueue: Queue<CampaignDispatchJobData>,
+    @InjectQueue(CAMPAIGN_DISPATCH_QUEUE)
+    private readonly campaignQueue: Queue<CampaignDispatchJobData>,
   ) {}
 
   // ─── Segments ────────────────────────────────────────────────────────────────
@@ -43,7 +54,11 @@ export class CampaignsService {
       .orderBy(desc(segments.createdAt));
   }
 
-  async createSegment(tenantId: string, userId: string, data: { name: string; description?: string; filters?: Record<string, unknown> }) {
+  async createSegment(
+    tenantId: string,
+    userId: string,
+    data: { name: string; description?: string; filters?: Record<string, unknown> },
+  ) {
     const [seg] = await this.db
       .insert(segments)
       .values({
@@ -63,10 +78,7 @@ export class CampaignsService {
       .from(segments)
       .where(and(eq(segments.id, segmentId), eq(segments.tenantId, tenantId)));
     if (!seg) throw new NotFoundException('Segment not found');
-    await this.db
-      .update(segments)
-      .set({ deletedAt: new Date() })
-      .where(eq(segments.id, segmentId));
+    await this.db.update(segments).set({ deletedAt: new Date() }).where(eq(segments.id, segmentId));
   }
 
   // ─── Campaigns ───────────────────────────────────────────────────────────────
@@ -143,7 +155,11 @@ export class CampaignsService {
   //   6. Contato já recebeu mensagem recentemente? (frequency cap)
   //   7. Dentro das políticas da empresa?
 
-  async checkEligibility(tenantId: string, campaignId: string, includeRecipients = false): Promise<SendPolicyResult> {
+  async checkEligibility(
+    tenantId: string,
+    campaignId: string,
+    includeRecipients = false,
+  ): Promise<SendPolicyResult> {
     const campaign = await this.getCampaign(tenantId, campaignId);
 
     if (!campaign.segmentId) {
@@ -168,7 +184,11 @@ export class CampaignsService {
 
     // ── Check 4 (campaign-level): template exists and is APPROVED ──
     const [approvedTemplate] = await this.db
-      .select({ id: whatsappTemplates.id, category: whatsappTemplates.category, status: whatsappTemplates.status })
+      .select({
+        id: whatsappTemplates.id,
+        category: whatsappTemplates.category,
+        status: whatsappTemplates.status,
+      })
       .from(whatsappTemplates)
       .where(
         and(
@@ -206,10 +226,7 @@ export class CampaignsService {
       })
       .from(contactIdentities)
       .where(
-        and(
-          eq(contactIdentities.tenantId, tenantId),
-          eq(contactIdentities.channel, 'whatsapp'),
-        ),
+        and(eq(contactIdentities.tenantId, tenantId), eq(contactIdentities.channel, 'whatsapp')),
       );
 
     const results: SendPolicyResult = {
@@ -338,7 +355,9 @@ export class CampaignsService {
     const eligibility = await this.checkEligibility(tenantId, campaignId, true);
 
     if (eligibility.eligible === 0) {
-      throw new BadRequestException('Nenhum destinatário elegível. Verifique consentimentos e opt-outs.');
+      throw new BadRequestException(
+        'Nenhum destinatário elegível. Verifique consentimentos e opt-outs.',
+      );
     }
 
     // Get the connected WhatsApp account for this tenant

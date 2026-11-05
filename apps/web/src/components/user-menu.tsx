@@ -22,8 +22,13 @@ export function UserMenu({ email, name }: UserMenuProps) {
   }, []);
 
   const initials = name
-    ? name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
-    : email?.slice(0, 2).toUpperCase() ?? '??';
+    ? name
+        .split(' ')
+        .map((n) => n[0])
+        .join('')
+        .slice(0, 2)
+        .toUpperCase()
+    : (email?.slice(0, 2).toUpperCase() ?? '??');
 
   return (
     <div ref={ref} className="relative">

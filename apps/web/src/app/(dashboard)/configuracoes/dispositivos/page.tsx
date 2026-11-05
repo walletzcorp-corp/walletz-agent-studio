@@ -3,8 +3,17 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import {
-  Monitor, Wifi, WifiOff, Trash2, Settings2, ArrowLeft,
-  Plus, RefreshCw, Shield, Folder, AlertTriangle,
+  Monitor,
+  Wifi,
+  WifiOff,
+  Trash2,
+  Settings2,
+  ArrowLeft,
+  Plus,
+  RefreshCw,
+  Shield,
+  Folder,
+  AlertTriangle,
 } from 'lucide-react';
 import { Button } from '@walletz/ui';
 import { useAuth } from '../../../../hooks/use-auth';
@@ -25,7 +34,11 @@ async function apiCall(path: string, opts: RequestInit = {}) {
   const token = localStorage.getItem('accessToken') ?? '';
   const r = await fetch(`${API_BASE}/v1${path}`, {
     ...opts,
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...(opts.headers ?? {}) },
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+      ...(opts.headers ?? {}),
+    },
   });
   if (!r.ok) throw new Error(await r.text());
   if (r.status === 204) return null;
@@ -45,11 +58,15 @@ export default function DispositivosPage() {
     try {
       const data = await apiCall(`/tenants/${tenantId}/pc-connector/devices`);
       setDevices(Array.isArray(data) ? data : []);
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     setLoading(false);
   }, [tenantId]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   const disconnect = async (deviceId: string) => {
     if (!tenantId) return;
@@ -58,7 +75,9 @@ export default function DispositivosPage() {
     try {
       await apiCall(`/tenants/${tenantId}/pc-connector/devices/${deviceId}`, { method: 'DELETE' });
       await load();
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     setDisconnecting(null);
   };
 
@@ -78,7 +97,9 @@ export default function DispositivosPage() {
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-display font-bold">Dispositivos</h1>
-          <p className="text-sm text-muted-foreground mt-1">Computadores conectados ao Walletz Agent Studio</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            Computadores conectados ao Walletz Agent Studio
+          </p>
         </div>
         <div className="flex gap-2">
           <Button variant="ghost" size="sm" onClick={load}>
@@ -103,24 +124,31 @@ export default function DispositivosPage() {
           </div>
           <div>
             <p className="font-semibold">Nenhum dispositivo conectado</p>
-            <p className="text-sm text-muted-foreground mt-1">Conecte este computador para que agentes possam executar tarefas nele.</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Conecte este computador para que agentes possam executar tarefas nele.
+            </p>
           </div>
           <Link href="/integracoes/meu-computador">
-            <Button className="gap-2"><Plus className="h-4 w-4" /> Conectar Computador</Button>
+            <Button className="gap-2">
+              <Plus className="h-4 w-4" /> Conectar Computador
+            </Button>
           </Link>
         </div>
       ) : (
         <div className="space-y-4">
-          {devices.map(device => (
+          {devices.map((device) => (
             <div key={device.id} className="neural-card p-5 space-y-4">
               {/* Device header */}
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
-                  <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${isOnline(device) ? 'bg-green-100' : 'bg-muted/50'}`}>
-                    {isOnline(device)
-                      ? <Wifi className="h-5 w-5 text-green-600" />
-                      : <WifiOff className="h-5 w-5 text-muted-foreground" />
-                    }
+                  <div
+                    className={`flex h-10 w-10 items-center justify-center rounded-xl ${isOnline(device) ? 'bg-green-100' : 'bg-muted/50'}`}
+                  >
+                    {isOnline(device) ? (
+                      <Wifi className="h-5 w-5 text-green-600" />
+                    ) : (
+                      <WifiOff className="h-5 w-5 text-muted-foreground" />
+                    )}
                   </div>
                   <div>
                     <p className="font-semibold text-foreground">{device.deviceName}</p>
@@ -130,7 +158,9 @@ export default function DispositivosPage() {
                         <span className="text-green-600 font-medium">Online agora</span>
                       ) : device.lastSeenAt ? (
                         `Última atividade: ${new Date(device.lastSeenAt).toLocaleString('pt-BR')}`
-                      ) : 'Nunca visto online'}
+                      ) : (
+                        'Nunca visto online'
+                      )}
                     </p>
                   </div>
                 </div>
@@ -158,7 +188,11 @@ export default function DispositivosPage() {
                     <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
                       <Shield className="h-3.5 w-3.5" /> Permissões
                     </p>
-                    <CapabilityCheckboxes device={device} tenantId={tenantId ?? ''} onSaved={load} />
+                    <CapabilityCheckboxes
+                      device={device}
+                      tenantId={tenantId ?? ''}
+                      onSaved={load}
+                    />
                   </div>
 
                   <div>
@@ -167,8 +201,10 @@ export default function DispositivosPage() {
                     </p>
                     {device.authorizedPaths.length > 0 ? (
                       <ul className="space-y-1">
-                        {device.authorizedPaths.map(p => (
-                          <li key={p} className="rounded bg-muted/50 px-3 py-1.5 font-mono text-xs">{p}</li>
+                        {device.authorizedPaths.map((p) => (
+                          <li key={p} className="rounded bg-muted/50 px-3 py-1.5 font-mono text-xs">
+                            {p}
+                          </li>
                         ))}
                       </ul>
                     ) : (
@@ -177,10 +213,17 @@ export default function DispositivosPage() {
                   </div>
 
                   <div>
-                    <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Aplicativos autorizados</p>
+                    <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">
+                      Aplicativos autorizados
+                    </p>
                     <div className="flex flex-wrap gap-2">
-                      {device.authorizedApps.map(app => (
-                        <span key={app} className="rounded-full bg-muted/50 px-3 py-1 text-xs font-mono">{app}</span>
+                      {device.authorizedApps.map((app) => (
+                        <span
+                          key={app}
+                          className="rounded-full bg-muted/50 px-3 py-1 text-xs font-mono"
+                        >
+                          {app}
+                        </span>
                       ))}
                     </div>
                   </div>
@@ -188,7 +231,10 @@ export default function DispositivosPage() {
                   {!isOnline(device) && (
                     <div className="rounded-lg bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 p-3 flex gap-2 text-sm text-yellow-800 dark:text-yellow-300">
                       <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-                      <span>Dispositivo offline. Execute o Walletz PC Connector neste computador para ficar online.</span>
+                      <span>
+                        Dispositivo offline. Execute o Walletz PC Connector neste computador para
+                        ficar online.
+                      </span>
                     </div>
                   )}
                 </div>
@@ -202,7 +248,9 @@ export default function DispositivosPage() {
 }
 
 function CapabilityCheckboxes({
-  device, tenantId, onSaved,
+  device,
+  tenantId,
+  onSaved,
 }: {
   device: PcDevice;
   tenantId: string;
@@ -224,12 +272,14 @@ function CapabilityCheckboxes({
         body: JSON.stringify({ capabilities: caps }),
       });
       onSaved();
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     setSaving(false);
   };
 
   const toggle = (section: keyof typeof caps, key: string) => {
-    setCaps(prev => ({
+    setCaps((prev) => ({
       ...prev,
       [section]: { ...prev[section], [key]: !prev[section][key] },
     }));
@@ -244,17 +294,26 @@ function CapabilityCheckboxes({
     { section: 'apps' as const, key: 'open', label: 'Abrir aplicativos', risk: 'medium' },
     { section: 'apps' as const, key: 'close', label: 'Fechar aplicativos', risk: 'medium' },
     { section: 'browser' as const, key: 'openUrl', label: 'Abrir URL no navegador', risk: 'low' },
-    { section: 'system' as const, key: 'info', label: 'Consultar informações do sistema', risk: 'low' },
+    {
+      section: 'system' as const,
+      key: 'info',
+      label: 'Consultar informações do sistema',
+      risk: 'low',
+    },
   ];
 
-  const riskColor = (r: string) => r === 'high' ? 'text-red-500' : r === 'medium' ? 'text-yellow-500' : 'text-green-500';
+  const riskColor = (r: string) =>
+    r === 'high' ? 'text-red-500' : r === 'medium' ? 'text-yellow-500' : 'text-green-500';
 
   return (
     <div className="space-y-2">
-      {ITEMS.map(item => {
+      {ITEMS.map((item) => {
         const enabled = !!(caps[item.section] as Record<string, boolean>)[item.key];
         return (
-          <label key={`${item.section}.${item.key}`} className="flex items-center gap-3 cursor-pointer group">
+          <label
+            key={`${item.section}.${item.key}`}
+            className="flex items-center gap-3 cursor-pointer group"
+          >
             <input
               type="checkbox"
               checked={enabled}
@@ -262,7 +321,9 @@ function CapabilityCheckboxes({
               className="rounded border-border"
             />
             <span className="text-sm text-foreground">{item.label}</span>
-            <span className={`ml-auto text-[10px] font-medium uppercase ${riskColor(item.risk)}`}>{item.risk}</span>
+            <span className={`ml-auto text-[10px] font-medium uppercase ${riskColor(item.risk)}`}>
+              {item.risk}
+            </span>
           </label>
         );
       })}

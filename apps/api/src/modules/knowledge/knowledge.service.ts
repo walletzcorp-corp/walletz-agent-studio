@@ -1,9 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-  BadRequestException,
-  Logger,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import * as crypto from 'crypto';
@@ -12,7 +7,11 @@ import { StorageService } from '../../shared/storage/storage.service';
 import { AuditService } from '../../shared/audit/audit.service';
 import { KNOWLEDGE_QUEUE, type KnowledgeJobData } from './knowledge.processor';
 import { createId } from '../../database/utils/id';
-import type { UploadSourceDto, CreateUrlSourceDto, CreateTypedSourceDto } from './dto/upload-source.dto';
+import type {
+  UploadSourceDto,
+  CreateUrlSourceDto,
+  CreateTypedSourceDto,
+} from './dto/upload-source.dto';
 
 const ALLOWED_MIMES = new Set([
   'application/pdf',

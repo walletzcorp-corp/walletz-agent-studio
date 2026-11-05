@@ -15,7 +15,10 @@ export class CreateMeetingDto {
   @ApiPropertyOptional() @IsOptional() @IsString() contactEmail?: string;
   @ApiProperty() @IsISO8601() startAt!: string;
   @ApiProperty() @IsISO8601() endAt!: string;
-  @ApiPropertyOptional({ enum: MeetingPlatformDto }) @IsOptional() @IsEnum(MeetingPlatformDto) platform?: MeetingPlatformDto;
+  @ApiPropertyOptional({ enum: MeetingPlatformDto })
+  @IsOptional()
+  @IsEnum(MeetingPlatformDto)
+  platform?: MeetingPlatformDto;
   @ApiPropertyOptional() @IsOptional() @IsString() agentId?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() connectionId?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() timeZone?: string;
