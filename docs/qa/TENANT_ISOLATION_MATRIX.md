@@ -1,6 +1,6 @@
 # Tenant Isolation Matrix
 
-Gerado automaticamente por `tenant-isolation.e2e-spec.ts` em 2026-11-05T22:26:35.506Z.
+Gerado automaticamente por `tenant-isolation.e2e-spec.ts` em 2026-11-05T22:43:35.601Z.
 
 - Rotas descobertas: **112** (tenant-scoped: **88**, públicas: 15, autenticadas: 9)
 - Ataques executados: **1760** — PASS: **1760** — FAIL: **0**

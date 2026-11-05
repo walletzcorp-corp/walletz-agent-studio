@@ -10,7 +10,10 @@ const config: Config = {
       '<rootDir>/../jest.esm-transform.cjs',
     '^.+\\.ts$': 'ts-jest',
   },
-  transformIgnorePatterns: ['/node_modules/(?!@nestjs/(bullmq|bull-shared|axios)/)'],
+  transformIgnorePatterns: [
+    // pnpm installs under node_modules/.pnpm/@nestjs+<pkg>@<ver>/node_modules/@nestjs/<pkg> on CI.
+    '/node_modules/(?!.*@nestjs[+/](bullmq|bull-shared|axios)[@/])',
+  ],
   testEnvironment: 'node',
   testTimeout: 120_000,
   maxWorkers: 1,

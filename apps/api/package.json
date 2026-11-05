@@ -102,7 +102,7 @@
       "^.+\\.ts$": "ts-jest"
     },
     "transformIgnorePatterns": [
-      "/node_modules/(?!@nestjs/(bullmq|bull-shared|axios)/)"
+      "/node_modules/(?!.*@nestjs[+/](bullmq|bull-shared|axios)[@/])"
     ],
     "collectCoverageFrom": [
       "**/*.(t|j)s",
