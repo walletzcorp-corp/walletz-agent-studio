@@ -1,0 +1,10 @@
+{
+  "name": "@walletz/worker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Queue worker process (BullMQ consumers). The code lives in @walletz/api (src/worker.ts) so it shares modules and migrations; this package is the deployable entrypoint.",
+  "scripts": {
+    "dev": "pnpm --filter @walletz/api dev:worker",
+    "start": "pnpm --filter @walletz/api start:worker"
+  }
+}

@@ -6,6 +6,7 @@ import { WhatsappModule } from '../whatsapp/whatsapp.module';
 import { ConversationsController } from './conversations.controller';
 import { ConversationsService } from './conversations.service';
 import { InboxDispatchProcessor, INBOX_DISPATCH_QUEUE } from './inbox-dispatch.processor';
+import { queueConsumers } from '../../shared/queue/queue-role';
 
 @Module({
   imports: [
@@ -15,7 +16,7 @@ import { InboxDispatchProcessor, INBOX_DISPATCH_QUEUE } from './inbox-dispatch.p
     BullModule.registerQueue({ name: INBOX_DISPATCH_QUEUE }),
   ],
   controllers: [ConversationsController],
-  providers: [ConversationsService, InboxDispatchProcessor],
+  providers: [ConversationsService, ...queueConsumers(InboxDispatchProcessor)],
   exports: [ConversationsService],
 })
 export class ConversationModule {}

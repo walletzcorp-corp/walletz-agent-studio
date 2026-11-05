@@ -5,6 +5,7 @@ import { Queue } from 'bullmq';
 import { eq } from 'drizzle-orm';
 import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';
 import { outboxEvents } from '../../database/schema/audit';
+import { queueRole } from '../queue/queue-role';
 
 export const OUTBOX_QUEUE = 'outbox';
 
@@ -19,6 +20,8 @@ export class OutboxRelayService {
 
   @Cron(CronExpression.EVERY_5_SECONDS)
   async relayPendingEvents(): Promise<void> {
+    // With a dedicated worker, only the worker relays: one publisher, no duplicate events.
+    if (queueRole() === 'api') return;
     const pending = await this.db
       .select()
       .from(outboxEvents)

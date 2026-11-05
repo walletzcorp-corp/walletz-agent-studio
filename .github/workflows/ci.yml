@@ -127,7 +127,7 @@ jobs:
           DATABASE_URL: ${{ env.DATABASE_TEST_URL }}
 
       - name: Run tests
-        run: pnpm test --coverage
+        run: pnpm --filter @walletz/api test:cov
 
       - name: Upload coverage
         uses: actions/upload-artifact@v4
@@ -145,6 +145,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}
@@ -192,7 +194,6 @@ jobs:
           path: |
             apps/web/.next
             apps/api/dist
-            apps/worker/dist
           retention-days: 3
 
   # ============================================================

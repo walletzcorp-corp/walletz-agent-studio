@@ -94,15 +94,15 @@ pnpm --filter @walletz/api dev
 
 ### Testar autenticação
 ```bash
-# Registrar usuário
+# Registrar usuário (escolha uma senha forte própria; não versione credenciais)
 curl -X POST http://localhost:3001/api/v1/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"email":"admin@walletz.com","password":"Test@1234","firstName":"Admin","lastName":"Walletz"}'
+  -d '{"email":"admin@walletz.com","password":"<SUA_SENHA_FORTE>","firstName":"Admin","lastName":"Walletz"}'
 
 # Login
 curl -X POST http://localhost:3001/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"admin@walletz.com","password":"Test@1234"}'
+  -d '{"email":"admin@walletz.com","password":"<SUA_SENHA_FORTE>"}'
 ```
 
 ---

@@ -47,6 +47,11 @@ const defaults: Record<string, string> = {
   CALENDAR_OAUTH_STATE_SECRET: 'e2e-oauth-state-secret-0123456789abcdef0123456789abcdef',
   META_APP_SECRET: 'e2e-meta-app-secret',
   WHATSAPP_WEBHOOK_VERIFY_TOKEN: 'e2e-verify-token',
+  // Fake OAuth clients: the suites build authorize URLs but never reach the providers.
+  GOOGLE_OAUTH_CLIENT_ID: 'e2e-google-client-id',
+  GOOGLE_OAUTH_CLIENT_SECRET: 'e2e-google-client-secret',
+  MICROSOFT_OAUTH_CLIENT_ID: 'e2e-microsoft-client-id',
+  MICROSOFT_OAUTH_CLIENT_SECRET: 'e2e-microsoft-client-secret',
   CORS_ALLOWED_ORIGINS: 'http://localhost:3000',
 };
 for (const [key, value] of Object.entries(defaults)) {

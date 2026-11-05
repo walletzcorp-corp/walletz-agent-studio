@@ -5,6 +5,7 @@ import { KnowledgeController } from './knowledge.controller';
 import { KnowledgeService } from './knowledge.service';
 import { KnowledgeRepository } from './knowledge.repository';
 import { KnowledgeProcessor, KNOWLEDGE_QUEUE } from './knowledge.processor';
+import { queueConsumers } from '../../shared/queue/queue-role';
 
 @Module({
   imports: [
@@ -14,7 +15,7 @@ import { KnowledgeProcessor, KNOWLEDGE_QUEUE } from './knowledge.processor';
     }),
   ],
   controllers: [KnowledgeController],
-  providers: [KnowledgeService, KnowledgeRepository, KnowledgeProcessor],
+  providers: [KnowledgeService, KnowledgeRepository, ...queueConsumers(KnowledgeProcessor)],
   exports: [KnowledgeService],
 })
 export class KnowledgeModule {}

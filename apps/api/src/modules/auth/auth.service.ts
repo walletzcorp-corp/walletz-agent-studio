@@ -135,6 +135,10 @@ export class AuthService {
       if (!valid) {
         throw new UnauthorizedException('Invalid MFA code');
       }
+      if (this.mfaService.isLegacyPlaintext(user.mfaSecret!)) {
+        // Secrets created before encryption at rest are sealed on first successful use.
+        await this.usersService.setMfaSecret(user.id, this.mfaService.sealSecret(user.mfaSecret!));
+      }
     }
 
     const session = await this.sessionService.create({
@@ -237,7 +241,7 @@ export class AuthService {
     if (user.mfaEnabledAt) throw new ConflictException('MFA already enabled');
 
     const secret = this.mfaService.generateSecret();
-    await this.usersService.setMfaSecret(userId, secret);
+    await this.usersService.setMfaSecret(userId, this.mfaService.sealSecret(secret));
 
     return {
       secret,

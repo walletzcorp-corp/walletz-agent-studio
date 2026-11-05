@@ -18,6 +18,9 @@ export class EncryptionService {
   constructor() {
     const raw = process.env.ENCRYPTION_KEY ?? '';
     if (!raw || raw.length !== 64) {
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error('ENCRYPTION_KEY must be 64 hex chars in production');
+      }
       this.logger.warn(
         'ENCRYPTION_KEY is missing or not 64 hex chars — token encryption is DISABLED. Set ENCRYPTION_KEY in production.',
       );

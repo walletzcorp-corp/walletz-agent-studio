@@ -5,6 +5,7 @@
 import { createHmac } from 'crypto';
 import { JwtService } from '@nestjs/jwt';
 import { and, eq } from 'drizzle-orm';
+import { authenticator } from 'otplib';
 import request from 'supertest';
 import {
   auditLogs,
@@ -347,6 +348,47 @@ describe('Access control, privacy and outbound workers', () => {
           .where(and(eq(memberships.tenantId, A.id), eq(memberships.status, 'invited')));
         expect(rows.some((r) => r.inviteToken === token)).toBe(false);
         expect((await accept({ token, password: 'Convite#2026' })).status).toBe(400);
+      });
+    });
+
+    describe('MFA secret at rest', () => {
+      it('is stored sealed, still verifies, and a legacy plaintext secret is sealed on first use', async () => {
+        const user = A.users.viewer;
+        const setup = await auth(api().get('/api/v1/auth/mfa/setup'), user.token);
+        expect(setup.status).toBe(200);
+        const secret = (setup.body as { secret: string }).secret;
+
+        const [pending] = await ctx.db.select().from(users).where(eq(users.id, user.id));
+        expect(pending!.mfaSecret).toMatch(/^enc:v1:/);
+        expect(pending!.mfaSecret).not.toContain(secret);
+
+        const confirm = await auth(api().post('/api/v1/auth/mfa/confirm'), user.token).send({
+          code: authenticator.generate(secret),
+        });
+        expect(confirm.status).toBe(204);
+
+        const login = await fresh(api().post('/api/v1/auth/login')).send({
+          email: user.email,
+          password: user.password,
+          mfaCode: authenticator.generate(secret),
+        });
+        expect(login.status).toBe(200);
+
+        // Simulate a row written before encryption at rest existed.
+        await ctx.db.update(users).set({ mfaSecret: secret }).where(eq(users.id, user.id));
+        const legacyLogin = await fresh(api().post('/api/v1/auth/login')).send({
+          email: user.email,
+          password: user.password,
+          mfaCode: authenticator.generate(secret),
+        });
+        expect(legacyLogin.status).toBe(200);
+        const [sealed] = await ctx.db.select().from(users).where(eq(users.id, user.id));
+        expect(sealed!.mfaSecret).toMatch(/^enc:v1:/);
+
+        await ctx.db
+          .update(users)
+          .set({ mfaSecret: null, mfaEnabledAt: null })
+          .where(eq(users.id, user.id));
       });
     });
 
