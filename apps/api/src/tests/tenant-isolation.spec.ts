@@ -9,7 +9,7 @@
 
 import { Test, type TestingModule } from '@nestjs/testing';
 import type { INestApplication} from '@nestjs/common';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, VersioningType } from '@nestjs/common';
 import request from 'supertest';
 import { AppModule } from '../app.module';
 
@@ -62,6 +62,7 @@ describe('Tenant Isolation (TC01-TC25)', () => {
     }).compile();
 
     app = module.createNestApplication();
+    app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
     await app.init();
 

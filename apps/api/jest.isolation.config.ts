@@ -6,8 +6,10 @@ const config: Config = {
   testRegex: '.*\\.spec\\.ts$',
   testPathPattern: 'tests/tenant-isolation',
   transform: {
-    '^.+\\.(t|j)s$': 'ts-jest',
+    '[\\\\/]node_modules[\\\\/]@nestjs[\\\\/](bullmq|bull-shared|axios)[\\\\/].+\\.js$': '<rootDir>/../jest.esm-transform.cjs',
+    '^.+\\.ts$': 'ts-jest',
   },
+  transformIgnorePatterns: ['/node_modules/(?!@nestjs/(bullmq|bull-shared|axios)/)'],
   testEnvironment: 'node',
   testTimeout: 60_000,
   setupFiles: ['../jest.isolation.setup.ts'],
