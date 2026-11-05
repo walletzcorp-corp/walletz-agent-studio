@@ -1,11 +1,17 @@
 import { Injectable, Inject, NotFoundException } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import type { Queue } from 'bullmq';
 import { eq, and, desc } from 'drizzle-orm';
 import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';
 import { conversations, messages } from '../../database/schema/conversations';
+import { INBOX_DISPATCH_QUEUE, type InboxDispatchJobData } from './inbox-dispatch.processor';
 
 @Injectable()
 export class ConversationsService {
-  constructor(@Inject(DRIZZLE_TOKEN) private readonly db: DrizzleDB) {}
+  constructor(
+    @Inject(DRIZZLE_TOKEN) private readonly db: DrizzleDB,
+    @InjectQueue(INBOX_DISPATCH_QUEUE) private readonly inboxQueue: Queue<InboxDispatchJobData>,
+  ) {}
 
   async listConversations(
     tenantId: string,
@@ -50,7 +56,7 @@ export class ConversationsService {
     text: string,
     userId: string,
   ) {
-    await this.getConversation(tenantId, conversationId);
+    const conv = await this.getConversation(tenantId, conversationId);
 
     const [msg] = await this.db
       .insert(messages)
@@ -69,6 +75,18 @@ export class ConversationsService {
       .update(conversations)
       .set({ lastMessageAt: new Date(), updatedAt: new Date(), aiPausedAt: new Date() })
       .where(eq(conversations.id, conversationId));
+
+    await this.inboxQueue.add(
+      'send',
+      {
+        messageId: msg!.id,
+        conversationId,
+        tenantId,
+        text,
+        contactId: conv.contactId,
+      },
+      { attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
+    );
 
     return msg;
   }

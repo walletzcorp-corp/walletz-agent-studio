@@ -478,6 +478,90 @@ export class WhatsappService {
     }
   }
 
+  async sendTemplateMessage(
+    tenantId: string,
+    accountId: string,
+    dto: {
+      to: string;
+      templateName: string;
+      templateLanguage: string;
+      templateComponents: unknown[];
+      idempotencyKey?: string;
+    },
+  ): Promise<{ messageId: string; status: string }> {
+    const account = await this.getAccountInternal(tenantId, accountId);
+
+    if (account.status !== 'connected') {
+      throw new BadRequestException('WhatsApp account is not connected');
+    }
+
+    if (dto.idempotencyKey) {
+      const [dup] = await this.db
+        .select({ id: whatsappMessageLogs.id })
+        .from(whatsappMessageLogs)
+        .where(and(
+          eq(whatsappMessageLogs.tenantId, tenantId),
+          eq(whatsappMessageLogs.idempotencyKey, dto.idempotencyKey),
+        ))
+        .limit(1);
+      if (dup) return { messageId: dup.id, status: 'deduplicated' };
+    }
+
+    const logId = createId();
+    const idempotencyKey = dto.idempotencyKey ?? logId;
+
+    await this.db.insert(whatsappMessageLogs).values({
+      id: logId,
+      tenantId,
+      accountId,
+      direction: 'outbound',
+      status: 'pending',
+      to: dto.to,
+      messageType: 'template',
+      content: { templateName: dto.templateName, components: dto.templateComponents },
+      idempotencyKey,
+    });
+
+    const bearerToken = this.decryptToken(account);
+
+    try {
+      const resp = await firstValueFrom(
+        this.httpService.post(
+          `${META_GRAPH_URL}/${account.phoneNumberId}/messages`,
+          {
+            messaging_product: 'whatsapp',
+            to: dto.to,
+            type: 'template',
+            template: {
+              name: dto.templateName,
+              language: { code: dto.templateLanguage },
+              components: dto.templateComponents,
+            },
+          },
+          { headers: { Authorization: `Bearer ${bearerToken}` } },
+        ),
+      );
+
+      const data = resp.data as { messages?: Array<{ id: string }> };
+      const providerMsgId = data.messages?.[0]?.id ?? '';
+
+      await this.db
+        .update(whatsappMessageLogs)
+        .set({ status: 'sent', providerMessageId: providerMsgId, sentAt: new Date() })
+        .where(eq(whatsappMessageLogs.id, logId));
+
+      return { messageId: logId, status: 'sent' };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await this.db
+        .update(whatsappMessageLogs)
+        .set({ status: 'failed', errorMessage: msg, failedAt: new Date() })
+        .where(eq(whatsappMessageLogs.id, logId));
+      await this.handleApiError(err, account.id, tenantId);
+      throw new BadRequestException(`Falha ao enviar template: ${msg}`);
+    }
+  }
+
   // Internal: send AI reply without account lookup (used in webhook pipeline)
   private async sendAiReply(
     account: WhatsappAccount,
