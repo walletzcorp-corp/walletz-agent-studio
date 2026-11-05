@@ -1,13 +1,4 @@
-import {
-  pgTable,
-  text,
-  timestamp,
-  boolean,
-  integer,
-  jsonb,
-  pgEnum,
-  index,
-} from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, boolean, jsonb, pgEnum, index } from 'drizzle-orm/pg-core';
 import { createId } from '../utils/id';
 import { tenants } from './tenants';
 import { users } from './users';
@@ -31,11 +22,7 @@ export const messageStatusEnum = pgEnum('message_status', [
   'failed',
 ]);
 
-export const handoffStatusEnum = pgEnum('handoff_status', [
-  'active',
-  'resolved',
-  'returned_to_ai',
-]);
+export const handoffStatusEnum = pgEnum('handoff_status', ['active', 'resolved', 'returned_to_ai']);
 
 export const conversations = pgTable(
   'conversations',

@@ -17,12 +17,21 @@ export class KnowledgeRepository {
     const [row] = await this.db
       .select()
       .from(knowledgeSources)
-      .where(and(eq(knowledgeSources.id, id), eq(knowledgeSources.tenantId, tenantId), isNull(knowledgeSources.deletedAt)));
+      .where(
+        and(
+          eq(knowledgeSources.id, id),
+          eq(knowledgeSources.tenantId, tenantId),
+          isNull(knowledgeSources.deletedAt),
+        ),
+      );
     return row ?? null;
   }
 
   async findSourcesByTenant(tenantId: string, agentId?: string) {
-    const conditions = [eq(knowledgeSources.tenantId, tenantId), isNull(knowledgeSources.deletedAt)];
+    const conditions = [
+      eq(knowledgeSources.tenantId, tenantId),
+      isNull(knowledgeSources.deletedAt),
+    ];
     if (agentId) {
       conditions.push(eq(knowledgeSources.agentId, agentId));
     }

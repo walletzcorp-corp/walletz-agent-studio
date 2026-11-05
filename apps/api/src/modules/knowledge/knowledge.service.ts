@@ -1,18 +1,18 @@
-import {
-  Injectable,
-  NotFoundException,
-  BadRequestException,
-  Logger,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import * as crypto from 'crypto';
 import { KnowledgeRepository } from './knowledge.repository';
 import { StorageService } from '../../shared/storage/storage.service';
 import { AuditService } from '../../shared/audit/audit.service';
+import { TenantOwnershipService } from '../../shared/tenancy/tenant-ownership.service';
 import { KNOWLEDGE_QUEUE, type KnowledgeJobData } from './knowledge.processor';
 import { createId } from '../../database/utils/id';
-import type { UploadSourceDto, CreateUrlSourceDto, CreateTypedSourceDto } from './dto/upload-source.dto';
+import type {
+  UploadSourceDto,
+  CreateUrlSourceDto,
+  CreateTypedSourceDto,
+} from './dto/upload-source.dto';
 
 const ALLOWED_MIMES = new Set([
   'application/pdf',
@@ -33,6 +33,7 @@ export class KnowledgeService {
     private readonly repo: KnowledgeRepository,
     private readonly storage: StorageService,
     private readonly auditService: AuditService,
+    private readonly ownership: TenantOwnershipService,
     @InjectQueue(KNOWLEDGE_QUEUE) private readonly queue: Queue<KnowledgeJobData>,
   ) {}
 
@@ -52,6 +53,8 @@ export class KnowledgeService {
     tenantId: string,
     userId: string,
   ) {
+    if (dto.agentId) await this.ownership.assertAgent(tenantId, dto.agentId);
+
     if (!ALLOWED_MIMES.has(file.mimetype)) {
       throw new BadRequestException(
         `File type not allowed: ${file.mimetype}. Allowed: PDF, DOCX, TXT, CSV, HTML`,
@@ -112,6 +115,7 @@ export class KnowledgeService {
   }
 
   async createFromUrl(dto: CreateUrlSourceDto, tenantId: string, userId: string) {
+    if (dto.agentId) await this.ownership.assertAgent(tenantId, dto.agentId);
     const source = await this.repo.createSource({
       tenantId,
       agentId: dto.agentId ?? null,
@@ -131,6 +135,7 @@ export class KnowledgeService {
   }
 
   async createTyped(dto: CreateTypedSourceDto, tenantId: string, userId: string) {
+    if (dto.agentId) await this.ownership.assertAgent(tenantId, dto.agentId);
     const checksum = crypto.createHash('sha256').update(dto.content).digest('hex');
     const storageKey = `${tenantId}/${createId()}.txt`;
 

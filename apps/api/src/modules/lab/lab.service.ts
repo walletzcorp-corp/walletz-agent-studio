@@ -1,14 +1,31 @@
-import { Injectable, Inject, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
-import Anthropic from '@anthropic-ai/sdk';
-import { ConfigService } from '@nestjs/config';
+import {
+  Injectable,
+  Inject,
+  Logger,
+  NotFoundException,
+  BadRequestException,
+  HttpException,
+} from '@nestjs/common';
 import { eq, and, isNull, isNotNull, ilike, or } from 'drizzle-orm';
 import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';
-import { agents } from '../../database/schema/agents';
+import { agents, agentToolPermissions } from '../../database/schema/agents';
 import { knowledgeChunks, knowledgeSources, knowledgeItems } from '../../database/schema/knowledge';
 import { createId } from '../../database/utils/id';
-import { SchedulingToolsService, type ToolContext } from '../calendars/scheduling-tools.service';
+import { SchedulingToolsService } from '../calendars/scheduling-tools.service';
 import { PcConnectorService } from '../pc-connector/pc-connector.service';
+import type { AgentExecutionContext } from '../agents/execution-context';
+import { expandDeniedTools, isToolAllowed } from '../agents/tool-policy';
 import type { LabChatDto, ChatMessageDto } from './dto/chat.dto';
+import {
+  LLM_PROVIDER,
+  LlmNotConfiguredError,
+  type LlmMessage,
+  type LlmProvider,
+  type LlmToolCall,
+  type LlmToolDefinition,
+} from './llm/llm-provider';
+
+const MAX_TOOL_ROUNDS = 6;
 
 export interface LabChatResult {
   traceId: string;
@@ -19,13 +36,13 @@ export interface LabChatResult {
   toolCallsExecuted?: string[];
 }
 
-/* ── Anthropic tool definitions for conversational scheduling ── */
-const SCHEDULING_TOOLS: Anthropic.Tool[] = [
+/* ── Tool definitions for conversational scheduling ── */
+const SCHEDULING_TOOLS: LlmToolDefinition[] = [
   {
     name: 'get_availability',
     description:
       'Consulta os horários disponíveis para agendamento. Use quando o cliente demonstrar intenção de marcar, reagendar ou verificar disponibilidade para uma reunião. Retorna slots livres reais.',
-    input_schema: {
+    inputSchema: {
       type: 'object' as const,
       properties: {
         days_ahead: {
@@ -40,7 +57,7 @@ const SCHEDULING_TOOLS: Anthropic.Tool[] = [
     name: 'create_meeting',
     description:
       'Cria uma reunião REAL no calendário e gera o link (Google Meet ou Teams). Use SOMENTE após o cliente confirmar explicitamente o horário escolhido. Nunca crie sem confirmação.',
-    input_schema: {
+    inputSchema: {
       type: 'object' as const,
       properties: {
         start_at: {
@@ -75,7 +92,7 @@ const SCHEDULING_TOOLS: Anthropic.Tool[] = [
     name: 'find_meetings',
     description:
       'Busca reuniões existentes do contato ou da conversa. Use antes de reagendar ou cancelar para localizar a reunião correta.',
-    input_schema: {
+    inputSchema: {
       type: 'object' as const,
       properties: {
         status: {
@@ -91,7 +108,7 @@ const SCHEDULING_TOOLS: Anthropic.Tool[] = [
     name: 'reschedule_meeting',
     description:
       'Reagenda uma reunião existente. Cancela o evento anterior e cria um novo no horário confirmado. Use após o cliente confirmar o novo horário.',
-    input_schema: {
+    inputSchema: {
       type: 'object' as const,
       properties: {
         meeting_id: { type: 'string', description: 'ID da reunião a reagendar' },
@@ -106,7 +123,7 @@ const SCHEDULING_TOOLS: Anthropic.Tool[] = [
     name: 'cancel_meeting',
     description:
       'Cancela uma reunião e remove o evento externo (Google Calendar / Teams). Confirme com o cliente antes de executar.',
-    input_schema: {
+    inputSchema: {
       type: 'object' as const,
       properties: {
         meeting_id: { type: 'string', description: 'ID da reunião a cancelar' },
@@ -120,38 +137,36 @@ const SCHEDULING_TOOLS: Anthropic.Tool[] = [
 @Injectable()
 export class LabService {
   private readonly logger = new Logger(LabService.name);
-  private readonly client: Anthropic;
-  private readonly defaultModel: string;
 
   constructor(
     @Inject(DRIZZLE_TOKEN) private readonly db: DrizzleDB,
-    private readonly config: ConfigService,
+    @Inject(LLM_PROVIDER) private readonly llm: LlmProvider,
     private readonly schedulingTools: SchedulingToolsService,
     private readonly pcConnector: PcConnectorService,
-  ) {
-    const apiKey = this.config.get<string>('ANTHROPIC_API_KEY') ?? '';
-    this.client = new Anthropic({ apiKey });
-    this.defaultModel = this.config.get<string>('ANTHROPIC_DEFAULT_MODEL') ?? 'claude-sonnet-4-6';
-  }
+  ) {}
 
-  async chat(
-    dto: LabChatDto,
-    tenantId: string,
-    options?: { conversationId?: string; contactId?: string },
-  ): Promise<LabChatResult> {
+  /**
+   * Runs one agent turn. Everything security-relevant comes from `ctx`, which only the server
+   * can build: the model, the request body and tool inputs can never change tenant, contact,
+   * conversation or channel.
+   */
+  async chat(dto: LabChatDto, ctx: AgentExecutionContext): Promise<LabChatResult> {
     const traceId = createId();
+    const tenantId = ctx.tenantId;
 
-    /* Load agent */
+    /* Load agent (tenant-scoped) */
     const [agent] = await this.db
       .select()
       .from(agents)
-      .where(and(eq(agents.id, dto.agentId), eq(agents.tenantId, tenantId), isNull(agents.deletedAt)))
+      .where(
+        and(eq(agents.id, ctx.agentId), eq(agents.tenantId, tenantId), isNull(agents.deletedAt)),
+      )
       .limit(1);
 
     if (!agent) throw new NotFoundException('Agent not found');
 
     /* Retrieve relevant knowledge chunks */
-    const retrievedChunks = await this.retrieveRelevantChunks(dto.message, tenantId, dto.agentId);
+    const retrievedChunks = await this.retrieveRelevantChunks(dto.message, tenantId, ctx.agentId);
 
     /* Load approved knowledge items */
     const approvedItems = await this.db
@@ -166,18 +181,28 @@ export class LabService {
       )
       .limit(50);
 
-    /* Check if scheduling is enabled for this agent */
-    const agentSettings = await this.schedulingTools.loadSettings(dto.agentId, tenantId);
+    /* Tools this run may use: server policy + per-agent permissions, never model-controlled */
+    const denied = await this.loadDeniedTools(ctx.agentId, tenantId);
+    const agentSettings = await this.schedulingTools.loadSettings(ctx.agentId, tenantId);
     const schedulingEnabled = agentSettings?.canSchedule === true;
 
-    /* Check for connected PC devices for this tenant */
-    const pcDevicesList = await this.pcConnector.listDevices(tenantId);
+    const pcDevicesList = isToolAllowed('pc.listFiles', ctx)
+      ? await this.pcConnector.listDevices(tenantId)
+      : [];
     const onlineDevice = pcDevicesList.find(
-      (d: { pairedAt: Date | null; lastSeenAt: Date | null }) => d.pairedAt && d.lastSeenAt && Date.now() - d.lastSeenAt.getTime() < 30_000,
+      (d: { pairedAt: Date | null; lastSeenAt: Date | null }) =>
+        d.pairedAt && d.lastSeenAt && Date.now() - d.lastSeenAt.getTime() < 30_000,
     ) as (typeof pcDevicesList)[0] | undefined;
     const pcEnabled = !!onlineDevice;
 
-    /* Build system prompt — includes scheduling context when enabled */
+    const offeredTools: LlmToolDefinition[] = [
+      ...(schedulingEnabled ? SCHEDULING_TOOLS : []),
+      ...(pcEnabled
+        ? buildPcTools(onlineDevice!.id, onlineDevice!.capabilities as Record<string, unknown>)
+        : []),
+    ].filter((t) => isToolAllowed(t.name, ctx) && !denied.has(t.name));
+    const offered = new Set(offeredTools.map((t) => t.name));
+
     const systemPrompt = this.buildSystemPrompt(
       agent,
       approvedItems,
@@ -186,118 +211,123 @@ export class LabService {
       pcEnabled ? onlineDevice : null,
     );
 
-    /* Message history */
-    const messages: Anthropic.MessageParam[] = [
+    const messages: LlmMessage[] = [
       ...(dto.history ?? []).map((m: ChatMessageDto) => ({
-        role: m.role as 'user' | 'assistant',
+        role: m.role,
         content: m.content,
       })),
       { role: 'user', content: dto.message },
     ];
 
-    const tools: Anthropic.Tool[] = [
-      ...(schedulingEnabled ? SCHEDULING_TOOLS : []),
-      ...(pcEnabled ? buildPcTools(onlineDevice!.id, onlineDevice!.capabilities as Record<string, unknown>) : []),
-    ];
-    const toolCtx: ToolContext = {
-      tenantId,
-      agentId: dto.agentId,
-      conversationId: options?.conversationId,
-      contactId: options?.contactId,
-    };
+    if (!this.llm.isConfigured()) {
+      throw new BadRequestException(
+        `Provedor de IA "${this.llm.name}" não está configurado. Configure uma credencial real no .env.local para usar agentes.`,
+      );
+    }
 
     const toolCallsExecuted: string[] = [];
     let totalInputTokens = 0;
     let totalOutputTokens = 0;
 
     try {
-      /* Agentic loop — keeps running while model requests tool calls */
-      let response = await this.client.messages.create({
-        model: this.defaultModel,
-        max_tokens: 2048,
+      let response = await this.llm.complete({
         system: systemPrompt,
         messages,
-        tools: tools.length > 0 ? tools : undefined,
+        tools: offeredTools,
+        maxTokens: 2048,
       });
+      totalInputTokens += response.usage.inputTokens;
+      totalOutputTokens += response.usage.outputTokens;
 
-      totalInputTokens += response.usage.input_tokens;
-      totalOutputTokens += response.usage.output_tokens;
+      for (let round = 0; response.stopReason === 'tool_use' && round < MAX_TOOL_ROUNDS; round++) {
+        const results: Array<{ toolCallId: string; content: string }> = [];
 
-      while (response.stop_reason === 'tool_use') {
-        const toolResults: Anthropic.ToolResultBlockParam[] = [];
-
-        for (const block of response.content) {
-          if (block.type !== 'tool_use') continue;
-
-          this.logger.debug(`Tool call: ${block.name} — ${JSON.stringify(block.input)}`);
-          toolCallsExecuted.push(block.name);
-
-          let toolOutput: unknown;
-          try {
-            if (block.name.startsWith('pc.') && onlineDevice) {
-              toolOutput = await this.pcConnector.enqueueCommand(
-                tenantId,
-                onlineDevice.id,
-                block.name,
-                block.input as Record<string, unknown>,
-                dto.agentId,
-              );
-            } else {
-              toolOutput = await this.schedulingTools.dispatch(
-                block.name,
-                block.input as Record<string, unknown>,
-                toolCtx,
-              );
-            }
-          } catch (err) {
-            toolOutput = { error: err instanceof Error ? err.message : String(err) };
-          }
-
-          toolResults.push({
-            type: 'tool_result',
-            tool_use_id: block.id,
-            content: JSON.stringify(toolOutput),
-          });
+        for (const call of response.toolCalls) {
+          this.logger.debug(`Tool call: ${call.name} (agent ${ctx.agentId}, tenant ${tenantId})`);
+          toolCallsExecuted.push(call.name);
+          const output = await this.executeTool(call, ctx, offered, onlineDevice?.id);
+          results.push({ toolCallId: call.id, content: JSON.stringify(output) });
         }
 
-        /* Feed tool results back and continue the loop */
-        messages.push({ role: 'assistant', content: response.content });
-        messages.push({ role: 'user', content: toolResults });
+        messages.push({ role: 'assistant', content: response.text, toolCalls: response.toolCalls });
+        messages.push({ role: 'tool', results });
 
-        response = await this.client.messages.create({
-          model: this.defaultModel,
-          max_tokens: 2048,
+        response = await this.llm.complete({
           system: systemPrompt,
           messages,
-          tools: tools.length > 0 ? tools : undefined,
+          tools: offeredTools,
+          maxTokens: 2048,
         });
-
-        totalInputTokens += response.usage.input_tokens;
-        totalOutputTokens += response.usage.output_tokens;
+        totalInputTokens += response.usage.inputTokens;
+        totalOutputTokens += response.usage.outputTokens;
       }
-
-      const textBlock = response.content.find((b) => b.type === 'text');
-      const reply = textBlock?.type === 'text' ? textBlock.text : '';
 
       return {
         traceId,
-        reply,
+        reply: response.text,
         inputTokens: totalInputTokens,
         outputTokens: totalOutputTokens,
         retrievedChunks: retrievedChunks.map((c) => ({ content: c.content, source: c.sourceName })),
         toolCallsExecuted: toolCallsExecuted.length > 0 ? toolCallsExecuted : undefined,
       };
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      this.logger.error(`LLM call failed: ${msg}`);
-
-      if (msg.includes('authentication') || msg.includes('invalid') || msg.includes('placeholder')) {
+      if (err instanceof LlmNotConfiguredError) {
         throw new BadRequestException(
-          'ANTHROPIC_API_KEY não está configurada. Configure uma chave real no .env.local para usar o laboratório.',
+          `Provedor de IA "${this.llm.name}" não está configurado. Configure uma credencial real no .env.local.`,
         );
       }
+      this.logger.error(`LLM call failed: ${err instanceof Error ? err.message : String(err)}`);
       throw err;
     }
+  }
+
+  private async executeTool(
+    call: LlmToolCall,
+    ctx: AgentExecutionContext,
+    offered: ReadonlySet<string>,
+    onlineDeviceId: string | undefined,
+  ): Promise<unknown> {
+    // Re-check on execution: a call to a tool that was not offered, or that this context may not
+    // use, is refused even if the model fabricated it (prompt injection / hallucination).
+    if (!offered.has(call.name) || !isToolAllowed(call.name, ctx)) {
+      this.logger.warn(`Refused tool "${call.name}" for ${ctx.channel}/${ctx.source}`);
+      return { error: 'Ferramenta não disponível neste contexto.' };
+    }
+
+    try {
+      if (call.name.startsWith('pc.')) {
+        if (!onlineDeviceId) return { error: 'Nenhum dispositivo online.' };
+        // The device is chosen by the server; any device_id supplied by the model is dropped.
+        const params = { ...call.input };
+        delete params['device_id'];
+        return await this.pcConnector.enqueueCommand(
+          ctx.tenantId,
+          onlineDeviceId,
+          call.name,
+          params,
+          ctx.agentId,
+        );
+      }
+      return await this.schedulingTools.dispatch(call.name, call.input, ctx);
+    } catch (err) {
+      if (err instanceof HttpException) return { error: err.message };
+      this.logger.error(`Tool ${call.name} failed: ${err instanceof Error ? err.message : err}`);
+      return { error: 'Falha ao executar a ferramenta.' };
+    }
+  }
+
+  private async loadDeniedTools(agentId: string, tenantId: string): Promise<Set<string>> {
+    const rows = await this.db
+      .select({ toolName: agentToolPermissions.toolName })
+      .from(agentToolPermissions)
+      .where(
+        and(
+          eq(agentToolPermissions.agentId, agentId),
+          eq(agentToolPermissions.tenantId, tenantId),
+          eq(agentToolPermissions.allowed, false),
+        ),
+      );
+    return expandDeniedTools(rows.map((r) => r.toolName));
   }
 
   private async retrieveRelevantChunks(
@@ -352,15 +382,30 @@ export class LabService {
   }
 
   private buildSystemPrompt(
-    agent: { name: string; objective: string | null; tone: string | null; language: string | null; persona: unknown },
+    agent: {
+      name: string;
+      objective: string | null;
+      tone: string | null;
+      language: string | null;
+      persona: unknown;
+    },
     knowledgeItemsList: Array<{ type: string; content: string; context: string | null }>,
     chunks: Array<{ content: string; sourceName: string }>,
-    schedulingSettings: { defaultDurationMinutes: number; defaultPlatform: string; timeZone: string } | null,
-    pcDevice: { deviceName: string; authorizedPaths: unknown; authorizedApps: unknown } | null = null,
+    schedulingSettings: {
+      defaultDurationMinutes: number;
+      defaultPlatform: string;
+      timeZone: string;
+    } | null,
+    pcDevice: {
+      deviceName: string;
+      authorizedPaths: unknown;
+      authorizedApps: unknown;
+    } | null = null,
   ): string {
-    const persona = typeof agent.persona === 'object' && agent.persona !== null
-      ? (agent.persona as { name?: string; description?: string })
-      : {};
+    const persona =
+      typeof agent.persona === 'object' && agent.persona !== null
+        ? (agent.persona as { name?: string; description?: string })
+        : {};
 
     const parts: string[] = [`Você é ${persona.name ?? agent.name}, um assistente de IA.`];
 
@@ -405,10 +450,17 @@ Você pode agendar reuniões reais usando as ferramentas disponíveis. Siga SEMP
       const procedures = knowledgeItemsList.filter((i) => i.type === 'procedure');
       const permissions = knowledgeItemsList.filter((i) => i.type === 'permission');
 
-      if (facts.length > 0) parts.push('### Fatos\n' + facts.map((i) => `- ${i.content}${i.context ? ` (${i.context})` : ''}`).join('\n'));
-      if (guidance.length > 0) parts.push('### Diretrizes\n' + guidance.map((i) => `- ${i.content}`).join('\n'));
-      if (procedures.length > 0) parts.push('### Procedimentos\n' + procedures.map((i) => `- ${i.content}`).join('\n'));
-      if (permissions.length > 0) parts.push('### Permissões\n' + permissions.map((i) => `- ${i.content}`).join('\n'));
+      if (facts.length > 0)
+        parts.push(
+          '### Fatos\n' +
+            facts.map((i) => `- ${i.content}${i.context ? ` (${i.context})` : ''}`).join('\n'),
+        );
+      if (guidance.length > 0)
+        parts.push('### Diretrizes\n' + guidance.map((i) => `- ${i.content}`).join('\n'));
+      if (procedures.length > 0)
+        parts.push('### Procedimentos\n' + procedures.map((i) => `- ${i.content}`).join('\n'));
+      if (permissions.length > 0)
+        parts.push('### Permissões\n' + permissions.map((i) => `- ${i.content}`).join('\n'));
     }
 
     if (chunks.length > 0) {
@@ -419,8 +471,12 @@ Você pode agendar reuniões reais usando as ferramentas disponíveis. Siga SEMP
     }
 
     if (pcDevice) {
-      const paths = Array.isArray(pcDevice.authorizedPaths) ? (pcDevice.authorizedPaths as string[]).join(', ') : '';
-      const apps = Array.isArray(pcDevice.authorizedApps) ? (pcDevice.authorizedApps as string[]).join(', ') : '';
+      const paths = Array.isArray(pcDevice.authorizedPaths)
+        ? (pcDevice.authorizedPaths as string[]).join(', ')
+        : '';
+      const apps = Array.isArray(pcDevice.authorizedApps)
+        ? (pcDevice.authorizedApps as string[]).join(', ')
+        : '';
       parts.push(`
 ## Acesso ao Computador
 
@@ -443,8 +499,11 @@ Você está conectado ao computador "${pcDevice.deviceName}" e pode executar tar
 
 // ── PC Tool Definitions (Anthropic API format) ─────────────────────────────
 
-function buildPcTools(deviceId: string, capabilities: Record<string, unknown>): Anthropic.Tool[] {
-  const tools: Anthropic.Tool[] = [];
+function buildPcTools(
+  deviceId: string,
+  capabilities: Record<string, unknown>,
+): LlmToolDefinition[] {
+  const tools: LlmToolDefinition[] = [];
   const files = (capabilities.files ?? {}) as Record<string, boolean>;
   const appsCapabilities = (capabilities.apps ?? {}) as Record<string, boolean>;
   const browser = (capabilities.browser ?? {}) as Record<string, boolean>;
@@ -454,10 +513,13 @@ function buildPcTools(deviceId: string, capabilities: Record<string, unknown>): 
     tools.push({
       name: 'pc.listFiles',
       description: 'Lista arquivos e pastas em um diretório autorizado do computador conectado.',
-      input_schema: {
+      inputSchema: {
         type: 'object' as const,
         properties: {
-          path: { type: 'string', description: 'Caminho do diretório a listar (deve estar dentro das pastas autorizadas)' },
+          path: {
+            type: 'string',
+            description: 'Caminho do diretório a listar (deve estar dentro das pastas autorizadas)',
+          },
           device_id: { type: 'string', description: 'ID do dispositivo', default: deviceId },
         },
         required: ['path'],
@@ -467,7 +529,7 @@ function buildPcTools(deviceId: string, capabilities: Record<string, unknown>): 
     tools.push({
       name: 'pc.readFile',
       description: 'Lê o conteúdo de um arquivo de texto no computador conectado.',
-      input_schema: {
+      inputSchema: {
         type: 'object' as const,
         properties: {
           path: { type: 'string', description: 'Caminho completo do arquivo' },
@@ -481,8 +543,9 @@ function buildPcTools(deviceId: string, capabilities: Record<string, unknown>): 
   if (files.create !== false) {
     tools.push({
       name: 'pc.createFile',
-      description: 'Cria um arquivo de texto no computador conectado dentro de uma pasta autorizada.',
-      input_schema: {
+      description:
+        'Cria um arquivo de texto no computador conectado dentro de uma pasta autorizada.',
+      inputSchema: {
         type: 'object' as const,
         properties: {
           path: { type: 'string', description: 'Caminho completo do arquivo a criar' },
@@ -496,7 +559,7 @@ function buildPcTools(deviceId: string, capabilities: Record<string, unknown>): 
     tools.push({
       name: 'pc.createFolder',
       description: 'Cria uma pasta no computador conectado dentro de uma pasta autorizada.',
-      input_schema: {
+      inputSchema: {
         type: 'object' as const,
         properties: {
           path: { type: 'string', description: 'Caminho completo da pasta a criar' },
@@ -511,7 +574,7 @@ function buildPcTools(deviceId: string, capabilities: Record<string, unknown>): 
     tools.push({
       name: 'pc.renameFile',
       description: 'Renomeia um arquivo ou pasta no computador conectado.',
-      input_schema: {
+      inputSchema: {
         type: 'object' as const,
         properties: {
           path: { type: 'string', description: 'Caminho atual' },
@@ -527,7 +590,7 @@ function buildPcTools(deviceId: string, capabilities: Record<string, unknown>): 
     tools.push({
       name: 'pc.moveFile',
       description: 'Move um arquivo ou pasta para outro local autorizado.',
-      input_schema: {
+      inputSchema: {
         type: 'object' as const,
         properties: {
           source: { type: 'string', description: 'Caminho de origem' },
@@ -543,10 +606,13 @@ function buildPcTools(deviceId: string, capabilities: Record<string, unknown>): 
     tools.push({
       name: 'pc.openApplication',
       description: 'Abre um aplicativo autorizado no computador conectado.',
-      input_schema: {
+      inputSchema: {
         type: 'object' as const,
         properties: {
-          app: { type: 'string', description: 'Nome do executável (ex: notepad.exe, calc.exe, msedge.exe)' },
+          app: {
+            type: 'string',
+            description: 'Nome do executável (ex: notepad.exe, calc.exe, msedge.exe)',
+          },
           device_id: { type: 'string', description: 'ID do dispositivo', default: deviceId },
         },
         required: ['app'],
@@ -558,7 +624,7 @@ function buildPcTools(deviceId: string, capabilities: Record<string, unknown>): 
     tools.push({
       name: 'pc.openUrl',
       description: 'Abre uma URL no navegador padrão do computador conectado.',
-      input_schema: {
+      inputSchema: {
         type: 'object' as const,
         properties: {
           url: { type: 'string', description: 'URL a abrir' },
@@ -573,7 +639,7 @@ function buildPcTools(deviceId: string, capabilities: Record<string, unknown>): 
     tools.push({
       name: 'pc.getDeviceInfo',
       description: 'Obtém informações básicas do computador conectado (SO, hostname, etc).',
-      input_schema: {
+      inputSchema: {
         type: 'object' as const,
         properties: {
           device_id: { type: 'string', description: 'ID do dispositivo', default: deviceId },

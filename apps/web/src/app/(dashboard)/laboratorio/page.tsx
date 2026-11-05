@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../../hooks/use-auth';
 import { labApi, type ChatMessage } from '../../../lib/lab-api';
-import { Button, Card, CardContent, CardHeader, CardTitle, Badge, Skeleton } from '@walletz/ui';
+import { Button, Card, CardContent, Badge, Skeleton } from '@walletz/ui';
 import { Bot, Send, User, FlaskConical, RefreshCw, ChevronDown, Info } from 'lucide-react';
 import { api } from '../../../lib/api';
 
@@ -169,29 +169,32 @@ export default function LaboratorioPage() {
             <Bot className="h-12 w-12 opacity-20" />
             <div>
               <p className="font-medium">Inicie uma conversa</p>
-              <p className="text-xs mt-1">
-                Digite uma pergunta para testar como o agente responde
-              </p>
+              <p className="text-xs mt-1">Digite uma pergunta para testar como o agente responde</p>
             </div>
           </div>
         )}
 
         {messages.map((msg, i) => (
-          <div key={i} className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+          <div
+            key={i}
+            className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+          >
             {msg.role === 'assistant' && (
               <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 mt-1">
                 <Bot className="h-3.5 w-3.5 text-primary" />
               </div>
             )}
 
-            <div className={`max-w-[75%] space-y-1.5 ${msg.role === 'user' ? 'items-end' : 'items-start'} flex flex-col`}>
+            <div
+              className={`max-w-[75%] space-y-1.5 ${msg.role === 'user' ? 'items-end' : 'items-start'} flex flex-col`}
+            >
               <div
                 className={`rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
                   msg.role === 'user'
                     ? 'bg-primary text-primary-foreground rounded-tr-sm'
                     : msg.error
-                    ? 'bg-destructive/10 text-destructive border border-destructive/20 rounded-tl-sm'
-                    : 'bg-muted rounded-tl-sm'
+                      ? 'bg-destructive/10 text-destructive border border-destructive/20 rounded-tl-sm'
+                      : 'bg-muted rounded-tl-sm'
                 }`}
               >
                 {msg.error ? (
@@ -213,7 +216,9 @@ export default function LaboratorioPage() {
                       onClick={() => toggleSources(i)}
                       className="flex items-center gap-0.5 text-[10px] text-primary hover:underline"
                     >
-                      <ChevronDown className={`h-2.5 w-2.5 transition-transform ${showSources.has(i) ? 'rotate-180' : ''}`} />
+                      <ChevronDown
+                        className={`h-2.5 w-2.5 transition-transform ${showSources.has(i) ? 'rotate-180' : ''}`}
+                      />
                       {msg.retrievedChunks.length} fonte(s)
                     </button>
                   )}

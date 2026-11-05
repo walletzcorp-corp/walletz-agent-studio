@@ -12,13 +12,38 @@ import { ChevronRight, ChevronLeft, Bot, Check } from 'lucide-react';
 
 const TEMPLATES = [
   { id: 'sdr', label: 'SDR', description: 'Qualifica leads e agenda demonstrações', icon: '🎯' },
-  { id: 'commercial', label: 'Comercial', description: 'Apresenta produtos e conduz vendas', icon: '💼' },
-  { id: 'reception_scheduling', label: 'Recepção', description: 'Agenda e gerencia compromissos', icon: '📅' },
-  { id: 'customer_service', label: 'Atendimento', description: 'Resolve dúvidas e problemas', icon: '🎧' },
-  { id: 'post_sale', label: 'Pós-venda', description: 'Acompanha o sucesso do cliente', icon: '⭐' },
+  {
+    id: 'commercial',
+    label: 'Comercial',
+    description: 'Apresenta produtos e conduz vendas',
+    icon: '💼',
+  },
+  {
+    id: 'reception_scheduling',
+    label: 'Recepção',
+    description: 'Agenda e gerencia compromissos',
+    icon: '📅',
+  },
+  {
+    id: 'customer_service',
+    label: 'Atendimento',
+    description: 'Resolve dúvidas e problemas',
+    icon: '🎧',
+  },
+  {
+    id: 'post_sale',
+    label: 'Pós-venda',
+    description: 'Acompanha o sucesso do cliente',
+    icon: '⭐',
+  },
   { id: 'collection', label: 'Cobrança', description: 'Negocia pagamentos pendentes', icon: '💳' },
   { id: 'faq', label: 'FAQ', description: 'Responde perguntas frequentes', icon: '❓' },
-  { id: 'custom', label: 'Personalizado', description: 'Configure do zero para seu uso', icon: '✨' },
+  {
+    id: 'custom',
+    label: 'Personalizado',
+    description: 'Configure do zero para seu uso',
+    icon: '✨',
+  },
 ];
 
 const TONES = [
@@ -158,8 +183,8 @@ export default function NovoAgentePage() {
                 i === step
                   ? 'bg-primary text-primary-foreground'
                   : i < step
-                  ? 'bg-primary/20 text-primary'
-                  : 'text-muted-foreground'
+                    ? 'bg-primary/20 text-primary'
+                    : 'text-muted-foreground'
               }`}
             >
               {i < step ? (
@@ -177,7 +202,9 @@ export default function NovoAgentePage() {
       </div>
 
       {error && (
-        <p className="mb-4 rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p>
+        <p className="mb-4 rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {error}
+        </p>
       )}
 
       {/* Step 1: Template */}
@@ -276,7 +303,9 @@ export default function NovoAgentePage() {
             </div>
           </div>
           <div className="space-y-1.5">
-            <label className="text-sm font-medium" htmlFor="language">Idioma</label>
+            <label className="text-sm font-medium" htmlFor="language">
+              Idioma
+            </label>
             <select
               id="language"
               className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
@@ -343,7 +372,11 @@ export default function NovoAgentePage() {
 
       {/* Navigation */}
       <div className="mt-8 flex items-center justify-between border-t border-border pt-6">
-        <Button variant="ghost" onClick={() => setStep((s) => Math.max(0, s - 1))} disabled={step === 0}>
+        <Button
+          variant="ghost"
+          onClick={() => setStep((s) => Math.max(0, s - 1))}
+          disabled={step === 0}
+        >
           <ChevronLeft className="h-4 w-4" />
           Anterior
         </Button>

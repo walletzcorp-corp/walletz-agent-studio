@@ -1,6 +1,15 @@
 import { api } from './api';
 
-export type KnowledgeSourceType = 'pdf' | 'docx' | 'xlsx' | 'csv' | 'txt' | 'html' | 'url' | 'faq' | 'typed';
+export type KnowledgeSourceType =
+  | 'pdf'
+  | 'docx'
+  | 'xlsx'
+  | 'csv'
+  | 'txt'
+  | 'html'
+  | 'url'
+  | 'faq'
+  | 'typed';
 export type KnowledgeSourceStatus = 'pending' | 'processing' | 'processed' | 'failed' | 'outdated';
 
 export interface KnowledgeSource {
@@ -32,7 +41,11 @@ export const knowledgeApi = {
   get: (tenantId: string, sourceId: string) =>
     api.get<KnowledgeSource>(`/tenants/${tenantId}/knowledge/${sourceId}`),
 
-  upload: (tenantId: string, file: File, opts?: { name?: string; agentId?: string; tags?: string[] }) => {
+  upload: (
+    tenantId: string,
+    file: File,
+    opts?: { name?: string; agentId?: string; tags?: string[] },
+  ) => {
     const form = new FormData();
     form.append('file', file);
     if (opts?.name) form.append('name', opts.name);

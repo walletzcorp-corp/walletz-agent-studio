@@ -42,7 +42,7 @@ export class GoogleCalendarService {
     this.clientSecret = this.config.get<string>('GOOGLE_OAUTH_CLIENT_SECRET');
     this.redirectUri = this.config.get<string>(
       'GOOGLE_OAUTH_REDIRECT_URI',
-      'http://localhost:3001/v1/tenants/callback/google',
+      'http://localhost:3001/api/v1/tenants/callback/google',
     );
   }
 
@@ -82,9 +82,9 @@ export class GoogleCalendarService {
       }).toString(),
     });
     if (!res.ok) {
-      const body = await res.text();
-      this.logger.error(`Google token exchange failed: ${body}`);
-      throw new Error(`Google OAuth error: ${body}`);
+      await res.text();
+      this.logger.error(`Google token exchange failed (HTTP ${res.status})`);
+      throw new Error(`Google OAuth token exchange failed (HTTP ${res.status})`);
     }
     const data = (await res.json()) as {
       access_token: string;
@@ -105,7 +105,9 @@ export class GoogleCalendarService {
     };
   }
 
-  async refreshAccessToken(refreshToken: string): Promise<Omit<GoogleTokens, 'email' | 'displayName' | 'scopes'>> {
+  async refreshAccessToken(
+    refreshToken: string,
+  ): Promise<Omit<GoogleTokens, 'email' | 'displayName' | 'scopes'>> {
     this.assertCredentials();
     const res = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
@@ -176,7 +178,12 @@ export class GoogleCalendarService {
       attendees: (event.attendeeEmails ?? []).map((email) => ({ email })),
     };
     if (event.addMeet) {
-      body.conferenceData = { createRequest: { requestId: crypto.randomUUID(), conferenceSolutionKey: { type: 'hangoutsMeet' } } };
+      body.conferenceData = {
+        createRequest: {
+          requestId: crypto.randomUUID(),
+          conferenceSolutionKey: { type: 'hangoutsMeet' },
+        },
+      };
     }
     const params = new URLSearchParams(event.addMeet ? { conferenceDataVersion: '1' } : {});
     const res = await fetch(
@@ -190,6 +197,31 @@ export class GoogleCalendarService {
     if (!res.ok) {
       const err = await res.text();
       throw new Error(`Failed to create Google Calendar event: ${err}`);
+    }
+    return res.json() as Promise<GoogleEvent>;
+  }
+
+  async updateEvent(
+    accessToken: string,
+    eventId: string,
+    patch: { start: string; end: string; timeZone?: string },
+    calendarId = 'primary',
+  ): Promise<GoogleEvent> {
+    const body = {
+      start: { dateTime: patch.start, timeZone: patch.timeZone ?? 'America/Sao_Paulo' },
+      end: { dateTime: patch.end, timeZone: patch.timeZone ?? 'America/Sao_Paulo' },
+    };
+    const res = await fetch(
+      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${eventId}`,
+      {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      },
+    );
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Failed to update Google Calendar event: ${err}`);
     }
     return res.json() as Promise<GoogleEvent>;
   }

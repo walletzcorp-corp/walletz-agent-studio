@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { TeachRepository } from './teach.repository';
 import { AuditService } from '../../shared/audit/audit.service';
+import { TenantOwnershipService } from '../../shared/tenancy/tenant-ownership.service';
 import { createId } from '../../database/utils/id';
 import type { CreateKnowledgeItemDto, UpdateKnowledgeItemDto } from './dto/knowledge-item.dto';
 
@@ -9,13 +10,17 @@ export class TeachService {
   constructor(
     private readonly repo: TeachRepository,
     private readonly auditService: AuditService,
+    private readonly ownership: TenantOwnershipService,
   ) {}
 
   async listItems(
     tenantId: string,
     filters?: { type?: string; agentId?: string; approved?: boolean },
   ) {
-    return this.repo.findByTenant(tenantId, filters as Parameters<TeachRepository['findByTenant']>[1]);
+    return this.repo.findByTenant(
+      tenantId,
+      filters as Parameters<TeachRepository['findByTenant']>[1],
+    );
   }
 
   async getItem(id: string, tenantId: string) {
@@ -25,6 +30,7 @@ export class TeachService {
   }
 
   async create(dto: CreateKnowledgeItemDto, tenantId: string, userId: string) {
+    if (dto.agentId) await this.ownership.assertAgent(tenantId, dto.agentId);
     const item = await this.repo.create({
       id: createId(),
       tenantId,

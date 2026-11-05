@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, MaxLength } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, MaxLength, ValidateIf } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class ConnectWhatsappDto {
@@ -40,17 +40,26 @@ export class EmbeddedSignupDto {
   @IsNotEmpty()
   code!: string;
 
-  @ApiProperty({ description: 'Connection path: existing WhatsApp Business or new number', required: false })
+  @ApiProperty({
+    description: 'Connection path: existing WhatsApp Business or new number',
+    required: false,
+  })
   @IsOptional()
   @IsString()
   path?: 'existing' | 'new';
 
-  @ApiProperty({ description: 'WABA ID from Embedded Signup session info (if provided by Meta)', required: false })
+  @ApiProperty({
+    description: 'WABA ID from Embedded Signup session info (if provided by Meta)',
+    required: false,
+  })
   @IsOptional()
   @IsString()
   wabaId?: string;
 
-  @ApiProperty({ description: 'Phone Number ID from Embedded Signup session info (if provided by Meta)', required: false })
+  @ApiProperty({
+    description: 'Phone Number ID from Embedded Signup session info (if provided by Meta)',
+    required: false,
+  })
   @IsOptional()
   @IsString()
   phoneNumberId?: string;
@@ -72,4 +81,15 @@ export class SendMessageDto {
   @IsOptional()
   @IsString()
   idempotencyKey?: string;
+}
+
+export class AssignAgentDto {
+  @ApiProperty({
+    nullable: true,
+    description: 'ID do agente publicado que responde neste número; null remove a associação',
+  })
+  @ValidateIf((o: AssignAgentDto) => o.agentId !== null)
+  @IsString()
+  @IsNotEmpty()
+  agentId!: string | null;
 }

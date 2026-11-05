@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsISO8601, IsOptional, IsEnum, IsInt, Min, Max } from 'class-validator';
+import { IsString, IsNotEmpty, IsISO8601, IsOptional, IsEnum } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export enum MeetingPlatformDto {
@@ -15,7 +15,10 @@ export class CreateMeetingDto {
   @ApiPropertyOptional() @IsOptional() @IsString() contactEmail?: string;
   @ApiProperty() @IsISO8601() startAt!: string;
   @ApiProperty() @IsISO8601() endAt!: string;
-  @ApiPropertyOptional({ enum: MeetingPlatformDto }) @IsOptional() @IsEnum(MeetingPlatformDto) platform?: MeetingPlatformDto;
+  @ApiPropertyOptional({ enum: MeetingPlatformDto })
+  @IsOptional()
+  @IsEnum(MeetingPlatformDto)
+  platform?: MeetingPlatformDto;
   @ApiPropertyOptional() @IsOptional() @IsString() agentId?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() connectionId?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() timeZone?: string;
@@ -24,6 +27,7 @@ export class CreateMeetingDto {
 export class RescheduleMeetingDto {
   @ApiProperty() @IsISO8601() startAt!: string;
   @ApiProperty() @IsISO8601() endAt!: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() timeZone?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() reason?: string;
 }
 

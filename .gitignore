@@ -56,3 +56,6 @@ dump.rdb
 # Seed script generated reports
 apps/api/.radar-editais-report.html
 apps/api/.seed-report.json
+
+# Local-only credentials and scratch
+.local/

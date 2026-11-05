@@ -34,14 +34,15 @@ export interface ToolPermission {
 }
 
 export const agentsApi = {
-  list: (tenantId: string) =>
-    api.get<Agent[]>(`/tenants/${tenantId}/agents`),
+  list: (tenantId: string) => api.get<Agent[]>(`/tenants/${tenantId}/agents`),
 
   templates: (tenantId: string) =>
     api.get<Record<string, unknown>[]>(`/tenants/${tenantId}/agents/templates`),
 
   tools: (tenantId: string) =>
-    api.get<{ name: string; label: string; category: string }[]>(`/tenants/${tenantId}/agents/tools`),
+    api.get<{ name: string; label: string; category: string }[]>(
+      `/tenants/${tenantId}/agents/tools`,
+    ),
 
   get: (tenantId: string, agentId: string) =>
     api.get<Agent>(`/tenants/${tenantId}/agents/${agentId}`),
@@ -70,6 +71,9 @@ export const agentsApi = {
   toolPermissions: (tenantId: string, agentId: string) =>
     api.get<ToolPermission[]>(`/tenants/${tenantId}/agents/${agentId}/tool-permissions`),
 
-  setToolPermission: (tenantId: string, agentId: string, data: { toolName: string; allowed: boolean; constraints?: Record<string, unknown> }) =>
-    api.post<ToolPermission>(`/tenants/${tenantId}/agents/${agentId}/tool-permissions`, data),
+  setToolPermission: (
+    tenantId: string,
+    agentId: string,
+    data: { toolName: string; allowed: boolean; constraints?: Record<string, unknown> },
+  ) => api.post<ToolPermission>(`/tenants/${tenantId}/agents/${agentId}/tool-permissions`, data),
 };

@@ -3,26 +3,20 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@/*": [
-        "./src/*"
-      ],
-      "@walletz/ui": [
-        "../../packages/ui/src/index.ts"
-      ],
-      "@walletz/contracts": [
-        "../../packages/contracts/src/index.ts"
-      ]
+      "@/*": ["./src/*"],
+      "@walletz/ui": ["../../packages/ui/src/index.ts"],
+      "@walletz/contracts": ["../../packages/contracts/src/index.ts"]
     },
     "noEmit": true,
-    "isolatedModules": true
+    "isolatedModules": true,
+    "exactOptionalPropertyTypes": false
   },
   "include": [
-    "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
-    ".next/types/**/*.ts"
+    ".next/types/**/*.ts",
+    "next-env.d.ts",
+    ".next-build/types/**/*.ts"
   ],
-  "exclude": [
-    "node_modules"
-  ]
+  "exclude": ["node_modules"]
 }

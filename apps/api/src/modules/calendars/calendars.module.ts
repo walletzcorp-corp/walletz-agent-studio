@@ -15,16 +15,8 @@ import { AvailabilityService } from './availability.service';
 import { SchedulingToolsService } from './scheduling-tools.service';
 
 @Module({
-  imports: [
-    HttpModule.register({ timeout: 15000 }),
-    RbacModule,
-    AuditModule,
-  ],
-  controllers: [
-    CalendarsController,
-    CalendarsCallbackController,
-    CalendarsAvailabilityController,
-  ],
+  imports: [HttpModule.register({ timeout: 15000 }), RbacModule, AuditModule],
+  controllers: [CalendarsController, CalendarsCallbackController, CalendarsAvailabilityController],
   providers: [
     CalendarsService,
     GoogleCalendarService,
@@ -33,6 +25,11 @@ import { SchedulingToolsService } from './scheduling-tools.service';
     AvailabilityService,
     SchedulingToolsService,
   ],
-  exports: [CalendarsService, AvailabilityService, SchedulingToolsService, MicrosoftGraphAuthService],
+  exports: [
+    CalendarsService,
+    AvailabilityService,
+    SchedulingToolsService,
+    MicrosoftGraphAuthService,
+  ],
 })
 export class CalendarsModule {}

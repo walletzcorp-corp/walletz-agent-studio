@@ -3,16 +3,35 @@
 import { useEffect, useState, useRef } from 'react';
 import { useAuth } from '../../../hooks/use-auth';
 import { knowledgeApi, type KnowledgeSource } from '../../../lib/knowledge-api';
+import { Button, Card, CardContent, CardHeader, CardTitle, Badge, Skeleton } from '@walletz/ui';
 import {
-  Button, Card, CardContent, CardHeader, CardTitle, Badge, Skeleton,
-} from '@walletz/ui';
-import {
-  Upload, FileText, Globe, Type, RefreshCw, Trash2, Plus, BookOpen, AlertCircle, CheckCircle2, Clock,
+  Upload,
+  FileText,
+  Globe,
+  Type,
+  RefreshCw,
+  Trash2,
+  Plus,
+  BookOpen,
+  AlertCircle,
+  CheckCircle2,
+  Clock,
 } from 'lucide-react';
 
-const STATUS_CONFIG: Record<KnowledgeSource['status'], { label: string; icon: React.ReactNode; variant: 'default' | 'secondary' | 'outline' | 'success' | 'warning' | 'destructive' }> = {
+const STATUS_CONFIG: Record<
+  KnowledgeSource['status'],
+  {
+    label: string;
+    icon: React.ReactNode;
+    variant: 'default' | 'secondary' | 'outline' | 'success' | 'warning' | 'destructive';
+  }
+> = {
   pending: { label: 'Pendente', icon: <Clock className="h-3 w-3" />, variant: 'secondary' },
-  processing: { label: 'Processando', icon: <RefreshCw className="h-3 w-3 animate-spin" />, variant: 'warning' },
+  processing: {
+    label: 'Processando',
+    icon: <RefreshCw className="h-3 w-3 animate-spin" />,
+    variant: 'warning',
+  },
   processed: { label: 'Pronto', icon: <CheckCircle2 className="h-3 w-3" />, variant: 'success' },
   failed: { label: 'Falhou', icon: <AlertCircle className="h-3 w-3" />, variant: 'destructive' },
   outdated: { label: 'Desatualizado', icon: <Clock className="h-3 w-3" />, variant: 'outline' },
@@ -62,7 +81,9 @@ export default function KnowledgePage() {
     }
   };
 
-  useEffect(() => { load(); }, [tenantId]);
+  useEffect(() => {
+    void load();
+  }, [tenantId]);
 
   // Poll for processing sources every 5s
   useEffect(() => {
@@ -113,7 +134,9 @@ export default function KnowledgePage() {
     try {
       await knowledgeApi.retry(tenantId, sourceId);
       await load();
-    } catch { /* silent */ }
+    } catch {
+      /* silent */
+    }
   };
 
   const handleDelete = async (sourceId: string) => {
@@ -121,7 +144,9 @@ export default function KnowledgePage() {
     try {
       await knowledgeApi.remove(tenantId, sourceId);
       setSources((prev) => prev.filter((s) => s.id !== sourceId));
-    } catch { /* silent */ }
+    } catch {
+      /* silent */
+    }
   };
 
   return (
@@ -134,11 +159,23 @@ export default function KnowledgePage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => { setMode('typed'); setError(null); }}>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setMode('typed');
+              setError(null);
+            }}
+          >
             <Type className="h-4 w-4" />
             Digitar conteúdo
           </Button>
-          <Button onClick={() => { setMode('file'); setError(null); fileRef.current?.click(); }}>
+          <Button
+            onClick={() => {
+              setMode('file');
+              setError(null);
+              fileRef.current?.click();
+            }}
+          >
             <Upload className="h-4 w-4" />
             Upload de arquivo
           </Button>
@@ -176,8 +213,13 @@ export default function KnowledgePage() {
               onChange={(e) => setTypedContent(e.target.value)}
             />
             <div className="flex gap-2 justify-end">
-              <Button variant="outline" onClick={() => setMode(null)}>Cancelar</Button>
-              <Button onClick={handleTypedSubmit} disabled={uploading || !typedName.trim() || !typedContent.trim()}>
+              <Button variant="outline" onClick={() => setMode(null)}>
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleTypedSubmit}
+                disabled={uploading || !typedName.trim() || !typedContent.trim()}
+              >
                 {uploading ? 'Salvando…' : 'Salvar'}
               </Button>
             </div>
@@ -197,7 +239,9 @@ export default function KnowledgePage() {
 
       {loading ? (
         <div className="space-y-3">
-          {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-20" />)}
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-20" />
+          ))}
         </div>
       ) : sources.length === 0 && mode === null ? (
         <Card>
@@ -216,7 +260,12 @@ export default function KnowledgePage() {
                 <Type className="h-4 w-4" />
                 Digitar conteúdo
               </Button>
-              <Button onClick={() => { setMode('file'); fileRef.current?.click(); }}>
+              <Button
+                onClick={() => {
+                  setMode('file');
+                  fileRef.current?.click();
+                }}
+              >
                 <Plus className="h-4 w-4" />
                 Adicionar arquivo
               </Button>
@@ -237,7 +286,9 @@ export default function KnowledgePage() {
                     <div className="flex items-center gap-2 mt-0.5">
                       <span className="text-xs text-muted-foreground uppercase">{source.type}</span>
                       {source.fileSizeBytes != null && (
-                        <span className="text-xs text-muted-foreground">· {formatBytes(source.fileSizeBytes)}</span>
+                        <span className="text-xs text-muted-foreground">
+                          · {formatBytes(source.fileSizeBytes)}
+                        </span>
                       )}
                       {source.processedAt && (
                         <span className="text-xs text-muted-foreground">
@@ -246,7 +297,9 @@ export default function KnowledgePage() {
                       )}
                     </div>
                     {source.processingError && (
-                      <p className="text-xs text-destructive mt-1 truncate">{source.processingError}</p>
+                      <p className="text-xs text-destructive mt-1 truncate">
+                        {source.processingError}
+                      </p>
                     )}
                   </div>
 
@@ -257,7 +310,12 @@ export default function KnowledgePage() {
 
                   <div className="flex items-center gap-1 shrink-0">
                     {source.status === 'failed' && (
-                      <Button variant="ghost" size="icon" title="Reprocessar" onClick={() => handleRetry(source.id)}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        title="Reprocessar"
+                        onClick={() => handleRetry(source.id)}
+                      >
                         <RefreshCw className="h-4 w-4" />
                       </Button>
                     )}

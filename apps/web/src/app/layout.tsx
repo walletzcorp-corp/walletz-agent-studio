@@ -24,9 +24,9 @@ export const metadata: Metadata = {
   description: 'Crie, ensine, conecte e automatize agentes de inteligência artificial.',
   robots: { index: false, follow: false },
   icons: {
-    icon:       [{ url: '/favicon.svg',    type: 'image/svg+xml' }],
-    apple:      [{ url: '/apple-icon.svg', type: 'image/svg+xml', sizes: '180x180' }],
-    shortcut:   [{ url: '/favicon.svg',    type: 'image/svg+xml' }],
+    icon: [{ url: '/favicon.svg', type: 'image/svg+xml' }],
+    apple: [{ url: '/apple-icon.svg', type: 'image/svg+xml', sizes: '180x180' }],
+    shortcut: [{ url: '/favicon.svg', type: 'image/svg+xml' }],
   },
   openGraph: {
     type: 'website',

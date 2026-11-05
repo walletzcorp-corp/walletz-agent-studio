@@ -6,13 +6,24 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useAuth } from '../../../../hooks/use-auth';
-import { agentsApi, type Agent, type AgentRelease, type ToolPermission } from '../../../../lib/agents-api';
 import {
-  Button, Card, CardContent, CardHeader, CardTitle, Badge, Skeleton,
-} from '@walletz/ui';
+  agentsApi,
+  type Agent,
+  type AgentRelease,
+  type ToolPermission,
+} from '../../../../lib/agents-api';
+import { Button, Card, CardContent, CardHeader, CardTitle, Badge, Skeleton } from '@walletz/ui';
 import {
-  ChevronLeft, Bot, Play, Pause, RotateCcw, Save, Tag,
-  Clock, Wrench, AlertTriangle,
+  ChevronLeft,
+  Bot,
+  Play,
+  Pause,
+  RotateCcw,
+  Save,
+  Tag,
+  Clock,
+  Wrench,
+  AlertTriangle,
 } from 'lucide-react';
 
 const STATUS_BADGE = {
@@ -102,7 +113,9 @@ export default function AgentDetailPage() {
     }
   };
 
-  useEffect(() => { load(); }, [tenantId, agentId]);
+  useEffect(() => {
+    void load();
+  }, [tenantId, agentId]);
 
   const handleSave = async (values: EditForm) => {
     if (!tenantId || !agentId) return;
@@ -151,7 +164,9 @@ export default function AgentDetailPage() {
         await agentsApi.resume(tenantId, agentId);
       }
       await load();
-    } catch { /* ignored */ }
+    } catch {
+      /* ignored */
+    }
   };
 
   const handleToolToggle = async (toolName: string, currentAllowed: boolean) => {
@@ -163,7 +178,9 @@ export default function AgentDetailPage() {
       });
       const { data } = await agentsApi.toolPermissions(tenantId, agentId);
       setToolPerms(data);
-    } catch { /* ignored */ }
+    } catch {
+      /* ignored */
+    }
   };
 
   const handleRollback = async (releaseId: string) => {
@@ -176,7 +193,9 @@ export default function AgentDetailPage() {
       const { api } = await import('../../../../lib/api');
       await api.post(`/tenants/${tenantId}/agents/${agentId}/releases/${releaseId}/rollback`);
       await load();
-    } catch { /* ignored */ }
+    } catch {
+      /* ignored */
+    }
   };
 
   if (loading) {
@@ -241,18 +260,20 @@ export default function AgentDetailPage() {
             {(isPublished || isPaused) && (
               <Button variant="outline" size="sm" onClick={handleToggle}>
                 {isPublished ? (
-                  <><Pause className="h-3.5 w-3.5" />Pausar</>
+                  <>
+                    <Pause className="h-3.5 w-3.5" />
+                    Pausar
+                  </>
                 ) : (
-                  <><Play className="h-3.5 w-3.5" />Ativar</>
+                  <>
+                    <Play className="h-3.5 w-3.5" />
+                    Ativar
+                  </>
                 )}
               </Button>
             )}
             {!isPublished && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setEditing((e) => !e)}
-              >
+              <Button variant="outline" size="sm" onClick={() => setEditing((e) => !e)}>
                 {editing ? 'Cancelar' : 'Editar'}
               </Button>
             )}
@@ -271,18 +292,21 @@ export default function AgentDetailPage() {
         <div className="flex items-center gap-2 rounded-lg bg-warning/10 border border-warning/30 px-4 py-3 text-sm text-warning-foreground">
           <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />
           <span className="text-amber-700 dark:text-amber-400">
-            Agente publicado não pode ser editado diretamente. Pause primeiro ou crie uma nova release.
+            Agente publicado não pode ser editado diretamente. Pause primeiro ou crie uma nova
+            release.
           </span>
         </div>
       )}
 
       {/* Tabs */}
       <div className="flex gap-0 border-b border-border">
-        {([
-          { id: 'overview', label: 'Visão Geral', icon: Bot },
-          { id: 'releases', label: `Releases (${releases.length})`, icon: Tag },
-          { id: 'tools', label: 'Ferramentas', icon: Wrench },
-        ] as { id: Tab; label: string; icon: React.FC<{ className?: string }> }[]).map(({ id, label, icon: Icon }) => (
+        {(
+          [
+            { id: 'overview', label: 'Visão Geral', icon: Bot },
+            { id: 'releases', label: `Releases (${releases.length})`, icon: Tag },
+            { id: 'tools', label: 'Ferramentas', icon: Wrench },
+          ] as { id: Tab; label: string; icon: React.FC<{ className?: string }> }[]
+        ).map(({ id, label, icon: Icon }) => (
           <button
             key={id}
             type="button"
@@ -319,7 +343,9 @@ export default function AgentDetailPage() {
                       {...form.register('name')}
                     />
                     {form.formState.errors.name && (
-                      <p className="text-xs text-destructive">{form.formState.errors.name.message}</p>
+                      <p className="text-xs text-destructive">
+                        {form.formState.errors.name.message}
+                      </p>
                     )}
                   </div>
                   <div className="space-y-1.5">
@@ -349,7 +375,9 @@ export default function AgentDetailPage() {
                       {...form.register('tone')}
                     >
                       {TONES.map((t) => (
-                        <option key={t.value} value={t.value}>{t.label}</option>
+                        <option key={t.value} value={t.value}>
+                          {t.label}
+                        </option>
                       ))}
                     </select>
                   </div>
@@ -389,32 +417,48 @@ export default function AgentDetailPage() {
               <dl className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Nome</dt>
+                    <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      Nome
+                    </dt>
                     <dd className="mt-1 text-sm">{agent.name}</dd>
                   </div>
                   <div>
-                    <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Título</dt>
+                    <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      Título
+                    </dt>
                     <dd className="mt-1 text-sm">{agent.title ?? '—'}</dd>
                   </div>
                   <div>
-                    <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Tom</dt>
-                    <dd className="mt-1 text-sm">{TONES.find((t) => t.value === agent.tone)?.label ?? agent.tone}</dd>
+                    <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      Tom
+                    </dt>
+                    <dd className="mt-1 text-sm">
+                      {TONES.find((t) => t.value === agent.tone)?.label ?? agent.tone}
+                    </dd>
                   </div>
                   <div>
-                    <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Idioma</dt>
+                    <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      Idioma
+                    </dt>
                     <dd className="mt-1 text-sm">{agent.language}</dd>
                   </div>
                 </div>
                 {agent.objective && (
                   <div>
-                    <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Objetivo</dt>
+                    <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      Objetivo
+                    </dt>
                     <dd className="mt-1 text-sm">{agent.objective}</dd>
                   </div>
                 )}
                 {(agent.persona as { description?: string })?.description && (
                   <div>
-                    <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Persona</dt>
-                    <dd className="mt-1 text-sm">{(agent.persona as { description?: string }).description}</dd>
+                    <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      Persona
+                    </dt>
+                    <dd className="mt-1 text-sm">
+                      {(agent.persona as { description?: string }).description}
+                    </dd>
                   </div>
                 )}
               </dl>
@@ -447,16 +491,28 @@ export default function AgentDetailPage() {
                       }`}
                     >
                       <div className="flex items-center gap-3">
-                        <div className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold ${
-                          isCurrent ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
-                        }`}>
+                        <div
+                          className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold ${
+                            isCurrent
+                              ? 'bg-primary text-primary-foreground'
+                              : 'bg-muted text-muted-foreground'
+                          }`}
+                        >
                           v{release.version}
                         </div>
                         <div>
                           <p className="text-sm font-medium flex items-center gap-1.5">
                             Versão {release.version}
-                            {isCurrent && <Badge variant="success" className="text-xs">Atual</Badge>}
-                            {release.rolledBackAt && <Badge variant="secondary" className="text-xs">Revertida</Badge>}
+                            {isCurrent && (
+                              <Badge variant="success" className="text-xs">
+                                Atual
+                              </Badge>
+                            )}
+                            {release.rolledBackAt && (
+                              <Badge variant="secondary" className="text-xs">
+                                Revertida
+                              </Badge>
+                            )}
                           </p>
                           {release.publishedAt && (
                             <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">

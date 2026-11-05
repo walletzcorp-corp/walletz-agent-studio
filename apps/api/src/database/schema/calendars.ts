@@ -116,6 +116,7 @@ export const calendarMeetings = pgTable(
     tenantIdx: index('cal_meetings_tenant_idx').on(t.tenantId),
     startAtIdx: index('cal_meetings_start_at_idx').on(t.tenantId, t.startAt),
     externalEventIdx: index('cal_meetings_external_event_idx').on(t.externalEventId),
+    contactIdx: index('cal_meetings_contact_idx').on(t.tenantId, t.contactId),
   }),
 );
 

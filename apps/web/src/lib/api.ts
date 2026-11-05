@@ -1,6 +1,5 @@
 import axios, { type AxiosInstance, type AxiosError } from 'axios';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+import { API_BASE } from './config';
 
 function createApiClient(): AxiosInstance {
   const client = axios.create({
@@ -61,6 +60,7 @@ export const api = createApiClient();
 export interface LoginResponse {
   accessToken: string;
   refreshToken: string;
+  sessionId: string;
   requiresMfa?: boolean;
   mfaToken?: string;
 }
@@ -79,6 +79,15 @@ export const authApi = {
   resetPassword: (token: string, password: string) =>
     api.post('/auth/reset-password', { token, password }),
 
+  verifyEmail: (token: string) => api.get('/auth/verify-email', { params: { token } }),
+
+  acceptInvite: (data: {
+    token: string;
+    password?: string;
+    firstName?: string;
+    lastName?: string;
+  }) => api.post<{ tenantId: string; email: string; role: string }>('/invites/accept', data),
+
   me: () => api.get<{ userId: string; email: string; sessionId: string }>('/auth/me'),
 };
 
@@ -87,11 +96,14 @@ export const tenantsApi = {
     api.post('/tenants', data),
 
   myTenants: () =>
-    api.get<Array<{ tenantId: string; tenantName: string; tenantSlug: string; role: string }>>('/tenants/my'),
+    api.get<Array<{ tenantId: string; tenantName: string; tenantSlug: string; role: string }>>(
+      '/tenants/my',
+    ),
 
   getOne: (tenantId: string) => api.get(`/tenants/${tenantId}`),
 
-  updateSettings: (tenantId: string, data: object) => api.patch(`/tenants/${tenantId}/settings`, data),
+  updateSettings: (tenantId: string, data: object) =>
+    api.patch(`/tenants/${tenantId}/settings`, data),
 
   getMembers: (tenantId: string) => api.get(`/tenants/${tenantId}/members`),
 

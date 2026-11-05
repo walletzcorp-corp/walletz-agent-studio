@@ -1,18 +1,38 @@
 # Status da Release — Walletz Agent Studio
 
-**Última atualização**: 2026-10-06  
-**Sprint atual**: 7 — Microsoft Graph Integration + Token Auto-Refresh + Teams Meeting
+**Última atualização**: 2026-11-05  
+**Sprint atual**: fix/production-readiness — isolamento multi-tenant, WhatsApp→agenda, tools do agente
 
 ---
 
 ## Sumário
 
-| Estado | Módulos |
-|--------|---------|
-| ✅ Pronto | Sprint 0–2 — Fundação, Auth/RBAC/Tenancy, Agent Builder |
-| ✅ Validado em dev | Auth flow, Agents, Knowledge Ingestion (Sprint 3), Teach AI + Approval (Sprint 4) |
-| ⏳ Pendente | RAG (E), Lab (F), Conversations (G), Contacts (H), Calendar (J), Campaigns (K), Analytics (M), Billing (N) |
-| 🔴 Bloqueado externamente | WhatsApp Cloud API, Google OAuth, Microsoft OAuth, Stripe |
+| Estado | Itens |
+|--------|-------|
+| ✅ Isolamento de tenant | Guard global deny-by-default (`AccessPolicyGuard`), `TenantContext` único e imutável, predicados `tenantId` em services, `TenantOwnershipService` para ids vindos do corpo. Matriz: 112 rotas, 1760 ataques, 0 FAIL — [TENANT_ISOLATION_MATRIX.md](../qa/TENANT_ISOLATION_MATRIX.md) |
+| ✅ WhatsApp → agenda | Conta resolvida por `phone_number_id` único, HMAC obrigatório (fail-closed), agente só se atribuído e publicado, contexto de tool imutável no servidor, `findMeetings` sempre escopado ao contato |
+| ✅ Tokens de uso único | Verificação de e-mail, reset de senha e convite armazenados apenas como SHA-256; fluxo `/invites/accept` + páginas web de aceite, reset e verificação |
+| ✅ Envio por número do tenant | Seleção determinística da conta de saída (conectada primeiro, depois a mais antiga) |
+| ✅ CI | Job `security-e2e` em todo push/PR (Postgres + Redis, migrações completas, 4 suítes); `build` depende dele. Runs 1–6 da branch estavam vermelhos (turbo descartava `DATABASE_URL`, `--dry-run` inexistente no drizzle-kit, suíte dependia de OAuth do `.env.local`, `pnpm audit` com 5 críticas/55 altas); corrigidos — confirmar o próximo run no GitHub |
+| ✅ Dependências | `pnpm audit --audit-level=high` sem achados (Next 15.5.29, drizzle-orm 0.45, zod 4, nodemailer 10, axios/multer/etc. + overrides) |
+| ✅ MFA em repouso | Segredo TOTP selado com AES-256-GCM (`enc:v1:`); segredos antigos em texto são selados no primeiro login com MFA; `ENCRYPTION_KEY` obrigatória em produção |
+| ✅ Worker | `apps/worker` + `QUEUE_ROLE=api|worker|all`: consumidores BullMQ e relay do outbox rodam em processo próprio (provado: job fica `waiting` só com a API e `completed` ao subir o worker) |
+| ⏳ Pendente | RAG (E), Billing (M, módulo não implementado), Analytics (L) |
+| 🔴 Bloqueado externamente | `ANTHROPIC_API_KEY` real (testes dependentes ficam `BLOCKED_EXTERNAL_MISSING_CREDENTIAL`), app Meta/WhatsApp em produção, consentimento Google/Microsoft, Stripe |
+
+### Evidência executada (2026-11-05, banco E2E recriado do zero + migrações)
+
+| Suíte | Resultado |
+|-------|-----------|
+| `tenant-isolation.e2e-spec.ts` (todas as rotas × papéis × tenants) | PASS |
+| `whatsapp-calendar-tenant-isolation.e2e-spec.ts` | PASS (1 skip: depende de chave Anthropic real) |
+| `tool-tenant-isolation.e2e-spec.ts` | PASS |
+| `access-control-and-privacy.e2e-spec.ts` (RBAC, LGPD, OAuth state, workers, convites) | PASS |
+| Total e2e | 137 passed, 1 skipped, 0 failed |
+| Unit (`pnpm test`) | 32 passed |
+| `pnpm lint` / `typecheck` / `format:check` / `build` | verde |
+
+Limitações conhecidas: testes que exigem o modelo real ficam bloqueados até existir chave válida; o relay do outbox usa `FOR UPDATE SKIP LOCKED` fora de transação, então deve rodar em uma única instância de worker até ser movido para dentro de uma transação.
 
 ---
 
@@ -62,7 +82,7 @@
 - [ ] packages/config (tsconfig, eslint, prettier)
 - [ ] apps/api (NestJS bootstrap)
 - [ ] apps/web (Next.js bootstrap)
-- [ ] apps/worker (NestJS worker bootstrap)
+- [x] apps/worker (bootstrap em `apps/api/src/worker.ts`, pacote `@walletz/worker`)
 - [ ] infra/docker/docker-compose.yml
 - [ ] .env.example
 - [ ] .github/workflows/ci.yml

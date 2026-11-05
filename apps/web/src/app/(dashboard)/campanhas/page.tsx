@@ -3,14 +3,29 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../../hooks/use-auth';
 import { api } from '../../../lib/api';
-import { Button, Card, CardContent, Badge } from '@walletz/ui';
+import { Button, Card, CardContent } from '@walletz/ui';
 import {
-  Megaphone, Plus, Play, ShieldCheck, AlertTriangle, CheckCircle2,
-  Clock, XCircle, Users, ChevronRight,
+  Megaphone,
+  Plus,
+  Play,
+  ShieldCheck,
+  AlertTriangle,
+  CheckCircle2,
+  Clock,
+  XCircle,
+  Users,
+  ChevronRight,
 } from 'lucide-react';
 
-interface Agent { id: string; name: string }
-interface Segment { id: string; name: string; contactCount: number }
+interface Agent {
+  id: string;
+  name: string;
+}
+interface Segment {
+  id: string;
+  name: string;
+  contactCount: number;
+}
 interface Campaign {
   id: string;
   name: string;
@@ -77,7 +92,9 @@ export default function CampanhasPage() {
     setLoading(false);
   };
 
-  useEffect(() => { void load(); }, [tenantId]);
+  useEffect(() => {
+    void load();
+  }, [tenantId]);
 
   const handleCreateCampaign = async () => {
     if (!tenantId || !campaignName.trim()) return;
@@ -89,11 +106,17 @@ export default function CampanhasPage() {
         segmentId: campaignSegment || undefined,
         templateName: campaignTemplate || undefined,
       });
-      setCampaignName(''); setCampaignAgent(''); setCampaignSegment(''); setCampaignTemplate('');
+      setCampaignName('');
+      setCampaignAgent('');
+      setCampaignSegment('');
+      setCampaignTemplate('');
       setShowNewCampaign(false);
       await load();
     } catch (err: unknown) {
-      setError((err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Erro ao criar campanha');
+      setError(
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+          'Erro ao criar campanha',
+      );
     }
   };
 
@@ -104,7 +127,9 @@ export default function CampanhasPage() {
       setSegmentName('');
       setShowNewSegment(false);
       await load();
-    } catch { /* silent */ }
+    } catch {
+      /* silent */
+    }
   };
 
   const handleCheckEligibility = async (campaignId: string) => {
@@ -118,7 +143,10 @@ export default function CampanhasPage() {
       );
       setEligibility(data);
     } catch (err: unknown) {
-      setError((err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Erro ao verificar elegibilidade');
+      setError(
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+          'Erro ao verificar elegibilidade',
+      );
     } finally {
       setCheckingEligibility(false);
     }
@@ -134,7 +162,10 @@ export default function CampanhasPage() {
       setSelectedCampaign(null);
       setEligibility(null);
     } catch (err: unknown) {
-      setError((err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Erro ao lançar campanha');
+      setError(
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+          'Erro ao lançar campanha',
+      );
     } finally {
       setLaunching(false);
     }
@@ -182,7 +213,9 @@ export default function CampanhasPage() {
               onChange={(e) => setSegmentName(e.target.value)}
             />
             <div className="flex gap-2 justify-end">
-              <Button variant="outline" onClick={() => setShowNewSegment(false)}>Cancelar</Button>
+              <Button variant="outline" onClick={() => setShowNewSegment(false)}>
+                Cancelar
+              </Button>
               <Button onClick={() => void handleCreateSegment()} disabled={!segmentName.trim()}>
                 Criar
               </Button>
@@ -197,7 +230,10 @@ export default function CampanhasPage() {
           <p className="text-sm font-medium text-muted-foreground mb-2">Segmentos</p>
           <div className="flex gap-2 flex-wrap">
             {segments.map((seg) => (
-              <div key={seg.id} className="rounded-lg border border-border bg-card px-3 py-2 text-sm flex items-center gap-2">
+              <div
+                key={seg.id}
+                className="rounded-lg border border-border bg-card px-3 py-2 text-sm flex items-center gap-2"
+              >
                 <Users className="h-3.5 w-3.5 text-muted-foreground" />
                 <span className="font-medium">{seg.name}</span>
                 <span className="text-muted-foreground">{seg.contactCount} contatos</span>
@@ -230,7 +266,11 @@ export default function CampanhasPage() {
                   onChange={(e) => setCampaignAgent(e.target.value)}
                 >
                   <option value="">Selecionar agente</option>
-                  {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                  {agents.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div className="space-y-1.5">
@@ -241,7 +281,11 @@ export default function CampanhasPage() {
                   onChange={(e) => setCampaignSegment(e.target.value)}
                 >
                   <option value="">Todos os contatos</option>
-                  {segments.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  {segments.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div className="space-y-1.5 sm:col-span-2">
@@ -255,7 +299,9 @@ export default function CampanhasPage() {
               </div>
             </div>
             <div className="flex gap-2 justify-end">
-              <Button variant="outline" onClick={() => setShowNewCampaign(false)}>Cancelar</Button>
+              <Button variant="outline" onClick={() => setShowNewCampaign(false)}>
+                Cancelar
+              </Button>
               <Button onClick={() => void handleCreateCampaign()} disabled={!campaignName.trim()}>
                 Criar campanha
               </Button>
@@ -267,7 +313,9 @@ export default function CampanhasPage() {
       {/* Campaigns list */}
       {loading ? (
         <div className="space-y-3">
-          {[1, 2].map((i) => <div key={i} className="h-20 rounded-lg bg-muted/30 animate-pulse" />)}
+          {[1, 2].map((i) => (
+            <div key={i} className="h-20 rounded-lg bg-muted/30 animate-pulse" />
+          ))}
         </div>
       ) : campaigns.length === 0 ? (
         <Card>
@@ -275,8 +323,8 @@ export default function CampanhasPage() {
             <Megaphone className="h-10 w-10 text-muted-foreground/30" />
             <p className="font-semibold">Nenhuma campanha criada</p>
             <p className="text-sm text-muted-foreground max-w-md">
-              Crie uma campanha para enviar mensagens via WhatsApp para seus contatos.
-              Apenas contatos com consentimento válido serão contactados.
+              Crie uma campanha para enviar mensagens via WhatsApp para seus contatos. Apenas
+              contatos com consentimento válido serão contactados.
             </p>
             <Button onClick={() => setShowNewCampaign(true)}>
               <Plus className="h-4 w-4" />
@@ -306,7 +354,9 @@ export default function CampanhasPage() {
                       <div className="flex gap-4 mt-1.5 text-xs text-muted-foreground">
                         <span>{camp.totalTargeted} alvo(s)</span>
                         <span className="text-green-600">{camp.totalEligible} elegíveis</span>
-                        {camp.totalBlocked > 0 && <span className="text-red-500">{camp.totalBlocked} bloqueados</span>}
+                        {camp.totalBlocked > 0 && (
+                          <span className="text-red-500">{camp.totalBlocked} bloqueados</span>
+                        )}
                         {camp.templateName && <span>Template: {camp.templateName}</span>}
                       </div>
                     </div>
@@ -326,7 +376,9 @@ export default function CampanhasPage() {
                         </Button>
                       )}
                       <button onClick={() => setSelectedCampaign(isSelected ? null : camp)}>
-                        <ChevronRight className={`h-4 w-4 text-muted-foreground transition-transform ${isSelected ? 'rotate-90' : ''}`} />
+                        <ChevronRight
+                          className={`h-4 w-4 text-muted-foreground transition-transform ${isSelected ? 'rotate-90' : ''}`}
+                        />
                       </button>
                     </div>
                   </div>
@@ -356,9 +408,13 @@ export default function CampanhasPage() {
                           </div>
                           {Object.entries(eligibility.reasons).length > 0 && (
                             <div className="rounded-lg bg-muted p-3 text-xs space-y-1">
-                              <p className="font-medium text-muted-foreground">Motivos de bloqueio:</p>
+                              <p className="font-medium text-muted-foreground">
+                                Motivos de bloqueio:
+                              </p>
                               {Object.entries(eligibility.reasons).map(([reason, count]) => (
-                                <p key={reason}>{reason}: {count}</p>
+                                <p key={reason}>
+                                  {reason}: {count}
+                                </p>
                               ))}
                             </div>
                           )}
@@ -369,7 +425,9 @@ export default function CampanhasPage() {
                               className="w-full"
                             >
                               <Play className="h-4 w-4 mr-2" />
-                              {launching ? 'Lançando…' : `Lançar campanha para ${eligibility.eligible} destinatários`}
+                              {launching
+                                ? 'Lançando…'
+                                : `Lançar campanha para ${eligibility.eligible} destinatários`}
                             </Button>
                           )}
                         </div>
