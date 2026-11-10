@@ -22,6 +22,9 @@ FROM node:20-bookworm-slim AS runner
 ENV NODE_ENV=production PORT=3001
 WORKDIR /app
 COPY --from=builder --chown=node:node /out ./
+# StorageService grava os arquivos da base de conhecimento em ./uploads
+# (montado como volume no compose de produção).
+RUN mkdir -p /app/uploads && chown node:node /app/uploads
 USER node
 EXPOSE 3001
 CMD ["node", "dist/main.js"]
