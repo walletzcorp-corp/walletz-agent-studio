@@ -20,9 +20,27 @@ interface CachedToken {
 export class MicrosoftGraphAuthService {
   private readonly logger = new Logger(MicrosoftGraphAuthService.name);
 
-  private readonly clientId: string;
-  private readonly clientSecret: string;
-  private readonly msTenantId: string;
+  /* Lidas sob demanda: sem credenciais Microsoft a API sobe normalmente e só
+   * as chamadas desta integração falham, com erro claro. */
+  private get clientId(): string {
+    return this.requireConfig('MICROSOFT_OAUTH_CLIENT_ID');
+  }
+  private get clientSecret(): string {
+    return this.requireConfig('MICROSOFT_OAUTH_CLIENT_SECRET');
+  }
+  private get msTenantId(): string {
+    return this.config.get<string>('MICROSOFT_OAUTH_TENANT_ID') || 'common';
+  }
+
+  private requireConfig(key: string): string {
+    const value = this.config.get<string>(key);
+    if (!value) {
+      throw new ServiceUnavailableException(
+        `Integração Microsoft 365 não configurada (${key} ausente).`,
+      );
+    }
+    return value;
+  }
 
   /* App-only token cache (single tenant, shared across requests) */
   private appTokenCache: CachedToken | null = null;
@@ -37,11 +55,7 @@ export class MicrosoftGraphAuthService {
     'User.Read',
   ].join(' ');
 
-  constructor(private readonly config: ConfigService) {
-    this.clientId = this.config.getOrThrow<string>('MICROSOFT_OAUTH_CLIENT_ID');
-    this.clientSecret = this.config.getOrThrow<string>('MICROSOFT_OAUTH_CLIENT_SECRET');
-    this.msTenantId = this.config.getOrThrow<string>('MICROSOFT_OAUTH_TENANT_ID');
-  }
+  constructor(private readonly config: ConfigService) {}
 
   /* ── App-only (Client Credentials) ── */
 
