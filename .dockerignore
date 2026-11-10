@@ -1,0 +1,19 @@
+**/node_modules
+**/.next
+**/dist
+**/.turbo
+**/coverage
+**/playwright-report
+**/test-results
+**/*.tsbuildinfo
+.git
+.github
+.vscode
+.claude
+docs
+infra
+package-lock.json
+# Segredos locais nunca entram na imagem
+**/.env
+**/.env.*
+!**/.env.example
