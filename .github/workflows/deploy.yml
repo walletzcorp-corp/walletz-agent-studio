@@ -1,0 +1,87 @@
+# Push em master → imagens da API e do web no GHCR → deploy em produção.
+# Infra: repositório walletz-infra (prod/agent-studio). No servidor o deploy
+# roda /srv/prod/agent-studio/deploy.sh <tag>.
+#
+# Provisório: ainda não há job de lint/typecheck bloqueando o build (o web tem
+# erros de tipo pré-existentes). O job de deploy só roda quando a variável
+# AGENT_STUDIO_DEPLOY_ENABLED=true e o secret PROD_SSH_KEY estiverem configurados.
+name: Deploy
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.repository }}
+  cancel-in-progress: false
+
+env:
+  IMAGE_API: ghcr.io/${{ github.repository_owner }}/walletz-agent-studio-api
+  IMAGE_WEB: ghcr.io/${{ github.repository_owner }}/walletz-agent-studio-web
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: meta
+        run: echo "tag=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: API
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          target: runner
+          push: true
+          tags: ${{ env.IMAGE_API }}:${{ steps.meta.outputs.tag }}
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+      - name: Web
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          target: runner
+          push: true
+          tags: ${{ env.IMAGE_WEB }}:${{ steps.meta.outputs.tag }}
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=max,scope=web
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ vars.AGENT_STUDIO_PUBLIC_API_URL || 'https://agent-studio.walletzcorp.com/api' }}
+            NEXT_PUBLIC_META_APP_ID=${{ vars.NEXT_PUBLIC_META_APP_ID }}
+            NEXT_PUBLIC_META_CONFIG_ID=${{ vars.NEXT_PUBLIC_META_CONFIG_ID }}
+      - name: Resumo
+        run: |
+          echo "### Imagens publicadas: \`${{ steps.meta.outputs.tag }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Deploy manual: \`sudo -u deploy bash /srv/prod/agent-studio/deploy.sh ${{ steps.meta.outputs.tag }}\`" >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    needs: build
+    if: vars.AGENT_STUDIO_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configura SSH
+        env:
+          SSH_KEY: ${{ secrets.AGENT_STUDIO_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.PROD_SSH_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+      - name: Deploy
+        run: ssh -p "${{ vars.PROD_PORT }}" "deploy@${{ vars.PROD_HOST }}" "${{ needs.build.outputs.tag }}"
+      - name: Resumo
+        run: echo "### ✅ agent-studio → \`${{ needs.build.outputs.tag }}\` em produção" >> "$GITHUB_STEP_SUMMARY"
