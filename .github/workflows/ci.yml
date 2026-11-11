@@ -67,7 +67,6 @@ jobs:
           --health-retries 10
     env:
       DATABASE_URL: postgresql://walletz:walletz_ci@localhost:5432/walletz_ci
-      NODE_ENV: production # logger em JSON, como no servidor
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -80,10 +79,10 @@ jobs:
       - run: pnpm --filter @walletz/api build
       - name: Aplica migrations
         working-directory: apps/api
-        run: MIGRATIONS_DIR=src/database/migrations node dist/database/migrate.js
+        run: NODE_ENV=production MIGRATIONS_DIR=src/database/migrations node dist/database/migrate.js
       - name: Reaplica (deve ser idempotente)
         working-directory: apps/api
-        run: MIGRATIONS_DIR=src/database/migrations node dist/database/migrate.js
+        run: NODE_ENV=production MIGRATIONS_DIR=src/database/migrations node dist/database/migrate.js
 
   build:
     name: Build
