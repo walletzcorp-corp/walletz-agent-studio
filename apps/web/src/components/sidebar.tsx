@@ -73,7 +73,7 @@ const FOOTER_ITEMS: NavItem[] = [
 ];
 
 interface SidebarProps {
-  tenantName?: string;
+  tenantName?: string | undefined;
 }
 
 export function Sidebar({ tenantName }: SidebarProps) {

@@ -1,17 +1,19 @@
 'use client';
 
 import * as React from 'react';
-import type { FieldError } from 'react-hook-form';
 import { cn } from '../utils';
 import { Label } from './label';
 
+/** Compatível com FieldError do react-hook-form, sem depender do pacote. */
+type FieldError = { message?: string | undefined };
+
 interface FormFieldProps {
-  label?: string;
-  required?: boolean;
-  error?: FieldError | string;
-  hint?: string;
+  label?: string | undefined;
+  required?: boolean | undefined;
+  error?: FieldError | string | undefined;
+  hint?: string | undefined;
   children: React.ReactNode;
-  className?: string;
+  className?: string | undefined;
 }
 
 function FormField({ label, required, error, hint, children, className }: FormFieldProps) {
@@ -38,7 +40,7 @@ function FormSection({ title, description, children, className }: {
   title?: string;
   description?: string;
   children: React.ReactNode;
-  className?: string;
+  className?: string | undefined;
 }) {
   return (
     <section className={cn('space-y-4', className)}>

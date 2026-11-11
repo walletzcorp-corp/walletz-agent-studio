@@ -24,11 +24,11 @@ interface Integration {
   provider: string;
   icon: React.ReactNode;
   iconBg: string;
-  href?: string;
-  connectHref?: string;
-  lastSync?: string;
-  meta?: Record<string, string>;
-  featured?: boolean;
+  href?: string | undefined;
+  connectHref?: string | undefined;
+  lastSync?: string | undefined;
+  meta?: Record<string, string> | undefined;
+  featured?: boolean | undefined;
 }
 
 /* ── Category config ── */

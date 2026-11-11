@@ -17,8 +17,8 @@ type TemplateLanguage = 'pt_BR' | 'en_US' | 'es' | 'fr';
 interface TemplateButton {
   type: 'QUICK_REPLY' | 'CALL_TO_ACTION';
   text: string;
-  url?: string;
-  phone?: string;
+  url?: string | undefined;
+  phone?: string | undefined;
 }
 
 interface WhatsAppTemplate {
@@ -27,12 +27,12 @@ interface WhatsAppTemplate {
   category: TemplateCategory;
   language: TemplateLanguage;
   status: TemplateStatus;
-  header?: { type: 'TEXT' | 'IMAGE' | 'DOCUMENT'; text?: string };
+  header?: { type: 'TEXT' | 'IMAGE' | 'DOCUMENT'; text?: string | undefined } | undefined;
   body: string;
-  footer?: string;
-  buttons?: TemplateButton[];
-  variables?: string[];
-  rejectionReason?: string;
+  footer?: string | undefined;
+  buttons?: TemplateButton[] | undefined;
+  variables?: string[] | undefined;
+  rejectionReason?: string | undefined;
   createdAt: string;
   updatedAt: string;
   usageCount?: number;
@@ -407,7 +407,7 @@ function NewTemplateDrawer({ onClose }: { onClose: () => void }) {
                     value={btn.type}
                     onChange={e => {
                       const btns = [...(form.buttons ?? [])];
-                      btns[i] = { ...btns[i], type: e.target.value as TemplateButton['type'] };
+                      btns[i] = { ...btn, type: e.target.value as TemplateButton['type'] };
                       update({ buttons: btns });
                     }}
                     className="rounded-lg border border-border bg-surface-1 px-2 py-1.5 text-xs text-foreground focus:outline-none shrink-0"
@@ -419,7 +419,7 @@ function NewTemplateDrawer({ onClose }: { onClose: () => void }) {
                     value={btn.text}
                     onChange={e => {
                       const btns = [...(form.buttons ?? [])];
-                      btns[i] = { ...btns[i], text: e.target.value };
+                      btns[i] = { ...btn, text: e.target.value };
                       update({ buttons: btns });
                     }}
                     placeholder="Texto do botão"

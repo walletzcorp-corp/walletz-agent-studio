@@ -54,7 +54,7 @@ const SIZES = ['1-10','11-50','51-200','201-500','501-1000','Mais de 1000'];
 const GOALS = ['Atendimento ao cliente','Qualificação de leads','Agendamento de reuniões','Vendas consultivas','Suporte técnico','Outro'];
 
 /* ── Field component ── */
-function Field({ label, required, error, children }: { label: string; required?: boolean; error?: string; children: React.ReactNode }) {
+function Field({ label, required, error, children }: { label: string; required?: boolean | undefined; error?: string | undefined; children: React.ReactNode }) {
   return (
     <div className="space-y-1.5">
       <label className="text-xs font-medium text-muted-foreground">

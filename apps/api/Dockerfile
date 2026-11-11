@@ -3,7 +3,7 @@
 #   docker build -f apps/api/Dockerfile .
 # Migrations: node dist/database/migrate.js (mesma imagem).
 
-FROM node:20-bookworm-slim AS base
+FROM node:24-bookworm-slim AS base
 ENV PNPM_HOME=/pnpm PATH=/pnpm:$PATH
 RUN corepack enable && corepack prepare pnpm@9.12.1 --activate
 WORKDIR /repo
@@ -18,7 +18,7 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm --filter @walletz/api dep
  && cp -r apps/api/dist /out/dist \
  && cp -r apps/api/src/database/migrations /out/dist/database/migrations
 
-FROM node:20-bookworm-slim AS runner
+FROM node:24-bookworm-slim AS runner
 ENV NODE_ENV=production PORT=3001
 WORKDIR /app
 COPY --from=builder --chown=node:node /out ./

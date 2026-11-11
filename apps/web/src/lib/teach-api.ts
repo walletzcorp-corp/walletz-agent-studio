@@ -35,18 +35,18 @@ export const teachApi = {
   create: (tenantId: string, data: {
     type: KnowledgeItemType;
     content: string;
-    context?: string;
-    agentId?: string;
-    confidence?: number;
-    tags?: string[];
-    validUntil?: string;
+    context?: string | undefined;
+    agentId?: string | undefined;
+    confidence?: number | undefined;
+    tags?: string[] | undefined;
+    validUntil?: string | undefined;
   }) => api.post<KnowledgeItem>(`/tenants/${tenantId}/teach`, data),
 
   update: (tenantId: string, itemId: string, data: {
-    content?: string;
-    context?: string;
-    confidence?: number;
-    tags?: string[];
+    content?: string | undefined;
+    context?: string | undefined;
+    confidence?: number | undefined;
+    tags?: string[] | undefined;
   }) => api.patch<KnowledgeItem>(`/tenants/${tenantId}/teach/${itemId}`, data),
 
   approve: (tenantId: string, itemId: string) =>

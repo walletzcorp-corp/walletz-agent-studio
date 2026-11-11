@@ -2,7 +2,7 @@ import * as React from 'react';
 import { cn } from '../utils';
 
 export interface LabelProps extends React.LabelHTMLAttributes<HTMLLabelElement> {
-  required?: boolean;
+  required?: boolean | undefined;
 }
 
 const Label = React.forwardRef<HTMLLabelElement, LabelProps>(

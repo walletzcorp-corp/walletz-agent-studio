@@ -66,10 +66,10 @@ export interface LoginResponse {
 }
 
 export const authApi = {
-  register: (data: { email: string; password: string; firstName?: string; lastName?: string }) =>
+  register: (data: { email: string; password: string; firstName?: string | undefined; lastName?: string | undefined }) =>
     api.post<{ userId: string; email: string }>('/auth/register', data),
 
-  login: (data: { email: string; password: string; mfaCode?: string }) =>
+  login: (data: { email: string; password: string; mfaCode?: string | undefined }) =>
     api.post<LoginResponse>('/auth/login', data),
 
   logout: () => api.post('/auth/logout'),
