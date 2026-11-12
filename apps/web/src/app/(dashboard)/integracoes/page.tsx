@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '../../../hooks/use-auth';
+import { apiUrl, withBasePath } from '../../../lib/paths';
 
 /* ── Types ── */
 type IntegrationStatus = 'connected' | 'disconnected' | 'error' | 'warning' | 'pending' | 'reauth' | 'coming_soon';
@@ -79,7 +80,7 @@ function useCalendarConnections(tenantId: string | null) {
     const token = typeof window !== 'undefined' ? (localStorage.getItem('accessToken') ?? '') : '';
     if (!token) { setLoading(false); return; }
     try {
-      const r = await fetch(`/api/v1/tenants/${tenantId}/calendars/connections`, {
+      const r = await fetch(apiUrl(`/v1/tenants/${tenantId}/calendars/connections`), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (r.ok) {
@@ -163,7 +164,7 @@ function buildIntegrations(
       ),
       iconBg: 'bg-[#4285F4]/10',
       href: '/agendas',
-      connectHref: `/api/v1/tenants/TENANT/calendars/google/authorize`,
+      connectHref: `/v1/tenants/TENANT/calendars/google/authorize`,
       lastSync: googleConn?.lastSyncAt ?? undefined,
       meta: googleConn ? { email: googleConn.email } : undefined,
     },
@@ -184,7 +185,7 @@ function buildIntegrations(
       ),
       iconBg: 'bg-[#5059C9]/10',
       href: '/agendas',
-      connectHref: `/api/v1/tenants/TENANT/calendars/microsoft/authorize`,
+      connectHref: `/v1/tenants/TENANT/calendars/microsoft/authorize`,
       lastSync: msConn?.lastSyncAt ?? undefined,
       meta: msConn ? { email: msConn.email } : undefined,
     },
@@ -319,7 +320,7 @@ function usePcDevices(tenantId: string | null) {
     const token = typeof window !== 'undefined' ? (localStorage.getItem('accessToken') ?? '') : '';
     if (!token) return;
     try {
-      const r = await fetch(`/api/v1/tenants/${tenantId}/pc-connector/devices`, {
+      const r = await fetch(apiUrl(`/v1/tenants/${tenantId}/pc-connector/devices`), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (r.ok) {
@@ -363,11 +364,11 @@ export default function IntegracoesPage() {
   function handleConnect(integration: Integration) {
     if (!tenantId) return;
     if (integration.connectHref) {
-      window.location.href = integration.connectHref.replace('TENANT', tenantId);
+      window.location.href = apiUrl(integration.connectHref.replace('TENANT', tenantId));
       return;
     }
     if (integration.href) {
-      window.location.href = integration.href;
+      window.location.href = withBasePath(integration.href);
     }
   }
 

@@ -97,7 +97,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
         env:
-          NEXT_PUBLIC_API_URL: https://agent-studio.walletzcorp.com/api
+          NEXT_PUBLIC_API_URL: https://walletzcorp.com/agent-studio/api
+          NEXT_PUBLIC_BASE_PATH: /agent-studio
 
   # ── Informativos (não bloqueiam ainda; ver docs/release/STATUS.md) ──
   # Lint: projeto ainda sem eslint.config.js (ESLint 9). Format: ~250 arquivos

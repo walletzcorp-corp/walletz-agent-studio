@@ -1,6 +1,8 @@
 # syntax=docker/dockerfile:1.7
 # Frontend Next.js (output standalone). Build a partir da raiz do monorepo:
-#   docker build -f apps/web/Dockerfile --build-arg NEXT_PUBLIC_API_URL=https://.../api .
+#   docker build -f apps/web/Dockerfile \
+#     --build-arg NEXT_PUBLIC_API_URL=https://walletzcorp.com/agent-studio/api \
+#     --build-arg NEXT_PUBLIC_BASE_PATH=/agent-studio .
 # Variáveis NEXT_PUBLIC_* são embutidas no bundle em tempo de build.
 
 FROM node:24-bookworm-slim AS base
@@ -10,9 +12,11 @@ WORKDIR /repo
 
 FROM base AS builder
 ARG NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_BASE_PATH=""
 ARG NEXT_PUBLIC_META_APP_ID=""
 ARG NEXT_PUBLIC_META_CONFIG_ID=""
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
+    NEXT_PUBLIC_BASE_PATH=$NEXT_PUBLIC_BASE_PATH \
     NEXT_PUBLIC_META_APP_ID=$NEXT_PUBLIC_META_APP_ID \
     NEXT_PUBLIC_META_CONFIG_ID=$NEXT_PUBLIC_META_CONFIG_ID
 COPY . .

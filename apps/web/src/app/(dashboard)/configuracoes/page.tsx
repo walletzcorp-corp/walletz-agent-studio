@@ -9,6 +9,7 @@ import {
   Mail, Clock, Key, UserCheck, Activity,
 } from 'lucide-react';
 import { useAuth } from '../../../hooks/use-auth';
+import { withBasePath } from '../../../lib/paths';
 
 /* ── Tab definitions ── */
 const TABS = [
@@ -348,7 +349,7 @@ function TabCanais() {
               <p className="text-xs text-muted-foreground">Não configurado</p>
             </div>
           </div>
-          <a href="/canais/whatsapp" className="btn-ghost rounded-lg px-3 py-1.5 text-xs flex items-center gap-1.5">
+          <a href={withBasePath('/canais/whatsapp')} className="btn-ghost rounded-lg px-3 py-1.5 text-xs flex items-center gap-1.5">
             Configurar
             <ChevronRight className="h-3 w-3" />
           </a>
@@ -367,7 +368,7 @@ function TabCanais() {
               <p className="text-xs text-muted-foreground">Não conectado</p>
             </div>
           </div>
-          <a href="/agendas" className="btn-ghost rounded-lg px-3 py-1.5 text-xs flex items-center gap-1.5">
+          <a href={withBasePath('/agendas')} className="btn-ghost rounded-lg px-3 py-1.5 text-xs flex items-center gap-1.5">
             Conectar
             <ChevronRight className="h-3 w-3" />
           </a>
@@ -388,7 +389,7 @@ function TabCanais() {
               <p className="text-xs text-muted-foreground">Não conectado</p>
             </div>
           </div>
-          <a href="/agendas" className="btn-ghost rounded-lg px-3 py-1.5 text-xs flex items-center gap-1.5">
+          <a href={withBasePath('/agendas')} className="btn-ghost rounded-lg px-3 py-1.5 text-xs flex items-center gap-1.5">
             Conectar
             <ChevronRight className="h-3 w-3" />
           </a>

@@ -1,4 +1,5 @@
 import axios, { type AxiosInstance, type AxiosError } from 'axios';
+import { withBasePath } from './paths';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
@@ -45,7 +46,7 @@ function createApiClient(): AxiosInstance {
             localStorage.removeItem('accessToken');
             localStorage.removeItem('refreshToken');
             localStorage.removeItem('sessionId');
-            window.location.href = '/auth/login';
+            window.location.href = withBasePath('/auth/login');
           }
         }
       }

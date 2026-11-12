@@ -7,6 +7,9 @@ const nextConfig: NextConfig = {
   // Imagem Docker enxuta (server.js + só as deps rastreadas); a raiz do
   // monorepo é necessária para incluir packages/* no trace.
   output: 'standalone',
+  // Produção: servido em https://walletzcorp.com/agent-studio (vazio em dev).
+  // Lido no build; links fora de <Link>/router usam src/lib/paths.ts.
+  ...(process.env.NEXT_PUBLIC_BASE_PATH ? { basePath: process.env.NEXT_PUBLIC_BASE_PATH } : {}),
   outputFileTracingRoot: path.join(__dirname, '../..'),
   async headers() {
     return [

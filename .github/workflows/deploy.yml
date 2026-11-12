@@ -63,7 +63,8 @@ jobs:
           cache-from: type=gha,scope=web
           cache-to: type=gha,mode=max,scope=web
           build-args: |
-            NEXT_PUBLIC_API_URL=${{ vars.AGENT_STUDIO_PUBLIC_API_URL || 'https://agent-studio.walletzcorp.com/api' }}
+            NEXT_PUBLIC_API_URL=${{ vars.AGENT_STUDIO_PUBLIC_API_URL || 'https://walletzcorp.com/agent-studio/api' }}
+            NEXT_PUBLIC_BASE_PATH=${{ vars.AGENT_STUDIO_BASE_PATH || '/agent-studio' }}
             NEXT_PUBLIC_META_APP_ID=${{ vars.NEXT_PUBLIC_META_APP_ID }}
             NEXT_PUBLIC_META_CONFIG_ID=${{ vars.NEXT_PUBLIC_META_CONFIG_ID }}
       - name: Resumo
