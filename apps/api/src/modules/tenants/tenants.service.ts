@@ -13,10 +13,14 @@ import type { UpdateTenantSettingsDto } from './dto/update-settings.dto';
 import type { CreateTenantDto } from './dto/create-tenant.dto';
 import type { InviteMemberDto } from './dto/invite-member.dto';
 import { createId } from '../../database/utils/id';
+import { AuditService } from '../../shared/audit/audit.service';
 
 @Injectable()
 export class TenantsService {
-  constructor(@Inject(DRIZZLE_TOKEN) private readonly db: DrizzleDB) {}
+  constructor(
+    @Inject(DRIZZLE_TOKEN) private readonly db: DrizzleDB,
+    private readonly auditService: AuditService,
+  ) {}
 
   async findById(id: string): Promise<Tenant | null> {
     const [tenant] = await this.db
@@ -61,6 +65,15 @@ export class TenantsService {
       userId: ownerUserId,
       role: 'owner',
       status: 'active',
+    });
+
+    await this.auditService.log({
+      tenantId: tenant!.id,
+      userId: ownerUserId,
+      action: 'tenant.created',
+      resourceType: 'tenant',
+      resourceId: tenant!.id,
+      newState: { name: tenant!.name, slug: tenant!.slug, status: tenant!.status },
     });
 
     return tenant!;

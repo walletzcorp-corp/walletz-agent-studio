@@ -8,6 +8,7 @@ import { knowledgeChunks, knowledgeSources, knowledgeItems } from '../../databas
 import { createId } from '../../database/utils/id';
 import { SchedulingToolsService, type ToolContext } from '../calendars/scheduling-tools.service';
 import { PcConnectorService } from '../pc-connector/pc-connector.service';
+import { LlmUsageService } from '../../shared/llm-usage/llm-usage.service';
 import type { LabChatDto, ChatMessageDto } from './dto/chat.dto';
 
 export interface LabChatResult {
@@ -128,10 +129,20 @@ export class LabService {
     private readonly config: ConfigService,
     private readonly schedulingTools: SchedulingToolsService,
     private readonly pcConnector: PcConnectorService,
+    private readonly llmUsage: LlmUsageService,
   ) {
     const apiKey = this.config.get<string>('ANTHROPIC_API_KEY') ?? '';
     this.client = new Anthropic({ apiKey });
     this.defaultModel = this.config.get<string>('ANTHROPIC_DEFAULT_MODEL') ?? 'claude-sonnet-4-6';
+  }
+
+  /** Chama o Messages API e guarda os limites de taxa da conta (headers). */
+  private async createMessage(
+    params: Anthropic.MessageCreateParamsNonStreaming,
+  ): Promise<Anthropic.Message> {
+    const { data, response } = await this.client.messages.create(params).withResponse();
+    await this.llmUsage.recordRateLimits(response.headers);
+    return data;
   }
 
   async chat(
@@ -149,6 +160,9 @@ export class LabService {
       .limit(1);
 
     if (!agent) throw new NotFoundException('Agent not found');
+
+    /* Limite mensal de tokens definido pelo admin da plataforma (429 se atingido) */
+    await this.llmUsage.assertWithinMonthlyLimit(tenantId);
 
     /* Retrieve relevant knowledge chunks */
     const retrievedChunks = await this.retrieveRelevantChunks(dto.message, tenantId, dto.agentId);
@@ -212,7 +226,7 @@ export class LabService {
 
     try {
       /* Agentic loop — keeps running while model requests tool calls */
-      let response = await this.client.messages.create({
+      let response = await this.createMessage({
         model: this.defaultModel,
         max_tokens: 2048,
         system: systemPrompt,
@@ -264,7 +278,7 @@ export class LabService {
         messages.push({ role: 'assistant', content: response.content });
         messages.push({ role: 'user', content: toolResults });
 
-        response = await this.client.messages.create({
+        response = await this.createMessage({
           model: this.defaultModel,
           max_tokens: 2048,
           system: systemPrompt,
@@ -278,6 +292,16 @@ export class LabService {
 
       const textBlock = response.content.find((b) => b.type === 'text');
       const reply = textBlock?.type === 'text' ? textBlock.text : '';
+
+      await this.llmUsage.recordUsage({
+        tenantId,
+        agentId: dto.agentId,
+        model: this.defaultModel,
+        inputTokens: totalInputTokens,
+        outputTokens: totalOutputTokens,
+        source: options?.conversationId ? 'conversation' : 'lab',
+        traceId,
+      });
 
       return {
         traceId,

@@ -46,6 +46,9 @@ export const users = pgTable(
     passwordResetToken: text('password_reset_token'),
     passwordResetExpiresAt: timestamp('password_reset_expires_at', { withTimezone: true }),
     lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
+    /** Administrador da plataforma Walletz (vê e age sobre todos os tenants).
+     *  Só é concedido direto no banco/script — nunca por API ou input de usuário. */
+    isPlatformAdmin: boolean('is_platform_admin').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),

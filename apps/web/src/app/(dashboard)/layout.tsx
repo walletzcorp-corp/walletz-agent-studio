@@ -9,7 +9,7 @@ import { useAuth } from '../../hooks/use-auth';
 import { Skeleton } from '@walletz/ui';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading, email, tenantName, logout } = useAuth();
+  const { isAuthenticated, isLoading, email, tenantName, isPlatformAdmin, logout } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -53,7 +53,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div className="flex flex-col shrink-0">
         <Sidebar tenantName={tenantName ?? undefined} />
         <div className="border-r border-t border-border px-2 py-2" style={{ background: 'hsl(var(--surface-1))' }}>
-          <UserMenu email={email} />
+          <UserMenu email={email} isPlatformAdmin={isPlatformAdmin} />
         </div>
       </div>
 

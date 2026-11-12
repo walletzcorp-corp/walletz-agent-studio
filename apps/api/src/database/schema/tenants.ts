@@ -3,6 +3,7 @@ import {
   text,
   timestamp,
   boolean,
+  integer,
   jsonb,
   pgEnum,
   uniqueIndex,
@@ -31,6 +32,10 @@ export const tenants = pgTable(
     trialEndsAt: timestamp('trial_ends_at', { withTimezone: true }),
     settings: jsonb('settings').notNull().default({}),
     featureFlags: jsonb('feature_flags').notNull().default({}),
+    /** Limite mensal de tokens de LLM (entrada + saída). null = sem limite.
+     *  Coluna própria (não `settings`) para o tenant não conseguir alterá-la
+     *  via PATCH /settings; só o admin da plataforma define. */
+    llmMonthlyTokenLimit: integer('llm_monthly_token_limit'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),

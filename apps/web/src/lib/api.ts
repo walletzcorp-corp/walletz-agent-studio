@@ -80,7 +80,15 @@ export const authApi = {
   resetPassword: (token: string, password: string) =>
     api.post('/auth/reset-password', { token, password }),
 
-  me: () => api.get<{ userId: string; email: string; sessionId: string }>('/auth/me'),
+  me: () =>
+    api.get<{
+      userId: string;
+      email: string;
+      sessionId: string;
+      firstName?: string | null;
+      lastName?: string | null;
+      isPlatformAdmin?: boolean;
+    }>('/auth/me'),
 };
 
 export const tenantsApi = {

@@ -100,3 +100,20 @@ Ver detalhes em [EXTERNAL_BLOCKERS.md](EXTERNAL_BLOCKERS.md).
 | Format | 🔴 | ~250 arquivos fora do Prettier; job informativo |
 | Testes unitários | 🔴 | API e web sem testes unitários |
 | Suíte de isolamento de tenant | 🔴 | não compila no jest (`@nestjs/bullmq` é ESM); fora do CI |
+
+---
+
+## Administração da plataforma (2026-11-12)
+
+| Item | Status | Evidência |
+|------|--------|-----------|
+| Admin da plataforma (`users.is_platform_admin`) | ✅ | migration 0004; script `dist/database/scripts/create-platform-admin.js` |
+| API `/v1/admin/*` (overview, tenants, agents, users, activity, llm) | ✅ | `PlatformAdminGuard` consulta o banco a cada requisição |
+| Ações: suspender, reativar, estender trial, limite mensal de tokens | ✅ | auditadas (`admin.tenant.*`) com estado anterior/novo |
+| Suspensão bloqueia o tenant | ✅ | `RbacGuard` → 403 `TENANT_SUSPENDED` |
+| Consumo de LLM por tenant | ✅ | `usage_events` (`llm.input_tokens` / `llm.output_tokens`) gravado pelo laboratório |
+| Limites de taxa da conta Anthropic | ✅ | headers `anthropic-ratelimit-*` da última resposta (Redis) |
+| Limite mensal de tokens por tenant | ✅ | `tenants.llm_monthly_token_limit`; laboratório responde 429 ao atingir |
+| Painel web `/admin` (dados reais, sem mock) | ✅ | dashboard, clientes, detalhe+ações, agentes, usuários, atividade, IA |
+| **Correção de segurança**: isolamento de tenant no `RbacGuard` | ✅ | rotas com `:tenantId` sem `@Roles` (lab, contatos, conversas, campanhas) não checavam vínculo; header `x-tenant-slug` podia divergir da URL |
+| Testes | ✅ | unit (guards, parser de rate limit) + E2E local 24/24 |
