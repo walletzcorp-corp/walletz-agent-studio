@@ -1,7 +1,7 @@
 import {
   Controller, Get, Post, Patch, Delete,
-  Param, Body, Query, Req, Res, UseGuards,
-  HttpCode, HttpStatus,
+  Param, Body, Query, Res, UseGuards,
+  HttpCode, HttpStatus, BadRequestException, Logger,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiHeader, ApiQuery } from '@nestjs/swagger';
 import type { Response } from 'express';
@@ -52,51 +52,70 @@ export class CalendarsController {
 
   /* ── OAuth flow ── */
 
+  /**
+   * Devolve a URL de consentimento do provedor; o front chama com o token e
+   * depois leva o navegador até ela (navegação direta não envia o Bearer).
+   */
   @Get(':provider/authorize')
   @Roles('admin')
-  @ApiOperation({ summary: 'Iniciar OAuth com Google ou Microsoft' })
-  authorize(
+  @ApiOperation({ summary: 'Gerar URL de autorização OAuth (Google ou Microsoft)' })
+  async authorize(
     @Param('tenantId') tenantId: string,
-    @Param('provider') provider: 'google' | 'microsoft',
-    @Res() res: Response,
-  ) {
-    const url = this.svc.buildAuthUrl(tenantId, provider);
-    res.redirect(url);
+    @Param('provider') provider: string,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<{ url: string }> {
+    return { url: await this.svc.createAuthUrl(tenantId, parseProvider(provider), user.sub) };
   }
+}
+
+function parseProvider(value: string): 'google' | 'microsoft' {
+  if (value !== 'google' && value !== 'microsoft') {
+    throw new BadRequestException('Provedor de agenda inválido.');
+  }
+  return value;
+}
+
+/** Página de Agendas do app (APP_URL já inclui o basePath em produção). */
+function agendasUrl(query: string): string {
+  const appUrl = (process.env['APP_URL'] ?? 'http://localhost:3000').replace(/\/$/, '');
+  return `${appUrl}/agendas?${query}`;
 }
 
 /* ── OAuth callback controller (no tenantId in path — uses state param) ── */
 @ApiTags('calendars')
 @Controller('tenants/callback')
 export class CalendarsCallbackController {
+  private readonly logger = new Logger(CalendarsCallbackController.name);
+
   constructor(private readonly svc: CalendarsService) {}
 
   @Get(':provider')
   @HttpCode(HttpStatus.FOUND)
   @ApiOperation({ summary: 'Callback OAuth (Google/Microsoft)' })
   async callback(
-    @Param('provider') provider: 'google' | 'microsoft',
-    @Query('code') code: string,
-    @Query('state') state: string,
+    @Param('provider') provider: string,
+    @Query('code') code: string | undefined,
+    @Query('state') state: string | undefined,
     @Query('error') error: string | undefined,
-    @Req() req: { user?: JwtPayload },
     @Res() res: Response,
   ) {
+    if (provider !== 'google' && provider !== 'microsoft') {
+      return res.redirect(agendasUrl(`error=${encodeURIComponent('Provedor de agenda inválido.')}`));
+    }
     if (error) {
-      return res.redirect(`/agendas?error=${encodeURIComponent(error)}`);
+      // Ex.: usuário clicou em "Cancelar" na tela do Google (access_denied).
+      const msg = error === 'access_denied' ? 'A conexão foi cancelada.' : 'O provedor recusou a conexão.';
+      return res.redirect(agendasUrl(`error=${encodeURIComponent(msg)}`));
     }
     try {
-      await this.svc.handleCallback(
-        code,
-        state,
-        req.user?.sub ?? null,
-      );
-      const appUrl = process.env['APP_URL'] ?? 'http://localhost:3000';
-      return res.redirect(`${appUrl}/agendas?connected=${provider}`);
+      await this.svc.handleCallback(provider, code ?? '', state ?? '');
+      return res.redirect(agendasUrl(`connected=${provider}`));
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'unknown';
-      const appUrl = process.env['APP_URL'] ?? 'http://localhost:3000';
-      return res.redirect(`${appUrl}/agendas?error=${encodeURIComponent(msg)}`);
+      this.logger.warn(`Falha no retorno OAuth (${provider}): ${err instanceof Error ? err.message : String(err)}`);
+      const msg = err instanceof BadRequestException
+        ? err.message
+        : 'Não foi possível conectar a agenda. Tente de novo.';
+      return res.redirect(agendasUrl(`error=${encodeURIComponent(msg)}`));
     }
   }
 }

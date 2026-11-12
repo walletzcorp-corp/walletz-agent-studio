@@ -8,6 +8,8 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
+import type Redis from 'ioredis';
+import { REDIS_TOKEN } from '../../shared/redis/redis.module';
 import { eq, and, isNull, gte, lte } from 'drizzle-orm';
 import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';
 import {
@@ -27,6 +29,11 @@ import type { UpdateAgentCalendarSettingsDto } from './dto/update-agent-settings
 
 type Provider = 'google' | 'microsoft';
 
+interface OAuthState { tenantId: string; provider: Provider; userId: string }
+
+const OAUTH_STATE_TTL_SECONDS = 600;
+const oauthStateKey = (nonce: string): string => `oauth:calendar:state:${nonce}`;
+
 @Injectable()
 export class CalendarsService {
   private readonly logger = new Logger(CalendarsService.name);
@@ -40,6 +47,7 @@ export class CalendarsService {
     private readonly microsoftService: MicrosoftCalendarService,
     private readonly msGraphAuth: MicrosoftGraphAuthService,
     private readonly availabilityService: AvailabilityService,
+    @Inject(REDIS_TOKEN) private readonly redis: Redis,
   ) {
     const raw = this.config.get<string>('CALENDAR_ENCRYPTION_KEY', '');
     this.encKey = raw
@@ -111,26 +119,35 @@ export class CalendarsService {
 
   /* ── OAuth ── */
 
-  buildAuthUrl(tenantId: string, provider: Provider): string {
-    /* state encodes tenantId + provider for the callback */
-    const state = Buffer.from(JSON.stringify({ tenantId, provider, ts: Date.now() })).toString('base64url');
-    return provider === 'google'
-      ? this.googleService.buildAuthUrl(state)
-      : this.microsoftService.buildAuthUrl(state);
+  /**
+   * URL de autorização do provedor. O `state` é um código aleatório de uso único
+   * guardado no Redis (10 min) com tenant/usuário: o retorno do provedor não
+   * tem login, então o tenant nunca pode vir de algo que o navegador controla.
+   */
+  async createAuthUrl(tenantId: string, provider: Provider, userId: string): Promise<string> {
+    const nonce = crypto.randomBytes(32).toString('base64url');
+    const url = provider === 'google'
+      ? this.googleService.buildAuthUrl(nonce)
+      : this.microsoftService.buildAuthUrl(nonce);
+    const state: OAuthState = { tenantId, provider, userId };
+    await this.redis.set(oauthStateKey(nonce), JSON.stringify(state), 'EX', OAUTH_STATE_TTL_SECONDS);
+    return url;
   }
 
   async handleCallback(
+    provider: Provider,
     code: string,
-    state: string,
-    userId: string | null,
+    nonce: string,
   ): Promise<{ tenantId: string; provider: Provider }> {
-    const decoded = JSON.parse(Buffer.from(state, 'base64url').toString('utf8')) as {
-      tenantId: string;
-      provider: Provider;
-      ts: number;
-    };
-
-    const { tenantId, provider } = decoded;
+    const raw = nonce && code ? await this.redis.getdel(oauthStateKey(nonce)) : null;
+    if (!raw) {
+      throw new BadRequestException('O link de conexão expirou ou é inválido. Tente conectar a agenda de novo.');
+    }
+    const state = JSON.parse(raw) as OAuthState;
+    const { tenantId, userId } = state;
+    if (state.provider !== provider) {
+      throw new BadRequestException('O link de conexão é inválido. Tente conectar a agenda de novo.');
+    }
 
     const tokens =
       provider === 'google'

@@ -42,14 +42,14 @@ export class GoogleCalendarService {
     this.clientSecret = this.config.get<string>('GOOGLE_OAUTH_CLIENT_SECRET');
     this.redirectUri = this.config.get<string>(
       'GOOGLE_OAUTH_REDIRECT_URI',
-      'http://localhost:3001/v1/tenants/callback/google',
+      'http://localhost:3001/api/v1/tenants/callback/google',
     );
   }
 
   private assertCredentials() {
     if (!this.clientId || !this.clientSecret) {
       throw new ServiceUnavailableException(
-        'Google Calendar integration is not configured. Set GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET.',
+        'A integração com o Google Agenda ainda não foi configurada na plataforma. Fale com o suporte Walletz.',
       );
     }
   }

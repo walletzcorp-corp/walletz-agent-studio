@@ -11,6 +11,9 @@ import {
 import Link from 'next/link';
 import { useAuth } from '../../../hooks/use-auth';
 import { apiUrl, withBasePath } from '../../../lib/paths';
+import {
+  startCalendarConnect, type CalendarProvider,
+} from '../../../lib/calendar-connect';
 
 /* ── Types ── */
 type IntegrationStatus = 'connected' | 'disconnected' | 'error' | 'warning' | 'pending' | 'reauth' | 'coming_soon';
@@ -26,7 +29,8 @@ interface Integration {
   icon: React.ReactNode;
   iconBg: string;
   href?: string | undefined;
-  connectHref?: string | undefined;
+  /** Agenda conectada via OAuth (a URL de consentimento vem da API). */
+  calendarProvider?: CalendarProvider | undefined;
   lastSync?: string | undefined;
   meta?: Record<string, string> | undefined;
   featured?: boolean | undefined;
@@ -164,7 +168,7 @@ function buildIntegrations(
       ),
       iconBg: 'bg-[#4285F4]/10',
       href: '/agendas',
-      connectHref: `/v1/tenants/TENANT/calendars/google/authorize`,
+      calendarProvider: 'google',
       lastSync: googleConn?.lastSyncAt ?? undefined,
       meta: googleConn ? { email: googleConn.email } : undefined,
     },
@@ -185,7 +189,7 @@ function buildIntegrations(
       ),
       iconBg: 'bg-[#5059C9]/10',
       href: '/agendas',
-      connectHref: `/v1/tenants/TENANT/calendars/microsoft/authorize`,
+      calendarProvider: 'microsoft',
       lastSync: msConn?.lastSyncAt ?? undefined,
       meta: msConn ? { email: msConn.email } : undefined,
     },
@@ -340,6 +344,7 @@ export default function IntegracoesPage() {
   const { connections, loading } = useCalendarConnections(tenantId);
   const { devices: pcDevicesList } = usePcDevices(tenantId);
   const [search, setSearch] = useState('');
+  const [connectError, setConnectError] = useState<string | null>(null);
   const [category, setCategory] = useState<IntegrationCategory>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'connected' | 'disconnected' | 'error'>('all');
 
@@ -361,10 +366,15 @@ export default function IntegracoesPage() {
   const featuredIntegration = integrations.find(i => i.featured);
   const otherIntegrations   = filtered.filter(i => !i.featured);
 
-  function handleConnect(integration: Integration) {
+  async function handleConnect(integration: Integration) {
     if (!tenantId) return;
-    if (integration.connectHref) {
-      window.location.href = apiUrl(integration.connectHref.replace('TENANT', tenantId));
+    if (integration.calendarProvider) {
+      setConnectError(null);
+      try {
+        await startCalendarConnect(tenantId, integration.calendarProvider);
+      } catch (err) {
+        setConnectError(err instanceof Error ? err.message : 'Não foi possível conectar.');
+      }
       return;
     }
     if (integration.href) {
@@ -382,6 +392,11 @@ export default function IntegracoesPage() {
           <p className="mt-1 text-sm text-muted-foreground">
             Conecte os serviços que seus agentes precisam para trabalhar.
           </p>
+          {connectError && (
+            <p role="alert" className="mt-3 rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {connectError}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {/* Health indicator */}

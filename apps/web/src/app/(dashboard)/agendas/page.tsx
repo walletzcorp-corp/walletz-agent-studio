@@ -9,6 +9,9 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../../hooks/use-auth';
 import { apiUrl } from '../../../lib/paths';
+import {
+  readCalendarCallbackResult, startCalendarConnect, type CalendarProvider,
+} from '../../../lib/calendar-connect';
 
 /* ── Types ── */
 interface CalendarConnection {
@@ -149,9 +152,29 @@ export default function AgendasPage() {
       .finally(() => setLoading(false));
   }, [tenantId]);
 
-  const handleConnect = (provider: 'google' | 'microsoft') => {
-    if (!tenantId) return;
-    window.location.href = apiUrl(`/v1/tenants/${tenantId}/calendars/${provider}/authorize`);
+  const [notice, setNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
+  const [connecting, setConnecting] = useState<CalendarProvider | null>(null);
+
+  // Resultado do retorno do Google/Microsoft (?connected= ou ?error=).
+  useEffect(() => {
+    const result = readCalendarCallbackResult();
+    if (result?.connected) {
+      setNotice({ kind: 'ok', text: `${result.connected === 'google' ? 'Google Agenda' : 'Microsoft 365'} conectado com sucesso.` });
+    } else if (result?.error) {
+      setNotice({ kind: 'error', text: result.error });
+    }
+  }, []);
+
+  const handleConnect = async (provider: CalendarProvider) => {
+    if (!tenantId || connecting) return;
+    setNotice(null);
+    setConnecting(provider);
+    try {
+      await startCalendarConnect(tenantId, provider);
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : 'Não foi possível conectar.' });
+      setConnecting(null);
+    }
   };
 
   const handleSync = async () => {
@@ -193,6 +216,16 @@ export default function AgendasPage() {
           <p className="mt-1 text-sm text-muted-foreground">
             Gerencie calendários conectados, disponibilidade e reuniões dos seus agentes
           </p>
+          {notice && (
+            <p
+              role={notice.kind === 'error' ? 'alert' : 'status'}
+              className={`mt-3 rounded-lg px-3 py-2 text-sm ${
+                notice.kind === 'error' ? 'bg-destructive/10 text-destructive' : 'bg-neural-success/10 text-neural-success'
+              }`}
+            >
+              {notice.text}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           <button

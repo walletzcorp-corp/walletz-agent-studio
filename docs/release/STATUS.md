@@ -120,4 +120,7 @@ Ver detalhes em [EXTERNAL_BLOCKERS.md](EXTERNAL_BLOCKERS.md).
 | Cadastro público fechado | ✅ | `POST /v1/auth/register` → 403 salvo `ALLOW_PUBLIC_SIGNUP=true`; telas de cadastro (`/auth/register`, `/register`, `/cadastro`) e "Criar conta" do login levam ao WhatsApp da equipe (`NEXT_PUBLIC_SALES_WHATSAPP`, padrão 5541992939892) |
 | Admin cria contas de clientes (`POST /v1/admin/users`) | ✅ | botão "Novo usuário" em `/admin/usuarios`; e-mail já verificado; auditado como `admin.user.created`; e-mail repetido → 409 |
 | Botão "Sair" no cabeçalho do painel | ✅ | |
+| Conectar agenda (Google/Microsoft): botão corrigido | ✅ | antes abria a rota da API direto no navegador (sem token → 401); agora `GET .../calendars/:provider/authorize` devolve `{ url }` e o front redireciona; erros em português na tela |
+| **Correção de segurança**: `state` do OAuth de agenda | ✅ | antes era o tenant em base64 (forjável: ligar uma agenda a outra organização); agora é código aleatório de uso único no Redis (10 min) com tenant/usuário/provedor |
+| Credenciais Google/Microsoft em produção | ⏳ | faltam `GOOGLE_OAUTH_CLIENT_ID/SECRET/REDIRECT_URI` no `api.env` |
 | Criação da organização no primeiro acesso (`/auth/organizacao`) | ✅ | antes não havia tela para criar o tenant: usuário novo ficava com todas as telas do painel carregando; o layout do painel agora redireciona quem não tem organização |
