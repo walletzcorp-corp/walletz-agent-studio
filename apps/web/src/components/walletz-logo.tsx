@@ -3,7 +3,7 @@
 import { cn } from '@walletz/ui';
 
 /* ── Neural W mark — SVG symbol ── */
-function NeuralWMark({ size = 40, className }: { size?: number; className?: string }) {
+function NeuralWMark({ size = 40, className }: { size?: number | undefined; className?: string | undefined }) {
   const id = `wg-${size}`; // unique enough for same-page dedup
   return (
     <svg
@@ -153,6 +153,6 @@ export function WalletzLogo({ variant = 'full', size = 'md', className, collapse
 }
 
 /** Alias for the symbol-only mark */
-export function WalletzMark({ size, className }: { size?: number; className?: string }) {
+export function WalletzMark({ size, className }: { size?: number | undefined; className?: string | undefined }) {
   return <NeuralWMark size={size ?? 36} className={className} />;
 }

@@ -1,6 +1,6 @@
 # Status da Release — Walletz Agent Studio
 
-**Última atualização**: 2026-10-06  
+**Última atualização**: 2026-11-11  
 **Sprint atual**: 7 — Microsoft Graph Integration + Token Auto-Refresh + Teams Meeting
 
 ---
@@ -23,7 +23,7 @@
 | **Sprint 0 — Fundação** | 🔄 Em progresso | — | — | — | — | — | Arquitetura | 2026-10-05 |
 | Monorepo setup | 🔄 | — | — | — | — | — | DevOps | 2026-10-05 |
 | Docker Compose dev | ⏳ | — | N/A | — | — | — | DevOps | — |
-| CI GitHub Actions | ⏳ | — | N/A | — | — | — | DevOps | — |
+| CI GitHub Actions | ✅ | typecheck, unit, migrations, build | N/A | — | lint/format ainda informativos | ci.yml + deploy.yml | DevOps | 2026-11-11 |
 | CLAUDE.md | ✅ | N/A | N/A | — | — | arquivo criado | Arquitetura | 2026-10-05 |
 | PRODUCT_SPEC.md | ✅ | N/A | N/A | — | — | arquivo criado | Product | 2026-10-05 |
 | ARCHITECTURE.md | ✅ | N/A | N/A | — | — | arquivo criado | Arquitetura | 2026-10-05 |
@@ -86,3 +86,41 @@ Ver detalhes em [EXTERNAL_BLOCKERS.md](EXTERNAL_BLOCKERS.md).
 | ANTHROPIC_API_KEY real | D/Lab | Chave real em apps/api/.env.local para habilitar testes de agente conversacional |
 | Stripe Account | M | Stripe account (test mode suficiente para dev) |
 | Domínio produção | Deploy | Domínio + certificado TLS |
+
+---
+
+## Deploy e CI (2026-11-11)
+
+| Item | Status | Observação |
+|------|--------|------------|
+| Produção (servidor 193.203.15.139) | ✅ no ar | stack `walletz-infra/prod/agent-studio`; aguardando DNS + TLS de agent-studio.walletzcorp.com |
+| CI bloqueante | ✅ | typecheck (4 pacotes), testes unitários, migrations em banco limpo (2x), build |
+| Typecheck web | ✅ 0 erros | checagem religada no `next build` |
+| Lint | 🔴 | ESLint 9 sem `eslint.config.js`; job informativo |
+| Format | 🔴 | ~250 arquivos fora do Prettier; job informativo |
+| Testes unitários | 🔴 | API e web sem testes unitários |
+| Suíte de isolamento de tenant | 🔴 | não compila no jest (`@nestjs/bullmq` é ESM); fora do CI |
+
+---
+
+## Administração da plataforma (2026-11-12)
+
+| Item | Status | Evidência |
+|------|--------|-----------|
+| Admin da plataforma (`users.is_platform_admin`) | ✅ | migration 0004; script `dist/database/scripts/create-platform-admin.js` |
+| API `/v1/admin/*` (overview, tenants, agents, users, activity, llm) | ✅ | `PlatformAdminGuard` consulta o banco a cada requisição |
+| Ações: suspender, reativar, estender trial, limite mensal de tokens | ✅ | auditadas (`admin.tenant.*`) com estado anterior/novo |
+| Suspensão bloqueia o tenant | ✅ | `RbacGuard` → 403 `TENANT_SUSPENDED` |
+| Consumo de LLM por tenant | ✅ | `usage_events` (`llm.input_tokens` / `llm.output_tokens`) gravado pelo laboratório |
+| Limites de taxa da conta Anthropic | ✅ | headers `anthropic-ratelimit-*` da última resposta (Redis) |
+| Limite mensal de tokens por tenant | ✅ | `tenants.llm_monthly_token_limit`; laboratório responde 429 ao atingir |
+| Painel web `/admin` (dados reais, sem mock) | ✅ | dashboard, clientes, detalhe+ações, agentes, usuários, atividade, IA |
+| **Correção de segurança**: isolamento de tenant no `RbacGuard` | ✅ | rotas com `:tenantId` sem `@Roles` (lab, contatos, conversas, campanhas) não checavam vínculo; header `x-tenant-slug` podia divergir da URL |
+| Testes | ✅ | unit (guards, parser de rate limit) + E2E local 24/24 |
+| Cadastro público fechado | ✅ | `POST /v1/auth/register` → 403 salvo `ALLOW_PUBLIC_SIGNUP=true`; telas de cadastro (`/auth/register`, `/register`, `/cadastro`) e "Criar conta" do login levam ao WhatsApp da equipe (`NEXT_PUBLIC_SALES_WHATSAPP`, padrão 5541992939892) |
+| Admin cria contas de clientes (`POST /v1/admin/users`) | ✅ | botão "Novo usuário" em `/admin/usuarios`; e-mail já verificado; auditado como `admin.user.created`; e-mail repetido → 409 |
+| Botão "Sair" no cabeçalho do painel | ✅ | |
+| Conectar agenda (Google/Microsoft): botão corrigido | ✅ | antes abria a rota da API direto no navegador (sem token → 401); agora `GET .../calendars/:provider/authorize` devolve `{ url }` e o front redireciona; erros em português na tela |
+| **Correção de segurança**: `state` do OAuth de agenda | ✅ | antes era o tenant em base64 (forjável: ligar uma agenda a outra organização); agora é código aleatório de uso único no Redis (10 min) com tenant/usuário/provedor |
+| Credenciais Google/Microsoft em produção | ⏳ | faltam `GOOGLE_OAUTH_CLIENT_ID/SECRET/REDIRECT_URI` no `api.env` |
+| Criação da organização no primeiro acesso (`/auth/organizacao`) | ✅ | antes não havia tela para criar o tenant: usuário novo ficava com todas as telas do painel carregando; o layout do painel agora redireciona quem não tem organização |

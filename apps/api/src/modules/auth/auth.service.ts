@@ -4,6 +4,7 @@ import {
   ConflictException,
   BadRequestException,
   NotFoundException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -51,6 +52,14 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto, ipAddress?: string, userAgent?: string) {
+    // Cadastro público fechado por padrão: contas novas são criadas pelo admin
+    // da plataforma (/v1/admin/users). Reabrir com ALLOW_PUBLIC_SIGNUP=true.
+    if (this.configService.get<string>('ALLOW_PUBLIC_SIGNUP') !== 'true') {
+      throw new ForbiddenException(
+        'O cadastro está fechado. Fale com a equipe Walletz pelo WhatsApp para criar sua conta.',
+      );
+    }
+
     const existing = await this.usersService.findByEmail(dto.email);
     if (existing) {
       throw new ConflictException('Email already registered');
@@ -145,6 +154,7 @@ export class AuthService {
     const tokens = await this.generateTokens(user.id, user.email, session.id);
 
     await this.sessionService.updateRefreshTokenHash(session.id, tokens.refreshToken);
+    await this.usersService.updateLastLogin(user.id);
 
     await this.auditService.log({
       userId: user.id,
@@ -300,6 +310,21 @@ export class AuthService {
     await this.sessionService.updateRefreshTokenHash(session.id, tokens.refreshToken);
 
     return tokens;
+  }
+
+  /** Dados do usuário logado. `isPlatformAdmin` só orienta a UI — a autorização
+   *  das rotas /admin é sempre checada no servidor (PlatformAdminGuard). */
+  async getMe(payload: JwtPayload) {
+    const user = await this.usersService.findById(payload.sub);
+    if (!user) throw new UnauthorizedException('User not found');
+    return {
+      userId: user.id,
+      email: user.email,
+      sessionId: payload.sessionId,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      isPlatformAdmin: user.isPlatformAdmin,
+    };
   }
 
   async logout(sessionId: string): Promise<void> {

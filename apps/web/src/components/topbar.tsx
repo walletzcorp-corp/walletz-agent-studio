@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { usePathname } from 'next/navigation';
-import { Bell, HelpCircle, Search, CheckCircle2, CreditCard } from 'lucide-react';
+import { Bell, HelpCircle, Search, CheckCircle2, CreditCard, LogOut } from 'lucide-react';
 
 /* ── Route label map ── */
 const ROUTE_LABELS: Record<string, string> = {
@@ -36,11 +36,12 @@ function getRouteLabel(pathname: string): string {
 }
 
 interface TopbarProps {
-  email?: string | null;
-  tenantName?: string;
+  email?: string | null | undefined;
+  tenantName?: string | undefined;
+  onLogout?: (() => void) | undefined;
 }
 
-export function Topbar({ tenantName }: TopbarProps) {
+export function Topbar({ tenantName, onLogout }: TopbarProps) {
   const pathname = usePathname();
   const pageTitle = getRouteLabel(pathname);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -107,6 +108,19 @@ export function Topbar({ tenantName }: TopbarProps) {
           <CreditCard className="h-3 w-3 text-muted-foreground/60" />
           <span className="text-[11px] text-muted-foreground font-medium">Professional</span>
         </div>
+
+        {/* Logout */}
+        {onLogout && (
+          <button
+            type="button"
+            onClick={onLogout}
+            title="Sair da conta"
+            className="ml-1 flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-sm text-muted-foreground hover:bg-surface-1 hover:text-foreground transition-colors"
+          >
+            <LogOut className="h-4 w-4" />
+            <span className="hidden sm:inline">Sair</span>
+          </button>
+        )}
       </div>
     </header>
   );

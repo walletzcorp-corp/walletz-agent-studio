@@ -19,9 +19,9 @@ const toastVariants = cva(
 );
 
 export interface ToastProps extends React.HTMLAttributes<HTMLDivElement>, VariantProps<typeof toastVariants> {
-  title?: string;
-  description?: string;
-  onClose?: () => void;
+  title?: string | undefined;
+  description?: string | undefined;
+  onClose?: (() => void) | undefined;
 }
 
 function Toast({ className, variant, title, description, onClose, ...props }: ToastProps) {

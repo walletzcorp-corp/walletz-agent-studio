@@ -7,6 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Button, Input, FormField, Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@walletz/ui';
 import { useAuth } from '../../../hooks/use-auth';
+import { signupWhatsappUrl } from '../../../lib/contact';
 
 const loginSchema = z.object({
   email: z.string().email('Email inválido'),
@@ -68,7 +69,7 @@ export default function LoginPage() {
         <Button form="login-form" type="submit" className="w-full" loading={isSubmitting}>Entrar</Button>
         <div className="flex w-full items-center justify-between text-sm">
           <Link href="/auth/forgot-password" className="text-muted-foreground hover:text-primary">Esqueceu a senha?</Link>
-          <Link href="/auth/register" className="text-primary hover:underline">Criar conta</Link>
+          <a href={signupWhatsappUrl()} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Criar conta</a>
         </div>
       </CardFooter>
     </Card>

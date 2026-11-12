@@ -119,6 +119,6 @@ export class AuthController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Dados do usuário autenticado' })
   async me(@CurrentUser() user: JwtPayload) {
-    return { userId: user.sub, email: user.email, sessionId: user.sessionId };
+    return this.authService.getMe(user);
   }
 }

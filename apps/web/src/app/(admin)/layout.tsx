@@ -1,31 +1,38 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
 import { useAuth } from '../../hooks/use-auth';
 import { WalletzLogo } from '../../components/walletz-logo';
-import { cn } from '@walletz/ui';
-import { LayoutDashboard, Users, Settings, Shield, ChevronRight } from 'lucide-react';
-import { Skeleton } from '@walletz/ui';
+import { cn, Skeleton } from '@walletz/ui';
+import {
+  LayoutDashboard, Building2, Bot, Users, Activity, Cpu, ChevronRight, LogOut,
+} from 'lucide-react';
 
 const NAV = [
-  { href: '/admin',          label: 'Dashboard',      icon: LayoutDashboard, exact: true },
-  { href: '/admin/clientes', label: 'Clientes',        icon: Users },
-  { href: '/admin/planos',   label: 'Planos',          icon: Shield },
-  { href: '/admin/config',   label: 'Configurações',   icon: Settings },
+  { href: '/admin', label: 'Dashboard', icon: LayoutDashboard, exact: true },
+  { href: '/admin/clientes', label: 'Clientes', icon: Building2 },
+  { href: '/admin/agentes', label: 'Agentes', icon: Bot },
+  { href: '/admin/usuarios', label: 'Usuários', icon: Users },
+  { href: '/admin/atividade', label: 'Atividade', icon: Activity },
+  { href: '/admin/ia', label: 'IA (Claude)', icon: Cpu },
 ];
 
+/**
+ * Painel da administração da plataforma. O bloqueio aqui é só de navegação:
+ * toda rota /v1/admin/* é protegida no servidor (PlatformAdminGuard).
+ */
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading, role, email } = useAuth();
+  const { isAuthenticated, isLoading, isPlatformAdmin, tenantId, email, logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) router.replace('/auth/login');
-    if (!isLoading && isAuthenticated && role !== 'super_admin') router.replace('/dashboard');
-  }, [isAuthenticated, isLoading, role, router]);
+    if (isLoading) return;
+    if (!isAuthenticated) router.replace('/auth/login');
+    else if (!isPlatformAdmin) router.replace('/dashboard');
+  }, [isAuthenticated, isLoading, isPlatformAdmin, router]);
 
   if (isLoading) {
     return (
@@ -41,20 +48,21 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     );
   }
 
-  if (!isAuthenticated || role !== 'super_admin') return null;
+  if (!isAuthenticated || !isPlatformAdmin) return null;
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
-      {/* Admin sidebar */}
       <aside className="flex h-screen w-56 shrink-0 flex-col border-r border-border" style={{ background: 'hsl(var(--surface-1))' }}>
         <div className="flex h-14 items-center gap-2.5 border-b border-border px-3">
           <WalletzLogo variant="horizontal" size="sm" />
         </div>
         <div className="flex h-8 items-center border-b border-border px-3">
-          <span className="rounded-full bg-neural-danger/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-neural-danger">Super Admin</span>
+          <span className="rounded-full bg-neural-danger/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-neural-danger">
+            Admin da plataforma
+          </span>
         </div>
         <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
-          {NAV.map(item => {
+          {NAV.map((item) => {
             const Icon = item.icon;
             const active = item.exact ? pathname === item.href : pathname.startsWith(item.href);
             return (
@@ -72,18 +80,23 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             );
           })}
         </nav>
-        <div className="border-t border-border px-3 py-3">
-          <Link href="/dashboard" className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
-            <ChevronRight className="h-3 w-3 rotate-180" /> Voltar ao app
-          </Link>
-          <p className="text-[10px] text-muted-foreground/40 mt-1 truncate">{email}</p>
+        <div className="border-t border-border px-3 py-3 space-y-2">
+          {tenantId && (
+            <Link href="/dashboard" className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
+              <ChevronRight className="h-3 w-3 rotate-180" /> Ir para minha organização
+            </Link>
+          )}
+          <button
+            onClick={() => void logout()}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-neural-danger transition-colors"
+          >
+            <LogOut className="h-3 w-3" /> Sair
+          </button>
+          <p className="text-[10px] text-muted-foreground/50 truncate">{email}</p>
         </div>
       </aside>
 
-      {/* Main */}
-      <main className="flex-1 overflow-auto">
-        {children}
-      </main>
+      <main className="flex-1 overflow-auto">{children}</main>
     </div>
   );
 }

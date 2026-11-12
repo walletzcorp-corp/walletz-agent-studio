@@ -11,6 +11,8 @@ interface AuthState {
   tenantSlug: string | null;
   tenantName: string | null;
   role: string | null;
+  /** Só orienta a UI; o acesso a /admin é validado no servidor. */
+  isPlatformAdmin: boolean;
   isAuthenticated: boolean;
   isLoading: boolean;
 }
@@ -22,6 +24,7 @@ const INITIAL_STATE: AuthState = {
   tenantSlug: null,
   tenantName: null,
   role: null,
+  isPlatformAdmin: false,
   isAuthenticated: false,
   isLoading: true,
 };
@@ -69,16 +72,21 @@ export function useAuth() {
         tenantSlug: activeTenant?.tenantSlug ?? null,
         tenantName: activeTenant?.tenantName ?? null,
         role: activeTenant?.role ?? null,
+        isPlatformAdmin: user.isPlatformAdmin === true,
         isAuthenticated: true,
         isLoading: false,
       });
 
       if (activeTenant) {
         localStorage.setItem('tenantSlug', activeTenant.tenantSlug);
+      } else {
+        localStorage.removeItem('tenantSlug');
       }
+      return { isPlatformAdmin: user.isPlatformAdmin === true, hasTenant: !!activeTenant };
     } catch {
       clearTokens();
       setState({ ...INITIAL_STATE, isLoading: false });
+      return { isPlatformAdmin: false, hasTenant: false };
     }
   }, [clearTokens]);
 
@@ -92,8 +100,11 @@ export function useAuth() {
       return { requiresMfa: true, mfaToken: data.mfaToken };
     }
     storeTokens(data);
-    await loadUser();
-    router.push('/');
+    const loaded = await loadUser();
+    // Admin da plataforma sem organização própria vai direto ao painel admin;
+    // usuário comum sem organização vai criar a primeira.
+    if (loaded?.hasTenant) router.push('/');
+    else router.push(loaded?.isPlatformAdmin ? '/admin' : '/auth/organizacao');
     return { requiresMfa: false };
   }, [storeTokens, loadUser, router]);
 

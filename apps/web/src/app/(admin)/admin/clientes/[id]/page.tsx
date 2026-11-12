@@ -1,549 +1,331 @@
 'use client';
 
-import { useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import {
-  ChevronRight, CheckCircle2, Clock, AlertTriangle, XCircle, Pause,
-  Building2, Users, Shield, CreditCard, FileText, BarChart3,
-  Bot, Smartphone, Puzzle, Brain, Calendar, Megaphone,
-  ClipboardList, AlertOctagon, Edit, Ban, RefreshCw,
-  TrendingUp, Mail, Phone, Globe, ArrowUpRight,
+  ChevronLeft, Ban, PlayCircle, CalendarPlus, Gauge, Loader2, CheckCircle2,
 } from 'lucide-react';
+import { cn } from '@walletz/ui';
+import {
+  AGENT_STATUS, adminApi, apiErrorMessage, fmtAgo, fmtCompact, fmtDate, fmtInt, templateLabel,
+  type AdminTenantDetail,
+} from '../../../../../lib/admin-api';
+import {
+  ActivityList, BarList, DailyBars, EmptyState, ErrorBlock, LoadingBlock, PageHeader, Section,
+  TenantStatusBadge, UsageMeter,
+} from '../../../_components/admin-ui';
 
-/* ── Types ── */
-type ClientStatus = 'active' | 'trial' | 'past_due' | 'suspended' | 'cancelled';
-
-const STATUS_CONFIG: Record<ClientStatus, { label: string; className: string; icon: React.ElementType }> = {
-  active:    { label: 'Ativo',        className: 'badge-success', icon: CheckCircle2 },
-  trial:     { label: 'Trial',        className: 'badge-warning', icon: Clock },
-  past_due:  { label: 'Inadimplente', className: 'badge-danger',  icon: AlertTriangle },
-  suspended: { label: 'Suspenso',     className: 'bg-surface-3 text-muted-foreground border border-border', icon: Pause },
-  cancelled: { label: 'Cancelado',    className: 'bg-surface-3 text-muted-foreground/60 border border-border', icon: XCircle },
+const ROLE_LABELS: Record<string, string> = {
+  owner: 'Dono', admin: 'Admin', manager: 'Gestor', agent_operator: 'Operador', analyst: 'Analista', viewer: 'Leitor',
 };
 
-/* ── Mock data ── */
-const CLIENT = {
-  id: '1',
-  company: 'Tech Solutions Ltda.',
-  fantasyName: 'Tech Solutions',
-  cnpj: '12.345.678/0001-90',
-  segment: 'Tecnologia',
-  owner: 'Ricardo Alves',
-  email: 'admin@techsol.com',
-  phone: '+55 11 99001-1234',
-  website: 'techsol.com',
-  country: 'Brasil',
-  state: 'SP',
-  city: 'São Paulo',
-  employees: '11–50',
-  plan: 'Professional',
-  status: 'active' as ClientStatus,
-  createdAt: '01/09/2026',
-  trialUntil: null as string | null,
-  lastAccess: '06/10/2026',
-  mrr: 'R$ 497',
-  arr: 'R$ 5.964',
-  nextBilling: '01/11/2026',
-  users: 4,
-  agents: 3,
-  whatsapp: true,
-  waNumber: '+55 11 93000-1234',
-  aiTokens: 84200,
-  conversations: 312,
-  tenantSlug: 'tech-solutions',
-};
+const LIMIT_PRESETS = [100_000, 500_000, 1_000_000, 5_000_000];
 
-const TABS = [
-  { id: 'overview',      label: 'Visão Geral',  icon: BarChart3 },
-  { id: 'company',       label: 'Empresa',      icon: Building2 },
-  { id: 'users',         label: 'Usuários',     icon: Users },
-  { id: 'plan',          label: 'Plano',        icon: Shield },
-  { id: 'subscription',  label: 'Assinatura',   icon: CreditCard },
-  { id: 'invoices',      label: 'Faturas',      icon: FileText },
-  { id: 'usage',         label: 'Consumo',      icon: TrendingUp },
-  { id: 'agents',        label: 'Agentes',      icon: Bot },
-  { id: 'whatsapp',      label: 'WhatsApp',     icon: Smartphone },
-  { id: 'integrations',  label: 'Integrações',  icon: Puzzle },
-  { id: 'ai',            label: 'IA',           icon: Brain },
-  { id: 'calendars',     label: 'Agendas',      icon: Calendar },
-  { id: 'campaigns',     label: 'Campanhas',    icon: Megaphone },
-  { id: 'audit',         label: 'Auditoria',    icon: ClipboardList },
-  { id: 'errors',        label: 'Erros',        icon: AlertOctagon },
-];
+export default function AdminClienteDetailPage() {
+  const params = useParams<{ id: string }>();
+  const id = params.id;
+  const [data, setData] = useState<AdminTenantDetail | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
-/* ── Tab content components ── */
-function TabOverview() {
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data } = await adminApi.tenant(id);
+      setData(data);
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  if (loading && !data) return <div className="page-container"><LoadingBlock /></div>;
+  if (error || !data) return <div className="page-container"><ErrorBlock message={error ?? 'Sem dados'} onRetry={load} /></div>;
+
+  const { tenant, llm, counts } = data;
+  const tokensDaily = llm.daily.map((d) => ({ day: d.day, tokens: d.input + d.output }));
+
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+    <div className="page-container space-y-5">
+      <Link href="/admin/clientes" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+        <ChevronLeft className="h-3.5 w-3.5" /> Clientes
+      </Link>
+
+      <PageHeader
+        title={tenant.name}
+        subtitle={`${tenant.slug} · criado em ${fmtDate(tenant.createdAt)} · ${tenant.timezone}`}
+        right={<TenantStatusBadge status={tenant.status} />}
+      />
+
+      <AdminActions detail={data} onDone={load} />
+
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
         {[
-          { label: 'MRR',          value: CLIENT.mrr,                      color: 'text-neural-success' },
-          { label: 'ARR Estimado', value: CLIENT.arr,                      color: 'text-primary' },
-          { label: 'Conversas 30d',value: String(CLIENT.conversations),    color: 'text-neural-blue' },
-          { label: 'Tokens IA 30d',value: CLIENT.aiTokens.toLocaleString(),color: 'text-neural-cyan' },
-        ].map(s => (
-          <div key={s.label} className="stat-card">
-            <p className="text-xs text-muted-foreground mb-2">{s.label}</p>
-            <p className={`text-xl font-display font-bold ${s.color}`}>{s.value}</p>
+          ['Membros', data.members.length],
+          ['Agentes', data.agents.length],
+          ['Conversas', counts.conversations],
+          ['Mensagens', counts.messages],
+          ['Contatos', counts.contacts],
+          ['Conhecimento', counts.knowledgeSources + counts.knowledgeItems],
+          ['Integrações', counts.whatsappAccounts + counts.calendarConnections],
+        ].map(([label, value]) => (
+          <div key={String(label)} className="stat-card">
+            <p className="text-xs text-muted-foreground">{label}</p>
+            <p className="text-xl font-display font-bold">{fmtInt(Number(value))}</p>
           </div>
         ))}
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="neural-card p-5 space-y-3">
-          <h3 className="text-sm font-semibold text-foreground">Saúde da conta</h3>
-          {[
-            { label: 'WhatsApp conectado',   ok: CLIENT.whatsapp },
-            { label: 'Agentes publicados',   ok: CLIENT.agents > 0 },
-            { label: 'Usuários ativos',      ok: CLIENT.users > 1 },
-            { label: 'Acesso últimos 7 dias', ok: true },
-            { label: 'Pagamento em dia',     ok: CLIENT.status === 'active' },
-          ].map(h => (
-            <div key={h.label} className="flex items-center justify-between py-1 border-b border-border/30 last:border-0">
-              <span className="text-sm text-muted-foreground">{h.label}</span>
-              <CheckCircle2 className={`h-4 w-4 ${h.ok ? 'text-neural-success' : 'text-neural-danger'}`} />
-            </div>
-          ))}
-        </div>
-        <div className="neural-card p-5 space-y-3">
-          <h3 className="text-sm font-semibold text-foreground">Linha do tempo</h3>
-          {[
-            { date: '06/10/2026', event: 'Último acesso', color: 'text-foreground' },
-            { date: '01/10/2026', event: 'Renovação assinatura', color: 'text-neural-success' },
-            { date: '14/09/2026', event: 'WhatsApp conectado', color: 'text-[#25D366]' },
-            { date: '03/09/2026', event: 'Primeiro agente publicado', color: 'text-primary' },
-            { date: '01/09/2026', event: 'Cadastro realizado', color: 'text-muted-foreground' },
-          ].map(e => (
-            <div key={e.date} className="flex items-center gap-3 py-1 border-b border-border/30 last:border-0">
-              <span className="text-[10px] text-muted-foreground shrink-0 w-20">{e.date}</span>
-              <span className={`text-xs ${e.color}`}>{e.event}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
 
-function TabCompany() {
-  return (
-    <div className="neural-card p-6 grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
-      {[
-        { label: 'Razão social',    value: CLIENT.company,      icon: Building2 },
-        { label: 'Nome fantasia',   value: CLIENT.fantasyName,  icon: Building2 },
-        { label: 'CNPJ',           value: CLIENT.cnpj,          icon: FileText },
-        { label: 'Segmento',       value: CLIENT.segment,       icon: BarChart3 },
-        { label: 'Responsável',    value: CLIENT.owner,         icon: Users },
-        { label: 'E-mail',         value: CLIENT.email,         icon: Mail },
-        { label: 'Telefone',       value: CLIENT.phone,         icon: Phone },
-        { label: 'Website',        value: CLIENT.website,       icon: Globe },
-        { label: 'País',           value: CLIENT.country,       icon: Globe },
-        { label: 'Estado / Cidade',value: `${CLIENT.state} / ${CLIENT.city}`, icon: Globe },
-        { label: 'Funcionários',   value: CLIENT.employees,     icon: Users },
-        { label: 'Workspace slug', value: CLIENT.tenantSlug,    icon: ArrowUpRight },
-      ].map(f => {
-        const Icon = f.icon;
-        return (
-          <div key={f.label} className="flex items-start gap-3">
-            <Icon className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-            <div>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{f.label}</p>
-              <p className="text-sm text-foreground font-medium">{f.value}</p>
-            </div>
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Section title="IA no mês (Claude)">
+          <UsageMeter used={llm.tokensMonth} limit={llm.limit} />
+          <div className="mt-4">
+            <DailyBars data={tokensDaily} valueKey="tokens" label="tokens 30d" />
           </div>
-        );
-      })}
-    </div>
-  );
-}
+        </Section>
+        <Section title="Tipos de agente escolhidos">
+          <BarList
+            emptyText="Nenhum agente criado."
+            items={Object.entries(data.agentsByTemplate)
+              .sort((a, b) => b[1] - a[1])
+              .map(([tpl, n]) => ({ key: tpl, label: templateLabel(tpl), value: n }))}
+          />
+        </Section>
+        <Section title="Período">
+          <dl className="space-y-2 text-sm">
+            <div className="flex justify-between"><dt className="text-muted-foreground">Status</dt><dd><TenantStatusBadge status={tenant.status} /></dd></div>
+            <div className="flex justify-between"><dt className="text-muted-foreground">Trial até</dt><dd>{fmtDate(tenant.trialEndsAt)}</dd></div>
+            <div className="flex justify-between"><dt className="text-muted-foreground">Plano</dt><dd>{tenant.planId ?? 'sem plano'}</dd></div>
+            <div className="flex justify-between"><dt className="text-muted-foreground">País / moeda</dt><dd>{tenant.country} / {tenant.currency}</dd></div>
+            <div className="flex justify-between"><dt className="text-muted-foreground">Atualizado</dt><dd>{fmtAgo(tenant.updatedAt)}</dd></div>
+          </dl>
+        </Section>
+      </div>
 
-function TabUsers() {
-  const users = [
-    { name: 'Ricardo Alves',   email: 'admin@techsol.com',  role: 'Admin',     lastSeen: '06/10/2026', status: 'active' },
-    { name: 'Camila Torres',   email: 'camila@techsol.com', role: 'Operador',  lastSeen: '05/10/2026', status: 'active' },
-    { name: 'Felipe Braga',    email: 'felipe@techsol.com', role: 'Operador',  lastSeen: '03/10/2026', status: 'active' },
-    { name: 'Aline Moreira',   email: 'aline@techsol.com',  role: 'Visualizador', lastSeen: '28/09/2026', status: 'active' },
-  ];
-  return (
-    <div className="neural-card overflow-hidden">
-      <table className="data-table">
-        <thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Último acesso</th><th>Status</th></tr></thead>
-        <tbody>
-          {users.map(u => (
-            <tr key={u.email}>
-              <td className="font-medium text-foreground">{u.name}</td>
-              <td className="text-muted-foreground text-sm">{u.email}</td>
-              <td><span className="text-xs bg-surface-2 px-2 py-0.5 rounded-full border border-border">{u.role}</span></td>
-              <td className="text-muted-foreground text-sm">{u.lastSeen}</td>
-              <td><span className="badge-success text-[10px] px-2 py-0.5 rounded-full">Ativo</span></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
+      <Section title="Agentes">
+        {data.agents.length === 0 ? <EmptyState text="Nenhum agente criado." /> : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-muted-foreground">
+                  <th className="py-2 pr-3 font-medium">Nome</th>
+                  <th className="py-2 pr-3 font-medium">Tipo</th>
+                  <th className="py-2 pr-3 font-medium">Status</th>
+                  <th className="py-2 pr-3 font-medium text-right">Tokens no mês</th>
+                  <th className="py-2 font-medium">Criado</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/60">
+                {data.agents.map((a) => (
+                  <tr key={a.id}>
+                    <td className="py-2 pr-3 font-medium">{a.name}</td>
+                    <td className="py-2 pr-3">{templateLabel(a.template)}</td>
+                    <td className="py-2 pr-3 text-muted-foreground">{AGENT_STATUS[a.status] ?? a.status}</td>
+                    <td className="py-2 pr-3 text-right tabular-nums">{fmtCompact(a.tokensMonth)}</td>
+                    <td className="py-2 text-muted-foreground">{fmtDate(a.createdAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Section>
 
-function TabPlan() {
-  const plans = [
-    { name: 'Starter',      price: 'R$ 197/mês', agents: 1,  users: 2,  conversations: 500,  tokens: '50k',  whatsapp: false, current: false },
-    { name: 'Professional', price: 'R$ 497/mês', agents: 5,  users: 10, conversations: 5000, tokens: '500k', whatsapp: true,  current: true },
-    { name: 'Business',     price: 'R$ 1.197/mês', agents: 20, users: 50, conversations: 25000, tokens: '2M', whatsapp: true, current: false },
-  ];
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        {plans.map(p => (
-          <div key={p.name} className={`neural-card p-5 space-y-3 ${p.current ? 'border-primary/40 ring-1 ring-primary/20' : ''}`}>
-            {p.current && <span className="badge-primary text-[10px] px-2 py-0.5 rounded-full">Plano atual</span>}
-            <h3 className="text-sm font-display font-bold text-foreground">{p.name}</h3>
-            <p className="text-lg font-bold text-primary">{p.price}</p>
-            <ul className="space-y-1.5 text-xs text-muted-foreground">
-              <li>• {p.agents} agente{p.agents > 1 ? 's' : ''}</li>
-              <li>• {p.users} usuário{p.users > 1 ? 's' : ''}</li>
-              <li>• {p.conversations.toLocaleString()} conversas/mês</li>
-              <li>• {p.tokens} tokens IA</li>
-              <li>• WhatsApp: {p.whatsapp ? '✓' : '—'}</li>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Section title="Membros">
+          {data.members.length === 0 ? <EmptyState text="Sem membros." /> : (
+            <ul className="divide-y divide-border/60">
+              {data.members.map((m) => (
+                <li key={m.userId} className="flex items-center justify-between gap-3 py-2 text-sm">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{m.name ?? m.email}</p>
+                    <p className="truncate text-xs text-muted-foreground">{m.email}</p>
+                  </div>
+                  <div className="shrink-0 text-right text-xs">
+                    <p>{ROLE_LABELS[m.role] ?? m.role}{m.status !== 'active' ? ` · ${m.status}` : ''}</p>
+                    <p className="text-muted-foreground">login {fmtAgo(m.lastLoginAt)}</p>
+                  </div>
+                </li>
+              ))}
             </ul>
-            {!p.current && (
-              <button className="btn-ghost border border-border rounded-lg w-full py-1.5 text-xs">Migrar para este plano</button>
-            )}
-          </div>
-        ))}
-      </div>
-      <div className="neural-card p-5 space-y-2">
-        <h3 className="text-sm font-semibold text-foreground">Ações</h3>
-        <div className="flex flex-wrap gap-2">
-          <button className="btn-ghost border border-border rounded-lg px-4 py-2 text-xs flex items-center gap-1.5"><Clock className="h-3.5 w-3.5" /> Prorrogar trial</button>
-          <button className="btn-ghost border border-border rounded-lg px-4 py-2 text-xs flex items-center gap-1.5"><TrendingUp className="h-3.5 w-3.5" /> Adicionar limite</button>
-          <button className="btn-ghost border border-border rounded-lg px-4 py-2 text-xs text-neural-warning flex items-center gap-1.5"><Pause className="h-3.5 w-3.5" /> Suspender</button>
-          <button className="btn-ghost border border-border rounded-lg px-4 py-2 text-xs text-neural-danger flex items-center gap-1.5"><Ban className="h-3.5 w-3.5" /> Cancelar</button>
-        </div>
+          )}
+        </Section>
+        <Section title="Atividade da organização">
+          <ActivityList items={data.activity} showTenant={false} />
+        </Section>
       </div>
     </div>
   );
 }
 
-function TabSubscription() {
-  return (
-    <div className="space-y-4">
-      <div className="neural-card p-6 space-y-4">
-        <h3 className="text-sm font-semibold text-foreground">Detalhes da assinatura</h3>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          {[
-            { label: 'Plano',          value: CLIENT.plan },
-            { label: 'Status',         value: 'Ativo' },
-            { label: 'MRR',            value: CLIENT.mrr },
-            { label: 'ARR',            value: CLIENT.arr },
-            { label: 'Próx. cobrança', value: CLIENT.nextBilling },
-            { label: 'Desde',          value: CLIENT.createdAt },
-          ].map(f => (
-            <div key={f.label}>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{f.label}</p>
-              <p className="text-sm font-semibold text-foreground">{f.value}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-      <div className="neural-card p-5 space-y-2">
-        <h3 className="text-sm font-semibold text-foreground">Ações rápidas</h3>
-        <div className="flex flex-wrap gap-2">
-          <button className="btn-ghost border border-border rounded-lg px-4 py-2 text-xs flex items-center gap-1.5"><Edit className="h-3.5 w-3.5" /> Alterar plano</button>
-          <button className="btn-ghost border border-border rounded-lg px-4 py-2 text-xs flex items-center gap-1.5"><RefreshCw className="h-3.5 w-3.5" /> Forçar renovação</button>
-          <button className="btn-ghost border border-border rounded-lg px-4 py-2 text-xs text-neural-danger flex items-center gap-1.5"><Ban className="h-3.5 w-3.5" /> Cancelar assinatura</button>
-        </div>
-      </div>
-    </div>
-  );
-}
+/* ── Ações administrativas ─────────────────────────────────────────── */
 
-function TabInvoices() {
-  const invoices = [
-    { id: 'INV-2026-010', date: '01/10/2026', amount: 'R$ 497,00', status: 'paid',    pdf: true },
-    { id: 'INV-2026-009', date: '01/09/2026', amount: 'R$ 497,00', status: 'paid',    pdf: true },
-    { id: 'INV-2026-008', date: '01/08/2026', amount: 'R$ 497,00', status: 'paid',    pdf: true },
-    { id: 'INV-2026-007', date: '01/07/2026', amount: 'R$ 197,00', status: 'paid',    pdf: true },
-  ];
-  return (
-    <div className="neural-card overflow-hidden">
-      <table className="data-table">
-        <thead><tr><th>Fatura</th><th>Data</th><th>Valor</th><th>Status</th><th>PDF</th></tr></thead>
-        <tbody>
-          {invoices.map(inv => (
-            <tr key={inv.id}>
-              <td className="font-mono text-xs text-foreground">{inv.id}</td>
-              <td className="text-muted-foreground text-sm">{inv.date}</td>
-              <td className="font-semibold text-foreground">{inv.amount}</td>
-              <td><span className="badge-success text-[10px] px-2 py-0.5 rounded-full">Pago</span></td>
-              <td><button className="text-xs text-primary hover:underline">Baixar</button></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
+type Panel = null | 'suspend' | 'trial' | 'limit';
 
-function TabUsage() {
-  const limits = [
-    { label: 'Conversas',    used: 312,   max: 5000,   unit: '' },
-    { label: 'Tokens IA',    used: 84200, max: 500000, unit: '' },
-    { label: 'Agentes',      used: 3,     max: 5,      unit: '' },
-    { label: 'Usuários',     used: 4,     max: 10,     unit: '' },
-    { label: 'Campanhas/mês',used: 2,     max: 10,     unit: '' },
-    { label: 'Storage',      used: 1.2,   max: 5,      unit: ' GB' },
-  ];
-  return (
-    <div className="space-y-3">
-      {limits.map(l => {
-        const pct = Math.round((l.used / l.max) * 100);
-        const color = pct > 80 ? 'text-neural-danger' : pct > 60 ? 'text-neural-warning' : 'text-neural-success';
-        const barColor = pct > 80 ? '#EF4444' : pct > 60 ? '#F59E0B' : '#22D3EE';
-        return (
-          <div key={l.label} className="neural-card p-4 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-foreground">{l.label}</span>
-              <span className={`text-xs font-semibold ${color}`}>{pct}% usado</span>
-            </div>
-            <div className="h-1.5 w-full rounded-full bg-surface-3 overflow-hidden">
-              <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: barColor }} />
-            </div>
-            <p className="text-[10px] text-muted-foreground">
-              {typeof l.used === 'number' && l.used > 100 ? l.used.toLocaleString() : l.used}{l.unit} de {typeof l.max === 'number' && l.max > 100 ? l.max.toLocaleString() : l.max}{l.unit}
-            </p>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
+function AdminActions({ detail, onDone }: { detail: AdminTenantDetail; onDone: () => Promise<void> }) {
+  const { tenant, llm } = detail;
+  const [panel, setPanel] = useState<Panel>(null);
+  const [busy, setBusy] = useState(false);
+  const [feedback, setFeedback] = useState<{ ok: boolean; text: string } | null>(null);
+  const [reason, setReason] = useState('');
+  const [days, setDays] = useState(14);
+  const [limitInput, setLimitInput] = useState(llm.limit === null ? '' : String(llm.limit));
 
-function TabAgents() {
-  const agents = [
-    { name: 'Assistente Vendas',    status: 'published', conversations: 212, created: '03/09/2026' },
-    { name: 'Suporte Técnico',      status: 'published', conversations: 87,  created: '10/09/2026' },
-    { name: 'Qualificador de Leads',status: 'draft',     conversations: 0,   created: '30/09/2026' },
-  ];
-  return (
-    <div className="neural-card overflow-hidden">
-      <table className="data-table">
-        <thead><tr><th>Agente</th><th>Status</th><th>Conversas 30d</th><th>Criado em</th></tr></thead>
-        <tbody>
-          {agents.map(a => (
-            <tr key={a.name}>
-              <td className="font-medium text-foreground">{a.name}</td>
-              <td>
-                <span className={a.status === 'published' ? 'badge-success text-[10px] px-2 py-0.5 rounded-full' : 'bg-surface-2 text-muted-foreground text-[10px] px-2 py-0.5 rounded-full border border-border'}>
-                  {a.status === 'published' ? 'Publicado' : 'Rascunho'}
-                </span>
-              </td>
-              <td className="text-sm text-muted-foreground">{a.conversations}</td>
-              <td className="text-sm text-muted-foreground">{a.created}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function TabWhatsApp() {
-  return (
-    <div className="neural-card p-6 space-y-4">
-      <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#25D366]/10">
-          <Smartphone className="h-5 w-5 text-[#25D366]" />
-        </div>
-        <div>
-          <p className="text-sm font-semibold text-foreground">WhatsApp conectado</p>
-          <p className="text-xs text-muted-foreground">{CLIENT.waNumber}</p>
-        </div>
-        <span className="ml-auto badge-success text-[10px] px-2 py-0.5 rounded-full">Ativo</span>
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        {[
-          { label: 'Templates aprovados',  value: '3' },
-          { label: 'Templates pendentes',  value: '1' },
-          { label: 'Mensagens 30d',        value: '624' },
-          { label: 'Taxa entrega',         value: '98.4%' },
-          { label: 'Número de telefone',   value: CLIENT.waNumber },
-          { label: 'Conta Meta',           value: 'act_1234567890' },
-        ].map(f => (
-          <div key={f.label}>
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{f.label}</p>
-            <p className="text-sm font-semibold text-foreground">{f.value}</p>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function SimpleInfoTab({ rows }: { rows: { label: string; value: string; status?: 'ok' | 'error' | 'none' }[] }) {
-  return (
-    <div className="neural-card p-6 space-y-3">
-      {rows.map(r => (
-        <div key={r.label} className="flex items-center justify-between py-1.5 border-b border-border/30 last:border-0">
-          <span className="text-sm text-muted-foreground">{r.label}</span>
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-foreground">{r.value}</span>
-            {r.status === 'ok' && <CheckCircle2 className="h-3.5 w-3.5 text-neural-success" />}
-            {r.status === 'error' && <AlertTriangle className="h-3.5 w-3.5 text-neural-danger" />}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function TabAudit() {
-  const logs = [
-    { date: '06/10 14:22', actor: 'admin@techsol.com', action: 'Configuração do agente atualizada', ip: '189.90.x.x' },
-    { date: '05/10 09:11', actor: 'camila@techsol.com', action: 'Contatos importados (245 registros)', ip: '187.11.x.x' },
-    { date: '03/10 16:44', actor: 'admin@techsol.com', action: 'Template WhatsApp enviado para aprovação', ip: '189.90.x.x' },
-    { date: '01/10 08:00', actor: 'sistema', action: 'Renovação de assinatura processada', ip: '—' },
-    { date: '30/09 11:33', actor: 'admin@techsol.com', action: 'Senha alterada', ip: '189.90.x.x' },
-  ];
-  return (
-    <div className="neural-card overflow-hidden">
-      <table className="data-table">
-        <thead><tr><th>Data</th><th>Ator</th><th>Ação</th><th>IP</th></tr></thead>
-        <tbody>
-          {logs.map((l, i) => (
-            <tr key={i}>
-              <td className="font-mono text-xs text-muted-foreground whitespace-nowrap">{l.date}</td>
-              <td className="text-xs text-muted-foreground">{l.actor}</td>
-              <td className="text-sm text-foreground">{l.action}</td>
-              <td className="font-mono text-xs text-muted-foreground">{l.ip}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function TabErrors() {
-  return (
-    <div className="space-y-3">
-      <div className="neural-card p-6 flex flex-col items-center gap-2 text-center">
-        <CheckCircle2 className="h-10 w-10 text-neural-success" />
-        <p className="text-sm font-semibold text-foreground">Nenhum erro registrado nos últimos 7 dias</p>
-        <p className="text-xs text-muted-foreground">Todos os sistemas desta conta estão operando normalmente.</p>
-      </div>
-    </div>
-  );
-}
-
-/* ── Main ── */
-export default function AdminClientDetailPage() {
-  const params = useParams();
-  const [activeTab, setActiveTab] = useState('overview');
-  const { label: statusLabel, className: statusClass, icon: StatusIcon } = STATUS_CONFIG[CLIENT.status];
-
-  function renderTab() {
-    switch (activeTab) {
-      case 'overview':     return <TabOverview />;
-      case 'company':      return <TabCompany />;
-      case 'users':        return <TabUsers />;
-      case 'plan':         return <TabPlan />;
-      case 'subscription': return <TabSubscription />;
-      case 'invoices':     return <TabInvoices />;
-      case 'usage':        return <TabUsage />;
-      case 'agents':       return <TabAgents />;
-      case 'whatsapp':     return <TabWhatsApp />;
-      case 'integrations': return <SimpleInfoTab rows={[
-        { label: 'Google Calendar', value: 'Conectado', status: 'ok' },
-        { label: 'Microsoft Teams', value: 'Não conectado', status: 'none' },
-        { label: 'Anthropic',       value: 'Via plataforma', status: 'ok' },
-        { label: 'WhatsApp',        value: 'Conectado', status: 'ok' },
-      ]} />;
-      case 'ai':           return <SimpleInfoTab rows={[
-        { label: 'Provedor',            value: 'Anthropic (plataforma)' },
-        { label: 'Modelo padrão',       value: 'claude-sonnet-4-5' },
-        { label: 'Tokens usados 30d',   value: '84.200' },
-        { label: 'BYOK',               value: 'Desativado' },
-        { label: 'Temperatura padrão',  value: '0.7' },
-      ]} />;
-      case 'calendars':    return <SimpleInfoTab rows={[
-        { label: 'Google Calendar',     value: '2 agendas sincronizadas', status: 'ok' },
-        { label: 'Microsoft Calendar',  value: 'Não conectado' },
-        { label: 'Reuniões agendadas 30d', value: '14' },
-      ]} />;
-      case 'campaigns':    return <SimpleInfoTab rows={[
-        { label: 'Campanhas ativas',    value: '1' },
-        { label: 'Campanhas enviadas',  value: '2' },
-        { label: 'Mensagens enviadas',  value: '1.240' },
-        { label: 'Taxa de abertura',    value: '68%' },
-        { label: 'Opt-outs',           value: '3' },
-      ]} />;
-      case 'audit':        return <TabAudit />;
-      case 'errors':       return <TabErrors />;
-      default:             return null;
+  async function run(action: () => Promise<unknown>, okText: string) {
+    setBusy(true);
+    setFeedback(null);
+    try {
+      await action();
+      setFeedback({ ok: true, text: okText });
+      setPanel(null);
+      setReason('');
+      await onDone();
+    } catch (err) {
+      setFeedback({ ok: false, text: apiErrorMessage(err) });
+    } finally {
+      setBusy(false);
     }
   }
 
+  const parsedLimit = limitInput.trim() === '' ? null : Number(limitInput.replace(/\D/g, ''));
+  const limitValid = parsedLimit === null || (Number.isInteger(parsedLimit) && parsedLimit >= 0);
+
+  const btn = 'flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50';
+
   return (
-    <div className="page-container space-y-6">
-      {/* Breadcrumb */}
-      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        <Link href="/admin" className="hover:text-foreground transition-colors">Dashboard</Link>
-        <ChevronRight className="h-3 w-3" />
-        <Link href="/admin/clientes" className="hover:text-foreground transition-colors">Clientes</Link>
-        <ChevronRight className="h-3 w-3" />
-        <span className="text-foreground">{CLIENT.fantasyName}</span>
+    <Section title="Ações">
+      <div className="flex flex-wrap gap-2">
+        {tenant.status === 'suspended' ? (
+          <button
+            disabled={busy}
+            className={cn(btn, 'border-neural-success/40 text-neural-success hover:bg-neural-success/10')}
+            onClick={() => void run(() => adminApi.reactivate(tenant.id), 'Organização reativada.')}
+          >
+            <PlayCircle className="h-3.5 w-3.5" /> Reativar
+          </button>
+        ) : tenant.status !== 'cancelled' ? (
+          <button
+            disabled={busy}
+            className={cn(btn, panel === 'suspend' ? 'border-neural-danger bg-neural-danger/10 text-neural-danger' : 'border-neural-danger/40 text-neural-danger hover:bg-neural-danger/10')}
+            onClick={() => setPanel(panel === 'suspend' ? null : 'suspend')}
+          >
+            <Ban className="h-3.5 w-3.5" /> Suspender
+          </button>
+        ) : null}
+        <button
+          disabled={busy}
+          className={cn(btn, panel === 'trial' ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:bg-white/5')}
+          onClick={() => setPanel(panel === 'trial' ? null : 'trial')}
+        >
+          <CalendarPlus className="h-3.5 w-3.5" /> Estender trial
+        </button>
+        <button
+          disabled={busy}
+          className={cn(btn, panel === 'limit' ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:bg-white/5')}
+          onClick={() => setPanel(panel === 'limit' ? null : 'limit')}
+        >
+          <Gauge className="h-3.5 w-3.5" /> Limite de tokens
+        </button>
+        {busy && <Loader2 className="h-4 w-4 animate-spin self-center text-muted-foreground" />}
       </div>
 
-      {/* Header */}
-      <div className="flex items-start gap-4 flex-wrap justify-between">
-        <div>
-          <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl font-display font-bold text-foreground">{CLIENT.company}</h1>
-            <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${statusClass}`}>
-              <StatusIcon className="h-3 w-3" /> {statusLabel}
-            </span>
-          </div>
-          <p className="text-sm text-muted-foreground mt-1">
-            {CLIENT.plan} · {CLIENT.mrr}/mês · {CLIENT.users} usuários · {CLIENT.agents} agentes · Desde {CLIENT.createdAt}
+      {panel === 'suspend' && (
+        <div className="mt-3 space-y-2 rounded-lg border border-neural-danger/30 bg-neural-danger/5 p-3">
+          <p className="text-xs text-muted-foreground">
+            Os usuários perdem o acesso à organização (agentes, conversas, laboratório). Nenhum dado é apagado; reativar devolve o acesso.
           </p>
+          <input
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="Motivo da suspensão (obrigatório, fica na auditoria)"
+            maxLength={500}
+            className="w-full rounded-lg border border-border bg-surface-1 px-3 py-2 text-sm focus:outline-none"
+          />
+          <button
+            disabled={busy || reason.trim().length < 3}
+            className={cn(btn, 'border-neural-danger bg-neural-danger text-white hover:opacity-90')}
+            onClick={() => void run(() => adminApi.suspend(tenant.id, reason.trim()), 'Organização suspensa.')}
+          >
+            Confirmar suspensão
+          </button>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <button className="btn-ghost border border-border rounded-lg px-3 py-2 text-xs flex items-center gap-1.5">
-            <Edit className="h-3.5 w-3.5" /> Editar
-          </button>
-          <button className="btn-ghost border border-border rounded-lg px-3 py-2 text-xs flex items-center gap-1.5 text-neural-warning">
-            <Pause className="h-3.5 w-3.5" /> Suspender
-          </button>
-          <button className="btn-ghost border border-border rounded-lg px-3 py-2 text-xs flex items-center gap-1.5 text-neural-danger">
-            <Ban className="h-3.5 w-3.5" /> Cancelar
-          </button>
-        </div>
-      </div>
+      )}
 
-      {/* Tab bar */}
-      <div className="flex gap-0.5 overflow-x-auto pb-0 border-b border-border" style={{ scrollbarWidth: 'none' }}>
-        {TABS.map(tab => {
-          const Icon = tab.icon;
-          const active = activeTab === tab.id;
-          return (
+      {panel === 'trial' && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-border p-3">
+          <span className="text-xs text-muted-foreground">
+            Trial atual até {fmtDate(tenant.trialEndsAt)}. Adicionar:
+          </span>
+          {[7, 14, 30, 60].map((d) => (
             <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium whitespace-nowrap border-b-2 transition-colors ${
-                active
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-muted-foreground hover:text-foreground'
-              }`}
+              key={d}
+              onClick={() => setDays(d)}
+              className={cn('rounded-full border px-3 py-1 text-xs', days === d ? 'border-primary text-primary' : 'border-border text-muted-foreground')}
             >
-              <Icon className="h-3.5 w-3.5 shrink-0" />
-              {tab.label}
+              {d} dias
             </button>
-          );
-        })}
-      </div>
+          ))}
+          <button
+            disabled={busy}
+            className={cn(btn, 'border-primary bg-primary text-primary-foreground hover:opacity-90')}
+            onClick={() => void run(() => adminApi.extendTrial(tenant.id, days), `Trial estendido em ${days} dias.`)}
+          >
+            Aplicar
+          </button>
+        </div>
+      )}
 
-      {/* Tab content */}
-      <div>{renderTab()}</div>
-    </div>
+      {panel === 'limit' && (
+        <div className="mt-3 space-y-2 rounded-lg border border-border p-3">
+          <p className="text-xs text-muted-foreground">
+            Tokens de IA (entrada + saída) por mês. Ao atingir, o agente para de responder até o mês virar ou o limite subir. Uso atual: {fmtInt(llm.tokensMonth)}.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              value={limitInput}
+              onChange={(e) => setLimitInput(e.target.value)}
+              inputMode="numeric"
+              placeholder="vazio = sem limite"
+              className="w-44 rounded-lg border border-border bg-surface-1 px-3 py-1.5 text-sm tabular-nums focus:outline-none"
+            />
+            {LIMIT_PRESETS.map((p) => (
+              <button key={p} onClick={() => setLimitInput(String(p))} className="rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground">
+                {fmtCompact(p)}
+              </button>
+            ))}
+            <button
+              disabled={busy || !limitValid}
+              className={cn(btn, 'border-primary bg-primary text-primary-foreground hover:opacity-90')}
+              onClick={() => void run(
+                () => adminApi.setTokenLimit(tenant.id, parsedLimit),
+                parsedLimit === null ? 'Limite removido.' : `Limite definido em ${fmtInt(parsedLimit)} tokens/mês.`,
+              )}
+            >
+              Salvar limite
+            </button>
+            {llm.limit !== null && (
+              <button
+                disabled={busy}
+                className={cn(btn, 'border-border hover:bg-white/5')}
+                onClick={() => void run(() => adminApi.setTokenLimit(tenant.id, null), 'Limite removido.')}
+              >
+                Remover limite
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {feedback && (
+        <p className={cn('mt-3 flex items-center gap-1.5 text-xs', feedback.ok ? 'text-neural-success' : 'text-neural-danger')}>
+          {feedback.ok && <CheckCircle2 className="h-3.5 w-3.5" />} {feedback.text}
+        </p>
+      )}
+    </Section>
   );
 }

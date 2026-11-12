@@ -9,6 +9,7 @@ import {
   Clock, RefreshCw, Shield,
 } from 'lucide-react';
 import Link from 'next/link';
+import { apiUrl } from '../../../lib/paths';
 
 type MetaTab = 'overview' | 'whatsapp' | 'templates' | 'costs' | 'consumption' | 'webhooks' | 'settings';
 
@@ -276,7 +277,7 @@ function WebhooksTab() {
           <label className="text-xs text-muted-foreground">URL do Webhook</label>
           <div className="flex items-center gap-2">
             <div className="flex-1 rounded-lg border border-border bg-surface-2 px-3 py-2.5 font-mono text-xs text-muted-foreground select-all">
-              {typeof window !== 'undefined' ? `${window.location.origin}/api/v1/webhooks/meta` : 'https://sua-api.walletz.app/api/v1/webhooks/meta'}
+              {apiUrl('/v1/webhooks/meta')}
             </div>
             <button className="btn-ghost rounded-lg px-3 py-2.5 text-xs">Copiar</button>
           </div>

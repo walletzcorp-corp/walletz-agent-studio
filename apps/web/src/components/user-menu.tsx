@@ -1,16 +1,17 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { LogOut, User, Settings } from 'lucide-react';
+import { LogOut, User, Settings, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@walletz/ui';
 
 interface UserMenuProps {
   email?: string | null;
   name?: string | null;
+  isPlatformAdmin?: boolean;
 }
 
-export function UserMenu({ email, name }: UserMenuProps) {
+export function UserMenu({ email, name, isPlatformAdmin = false }: UserMenuProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -45,6 +46,18 @@ export function UserMenu({ email, name }: UserMenuProps) {
 
       {open && (
         <div className="absolute bottom-full left-0 right-0 mb-1 rounded-lg border border-border bg-card py-1 shadow-lg">
+          {isPlatformAdmin && (
+            <>
+              <Link
+                href="/admin"
+                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-neural-danger hover:bg-accent"
+                onClick={() => setOpen(false)}
+              >
+                <ShieldCheck className="h-4 w-4" /> Painel da plataforma
+              </Link>
+              <hr className="my-1 border-border" />
+            </>
+          )}
           <Link
             href="/configuracoes/perfil"
             className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-accent"

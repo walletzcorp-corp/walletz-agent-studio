@@ -1,4 +1,5 @@
 import axios, { type AxiosInstance, type AxiosError } from 'axios';
+import { withBasePath } from './paths';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
@@ -45,7 +46,7 @@ function createApiClient(): AxiosInstance {
             localStorage.removeItem('accessToken');
             localStorage.removeItem('refreshToken');
             localStorage.removeItem('sessionId');
-            window.location.href = '/auth/login';
+            window.location.href = withBasePath('/auth/login');
           }
         }
       }
@@ -66,10 +67,10 @@ export interface LoginResponse {
 }
 
 export const authApi = {
-  register: (data: { email: string; password: string; firstName?: string; lastName?: string }) =>
+  register: (data: { email: string; password: string; firstName?: string | undefined; lastName?: string | undefined }) =>
     api.post<{ userId: string; email: string }>('/auth/register', data),
 
-  login: (data: { email: string; password: string; mfaCode?: string }) =>
+  login: (data: { email: string; password: string; mfaCode?: string | undefined }) =>
     api.post<LoginResponse>('/auth/login', data),
 
   logout: () => api.post('/auth/logout'),
@@ -79,7 +80,15 @@ export const authApi = {
   resetPassword: (token: string, password: string) =>
     api.post('/auth/reset-password', { token, password }),
 
-  me: () => api.get<{ userId: string; email: string; sessionId: string }>('/auth/me'),
+  me: () =>
+    api.get<{
+      userId: string;
+      email: string;
+      sessionId: string;
+      firstName?: string | null;
+      lastName?: string | null;
+      isPlatformAdmin?: boolean;
+    }>('/auth/me'),
 };
 
 export const tenantsApi = {

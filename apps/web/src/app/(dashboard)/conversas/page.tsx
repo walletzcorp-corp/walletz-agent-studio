@@ -163,7 +163,7 @@ export default function ConversasPage() {
             Conversas
           </h1>
           <div className="flex items-center gap-2">
-            <RefreshCw className="h-3 w-3 text-muted-foreground animate-spin opacity-40" title="Atualizando automaticamente" />
+            <RefreshCw className="h-3 w-3 text-muted-foreground animate-spin opacity-40" aria-label="Atualizando automaticamente" />
             <Badge variant="outline" className="text-xs">
               {conversations.filter((c) => c.status === 'open').length} abertas
             </Badge>
