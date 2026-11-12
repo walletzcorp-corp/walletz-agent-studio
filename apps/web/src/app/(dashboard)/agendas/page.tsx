@@ -8,6 +8,7 @@ import {
   MoreHorizontal, Edit2, Trash2, PhoneCall,
 } from 'lucide-react';
 import { useAuth } from '../../../hooks/use-auth';
+import { apiUrl } from '../../../lib/paths';
 
 /* ── Types ── */
 interface CalendarConnection {
@@ -139,7 +140,7 @@ export default function AgendasPage() {
     const token = getToken();
     if (!token) { setLoading(false); return; }
     setLoading(true);
-    fetch(`/api/v1/tenants/${tenantId}/calendars/connections`, {
+    fetch(apiUrl(`/v1/tenants/${tenantId}/calendars/connections`), {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then(r => r.ok ? r.json() : [])
@@ -150,7 +151,7 @@ export default function AgendasPage() {
 
   const handleConnect = (provider: 'google' | 'microsoft') => {
     if (!tenantId) return;
-    window.location.href = `/api/v1/tenants/${tenantId}/calendars/${provider}/authorize`;
+    window.location.href = apiUrl(`/v1/tenants/${tenantId}/calendars/${provider}/authorize`);
   };
 
   const handleSync = async () => {
@@ -159,7 +160,7 @@ export default function AgendasPage() {
     if (!token) return;
     setSyncing(true);
     try {
-      await fetch(`/api/v1/tenants/${tenantId}/calendars/sync`, {
+      await fetch(apiUrl(`/v1/tenants/${tenantId}/calendars/sync`), {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -172,7 +173,7 @@ export default function AgendasPage() {
     if (!tenantId) return;
     const token = getToken();
     if (!token) return;
-    await fetch(`/api/v1/tenants/${tenantId}/calendars/connections/${connectionId}`, {
+    await fetch(apiUrl(`/v1/tenants/${tenantId}/calendars/connections/${connectionId}`), {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` },
     });

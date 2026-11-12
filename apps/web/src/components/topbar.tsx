@@ -36,8 +36,8 @@ function getRouteLabel(pathname: string): string {
 }
 
 interface TopbarProps {
-  email?: string | null;
-  tenantName?: string;
+  email?: string | null | undefined;
+  tenantName?: string | undefined;
 }
 
 export function Topbar({ tenantName }: TopbarProps) {

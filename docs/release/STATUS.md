@@ -1,6 +1,6 @@
 # Status da Release — Walletz Agent Studio
 
-**Última atualização**: 2026-10-06  
+**Última atualização**: 2026-11-11  
 **Sprint atual**: 7 — Microsoft Graph Integration + Token Auto-Refresh + Teams Meeting
 
 ---
@@ -23,7 +23,7 @@
 | **Sprint 0 — Fundação** | 🔄 Em progresso | — | — | — | — | — | Arquitetura | 2026-10-05 |
 | Monorepo setup | 🔄 | — | — | — | — | — | DevOps | 2026-10-05 |
 | Docker Compose dev | ⏳ | — | N/A | — | — | — | DevOps | — |
-| CI GitHub Actions | ⏳ | — | N/A | — | — | — | DevOps | — |
+| CI GitHub Actions | ✅ | typecheck, unit, migrations, build | N/A | — | lint/format ainda informativos | ci.yml + deploy.yml | DevOps | 2026-11-11 |
 | CLAUDE.md | ✅ | N/A | N/A | — | — | arquivo criado | Arquitetura | 2026-10-05 |
 | PRODUCT_SPEC.md | ✅ | N/A | N/A | — | — | arquivo criado | Product | 2026-10-05 |
 | ARCHITECTURE.md | ✅ | N/A | N/A | — | — | arquivo criado | Arquitetura | 2026-10-05 |
@@ -86,3 +86,17 @@ Ver detalhes em [EXTERNAL_BLOCKERS.md](EXTERNAL_BLOCKERS.md).
 | ANTHROPIC_API_KEY real | D/Lab | Chave real em apps/api/.env.local para habilitar testes de agente conversacional |
 | Stripe Account | M | Stripe account (test mode suficiente para dev) |
 | Domínio produção | Deploy | Domínio + certificado TLS |
+
+---
+
+## Deploy e CI (2026-11-11)
+
+| Item | Status | Observação |
+|------|--------|------------|
+| Produção (servidor 193.203.15.139) | ✅ no ar | stack `walletz-infra/prod/agent-studio`; aguardando DNS + TLS de agent-studio.walletzcorp.com |
+| CI bloqueante | ✅ | typecheck (4 pacotes), testes unitários, migrations em banco limpo (2x), build |
+| Typecheck web | ✅ 0 erros | checagem religada no `next build` |
+| Lint | 🔴 | ESLint 9 sem `eslint.config.js`; job informativo |
+| Format | 🔴 | ~250 arquivos fora do Prettier; job informativo |
+| Testes unitários | 🔴 | API e web sem testes unitários |
+| Suíte de isolamento de tenant | 🔴 | não compila no jest (`@nestjs/bullmq` é ESM); fora do CI |

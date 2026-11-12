@@ -7,12 +7,10 @@ const nextConfig: NextConfig = {
   // Imagem Docker enxuta (server.js + só as deps rastreadas); a raiz do
   // monorepo é necessária para incluir packages/* no trace.
   output: 'standalone',
+  // Produção: servido em https://walletzcorp.com/agent-studio (vazio em dev).
+  // Lido no build; links fora de <Link>/router usam src/lib/paths.ts.
+  ...(process.env.NEXT_PUBLIC_BASE_PATH ? { basePath: process.env.NEXT_PUBLIC_BASE_PATH } : {}),
   outputFileTracingRoot: path.join(__dirname, '../..'),
-  // Provisório para o primeiro deploy: há ~40 erros de tipo pré-existentes
-  // (quase todos exactOptionalPropertyTypes). `pnpm typecheck` continua
-  // acusando-os; remover estas duas flags quando forem corrigidos.
-  typescript: { ignoreBuildErrors: true },
-  eslint: { ignoreDuringBuilds: true },
   async headers() {
     return [
       {

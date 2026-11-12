@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Inter, Sora } from 'next/font/google';
 import './globals.css';
 import { Providers } from './providers';
+import { withBasePath } from '../lib/paths';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -24,9 +25,9 @@ export const metadata: Metadata = {
   description: 'Crie, ensine, conecte e automatize agentes de inteligência artificial.',
   robots: { index: false, follow: false },
   icons: {
-    icon:       [{ url: '/favicon.svg',    type: 'image/svg+xml' }],
-    apple:      [{ url: '/apple-icon.svg', type: 'image/svg+xml', sizes: '180x180' }],
-    shortcut:   [{ url: '/favicon.svg',    type: 'image/svg+xml' }],
+    icon:       [{ url: withBasePath('/favicon.svg'),    type: 'image/svg+xml' }],
+    apple:      [{ url: withBasePath('/apple-icon.svg'), type: 'image/svg+xml', sizes: '180x180' }],
+    shortcut:   [{ url: withBasePath('/favicon.svg'),    type: 'image/svg+xml' }],
   },
   openGraph: {
     type: 'website',

@@ -6,6 +6,7 @@ import { labApi, type ChatMessage } from '../../../lib/lab-api';
 import { Button, Card, CardContent, CardHeader, CardTitle, Badge, Skeleton } from '@walletz/ui';
 import { Bot, Send, User, FlaskConical, RefreshCw, ChevronDown, Info } from 'lucide-react';
 import { api } from '../../../lib/api';
+import { withBasePath } from '../../../lib/paths';
 
 interface Agent {
   id: string;
@@ -126,7 +127,7 @@ export default function LaboratorioPage() {
             ) : agents.length === 0 ? (
               <span className="text-sm text-muted-foreground">
                 Nenhum agente criado.{' '}
-                <a href="/agentes/novo" className="text-primary underline">
+                <a href={withBasePath('/agentes/novo')} className="text-primary underline">
                   Criar agente
                 </a>
               </span>
