@@ -117,3 +117,7 @@ Ver detalhes em [EXTERNAL_BLOCKERS.md](EXTERNAL_BLOCKERS.md).
 | Painel web `/admin` (dados reais, sem mock) | ✅ | dashboard, clientes, detalhe+ações, agentes, usuários, atividade, IA |
 | **Correção de segurança**: isolamento de tenant no `RbacGuard` | ✅ | rotas com `:tenantId` sem `@Roles` (lab, contatos, conversas, campanhas) não checavam vínculo; header `x-tenant-slug` podia divergir da URL |
 | Testes | ✅ | unit (guards, parser de rate limit) + E2E local 24/24 |
+| Cadastro público fechado | ✅ | `POST /v1/auth/register` → 403 salvo `ALLOW_PUBLIC_SIGNUP=true`; telas de cadastro (`/auth/register`, `/register`, `/cadastro`) e "Criar conta" do login levam ao WhatsApp da equipe (`NEXT_PUBLIC_SALES_WHATSAPP`, padrão 5541992939892) |
+| Admin cria contas de clientes (`POST /v1/admin/users`) | ✅ | botão "Novo usuário" em `/admin/usuarios`; e-mail já verificado; auditado como `admin.user.created`; e-mail repetido → 409 |
+| Botão "Sair" no cabeçalho do painel | ✅ | |
+| Criação da organização no primeiro acesso (`/auth/organizacao`) | ✅ | antes não havia tela para criar o tenant: usuário novo ficava com todas as telas do painel carregando; o layout do painel agora redireciona quem não tem organização |

@@ -4,6 +4,7 @@ import {
   ConflictException,
   BadRequestException,
   NotFoundException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -51,6 +52,14 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto, ipAddress?: string, userAgent?: string) {
+    // Cadastro público fechado por padrão: contas novas são criadas pelo admin
+    // da plataforma (/v1/admin/users). Reabrir com ALLOW_PUBLIC_SIGNUP=true.
+    if (this.configService.get<string>('ALLOW_PUBLIC_SIGNUP') !== 'true') {
+      throw new ForbiddenException(
+        'O cadastro está fechado. Fale com a equipe Walletz pelo WhatsApp para criar sua conta.',
+      );
+    }
+
     const existing = await this.usersService.findByEmail(dto.email);
     if (existing) {
       throw new ConflictException('Email already registered');

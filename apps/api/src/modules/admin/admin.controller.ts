@@ -19,6 +19,7 @@ import type { JwtPayload } from '../auth/auth.service';
 import { PlatformAdminGuard } from './guards/platform-admin.guard';
 import { AdminService, type AdminActor } from './admin.service';
 import {
+  CreateUserDto,
   ExtendTrialDto,
   ListActivityQueryDto,
   ListAgentsQueryDto,
@@ -65,6 +66,12 @@ export class AdminController {
     const p = Math.max(1, Number(page) || 1);
     const ps = Math.min(200, Math.max(1, Number(pageSize) || 50));
     return this.adminService.listUsers(p, ps);
+  }
+
+  @Post('users')
+  @ApiOperation({ summary: 'Criar conta de cliente (cadastro público é fechado)' })
+  createUser(@Body() dto: CreateUserDto, @CurrentUser() user: JwtPayload, @Req() req: Request) {
+    return this.adminService.createUser(dto, actorFrom(user, req));
   }
 
   @Get('activity')

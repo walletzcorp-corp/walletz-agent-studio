@@ -9,14 +9,17 @@ import { useAuth } from '../../hooks/use-auth';
 import { Skeleton } from '@walletz/ui';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading, email, tenantName, isPlatformAdmin, logout } = useAuth();
+  const { isAuthenticated, isLoading, email, tenantId, tenantName, isPlatformAdmin, logout } = useAuth();
   const router = useRouter();
+  // Todas as telas do painel dependem de uma organização; sem ela ficariam
+  // carregando para sempre. Quem ainda não tem vai criar a primeira.
+  const needsOrganization = isAuthenticated && !tenantId;
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      router.replace('/auth/login');
-    }
-  }, [isAuthenticated, isLoading, router]);
+    if (isLoading) return;
+    if (!isAuthenticated) router.replace('/auth/login');
+    else if (needsOrganization) router.replace('/auth/organizacao');
+  }, [isAuthenticated, isLoading, needsOrganization, router]);
 
   useEffect(() => {
     const handler = () => logout();
@@ -45,7 +48,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     );
   }
 
-  if (!isAuthenticated) return null;
+  if (!isAuthenticated || needsOrganization) return null;
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
@@ -59,7 +62,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* Main area */}
       <div className="flex flex-1 flex-col overflow-hidden">
-        <Topbar email={email} tenantName={tenantName ?? undefined} />
+        <Topbar email={email} tenantName={tenantName ?? undefined} onLogout={() => void logout()} />
         <main className="flex-1 overflow-auto">
           {children}
         </main>

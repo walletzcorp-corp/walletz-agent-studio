@@ -1,13 +1,16 @@
 import {
   BadRequestException,
+  ConflictException,
   Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import * as bcrypt from 'bcryptjs';
 import { and, eq, isNull, sql, type SQL } from 'drizzle-orm';
 import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';
 import { tenants, type Tenant } from '../../database/schema/tenants';
+import { users } from '../../database/schema/users';
 import { AuditService } from '../../shared/audit/audit.service';
 import {
   LlmUsageService,
@@ -15,6 +18,7 @@ import {
   type RateLimitSnapshot,
 } from '../../shared/llm-usage/llm-usage.service';
 import type {
+  CreateUserDto,
   ListActivityQueryDto,
   ListAgentsQueryDto,
   ListTenantsQueryDto,
@@ -566,6 +570,46 @@ export class AdminService {
       { llmMonthlyTokenLimit: limit },
     );
     return updated;
+  }
+
+  /**
+   * Cria a conta de um cliente (o cadastro público é fechado). O e-mail já nasce
+   * verificado; no primeiro login o usuário cria a própria organização.
+   */
+  async createUser(dto: CreateUserDto, actor: AdminActor) {
+    const email = dto.email.trim().toLowerCase();
+    const [existing] = await this.db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1);
+    if (existing) throw new ConflictException('Já existe um usuário com este e-mail.');
+
+    const rounds = Number(this.config.get('BCRYPT_ROUNDS', 12));
+    const [user] = await this.db
+      .insert(users)
+      .values({
+        email,
+        passwordHash: await bcrypt.hash(dto.password, rounds),
+        firstName: dto.firstName.trim(),
+        lastName: dto.lastName?.trim() || null,
+        emailVerifiedAt: new Date(),
+      })
+      .returning({ id: users.id, email: users.email, createdAt: users.createdAt });
+
+    void this.audit.log({
+      userId: actor.userId,
+      sessionId: actor.sessionId,
+      action: 'admin.user.created',
+      resourceType: 'user',
+      resourceId: user!.id,
+      newState: { email, firstName: dto.firstName.trim() },
+      metadata: { platformAdmin: true },
+      ipAddress: actor.ipAddress,
+      userAgent: actor.userAgent,
+      traceId: actor.traceId,
+    });
+    return user!;
   }
 
   // ── helpers ───────────────────────────────────────────────────

@@ -101,8 +101,10 @@ export function useAuth() {
     }
     storeTokens(data);
     const loaded = await loadUser();
-    // Admin da plataforma sem organização própria vai direto ao painel admin.
-    router.push(loaded?.isPlatformAdmin && !loaded.hasTenant ? '/admin' : '/');
+    // Admin da plataforma sem organização própria vai direto ao painel admin;
+    // usuário comum sem organização vai criar a primeira.
+    if (loaded?.hasTenant) router.push('/');
+    else router.push(loaded?.isPlatformAdmin ? '/admin' : '/auth/organizacao');
     return { requiresMfa: false };
   }, [storeTokens, loadUser, router]);
 

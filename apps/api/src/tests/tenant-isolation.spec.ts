@@ -12,6 +12,9 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
 import { AppModule } from '../app.module';
 
+// A suíte cria usuários pelo cadastro público, que é fechado por padrão.
+process.env.ALLOW_PUBLIC_SIGNUP = 'true';
+
 const TENANT_A = { name: 'Tenant Alpha', slug: `test-alpha-${Date.now()}` };
 const TENANT_B = { name: 'Tenant Beta', slug: `test-beta-${Date.now()}` };
 

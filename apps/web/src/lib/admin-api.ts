@@ -179,6 +179,9 @@ export const adminApi = {
   activity: (q: Query = {}) => api.get<Paginated<ActivityItem>>('/admin/activity', { params: clean(q) }),
   llm: () => api.get<{ model: string; rateLimits: RateLimitSnapshot | null }>('/admin/llm'),
 
+  createUser: (data: { email: string; firstName: string; lastName?: string; password: string }) =>
+    api.post<{ id: string; email: string; createdAt: string }>('/admin/users', data),
+
   suspend: (id: string, reason: string) => api.post(`/admin/tenants/${id}/suspend`, { reason }),
   reactivate: (id: string) => api.post(`/admin/tenants/${id}/reactivate`),
   extendTrial: (id: string, days: number) => api.post(`/admin/tenants/${id}/extend-trial`, { days }),
@@ -266,6 +269,7 @@ export const ACTION_LABELS: Record<string, string> = {
   'admin.tenant.reactivated': 'Organização reativada (admin)',
   'admin.tenant.trial_extended': 'Trial estendido (admin)',
   'admin.tenant.token_limit_set': 'Limite de tokens alterado (admin)',
+  'admin.user.created': 'Usuário criado (admin)',
 };
 
 export const actionLabel = (a: string): string => ACTION_LABELS[a] ?? a;

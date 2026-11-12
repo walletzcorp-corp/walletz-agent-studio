@@ -2,17 +2,20 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ShieldCheck } from 'lucide-react';
+import { ShieldCheck, UserPlus } from 'lucide-react';
+import { Button } from '@walletz/ui';
 import {
   adminApi, apiErrorMessage, fmtAgo, fmtDate, fmtInt, type AdminUserRow, type Paginated,
 } from '../../../../lib/admin-api';
 import { EmptyState, ErrorBlock, LoadingBlock, PageHeader, Pagination } from '../../_components/admin-ui';
+import { NovoUsuario } from './novo-usuario';
 
 export default function AdminUsuariosPage() {
   const [page, setPage] = useState(1);
   const [data, setData] = useState<Paginated<AdminUserRow> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -34,7 +37,14 @@ export default function AdminUsuariosPage() {
       <PageHeader
         title="Usuários"
         subtitle={data ? `${fmtInt(data.total)} usuário(s) cadastrados` : 'Usuários da plataforma'}
+        right={!creating && (
+          <Button onClick={() => setCreating(true)} className="gap-2">
+            <UserPlus className="h-4 w-4" />
+            Novo usuário
+          </Button>
+        )}
       />
+      {creating && <NovoUsuario onClose={() => setCreating(false)} onCreated={() => void load()} />}
       {error ? <ErrorBlock message={error} onRetry={load} /> : loading && !data ? <LoadingBlock /> : !data || data.items.length === 0 ? (
         <EmptyState text="Nenhum usuário." />
       ) : (

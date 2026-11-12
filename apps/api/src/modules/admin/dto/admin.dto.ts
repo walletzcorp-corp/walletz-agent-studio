@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  IsEmail,
   IsIn,
   IsInt,
   IsOptional,
@@ -130,4 +131,27 @@ export class SetTokenLimitDto {
   @Min(0)
   @Max(2_000_000_000)
   limit!: number | null;
+}
+
+export class CreateUserDto {
+  @ApiProperty({ example: 'cliente@empresa.com.br' })
+  @IsEmail({}, { message: 'E-mail inválido' })
+  @MaxLength(254)
+  email!: string;
+
+  @ApiProperty({ example: 'Maria' })
+  @IsString()
+  @Length(1, 100, { message: 'Informe o nome' })
+  firstName!: string;
+
+  @ApiPropertyOptional({ example: 'Silva' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  lastName?: string;
+
+  @ApiProperty({ minLength: 8, description: 'Senha inicial; o usuário pode trocar depois' })
+  @IsString()
+  @Length(8, 100, { message: 'A senha precisa ter entre 8 e 100 caracteres' })
+  password!: string;
 }
