@@ -66,12 +66,37 @@ export interface Paginated<T> {
   pageSize: number;
 }
 
+export type CustomerType = 'pf' | 'pj';
+
+export const customerTypeLabel = (t: CustomerType): string => (t === 'pf' ? 'Pessoa física' : 'Pessoa jurídica');
+
+export interface CreateCustomerInput {
+  type: CustomerType;
+  name: string;
+  taxId: string;
+  email: string;
+  phone?: string;
+  contactName?: string;
+  password?: string;
+}
+
+export interface CreatedCustomer {
+  tenantId: string;
+  slug: string;
+  ownerUserId: string;
+  ownerEmail: string;
+  ownerUserCreated: boolean;
+}
+
 export interface AdminTenantRow {
   id: string;
   name: string;
   slug: string;
   status: string;
   planId: string | null;
+  customerType: CustomerType;
+  /** CPF mascarado (***.456.789-**) ou CNPJ formatado */
+  taxIdMasked: string | null;
   trialEndsAt: string | null;
   createdAt: string;
   ownerEmail: string | null;
@@ -91,6 +116,9 @@ export interface AdminTenantDetail {
     slug: string;
     status: string;
     planId: string | null;
+    customerType: CustomerType;
+    taxId: string | null;
+    contactPhone: string | null;
     trialEndsAt: string | null;
     timezone: string;
     locale: string;
@@ -178,6 +206,8 @@ export const adminApi = {
   users: (q: Query = {}) => api.get<Paginated<AdminUserRow>>('/admin/users', { params: clean(q) }),
   activity: (q: Query = {}) => api.get<Paginated<ActivityItem>>('/admin/activity', { params: clean(q) }),
   llm: () => api.get<{ model: string; rateLimits: RateLimitSnapshot | null }>('/admin/llm'),
+
+  createCustomer: (data: CreateCustomerInput) => api.post<CreatedCustomer>('/admin/tenants', data),
 
   createUser: (data: { email: string; firstName: string; lastName?: string; password: string }) =>
     api.post<{ id: string; email: string; createdAt: string }>('/admin/users', data),
@@ -270,6 +300,7 @@ export const ACTION_LABELS: Record<string, string> = {
   'admin.tenant.trial_extended': 'Trial estendido (admin)',
   'admin.tenant.token_limit_set': 'Limite de tokens alterado (admin)',
   'admin.user.created': 'Usuário criado (admin)',
+  'admin.tenant.created': 'Cliente cadastrado (admin)',
 };
 
 export const actionLabel = (a: string): string => ACTION_LABELS[a] ?? a;

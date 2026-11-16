@@ -2,15 +2,16 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Search } from 'lucide-react';
-import { cn } from '@walletz/ui';
+import { Search, UserPlus } from 'lucide-react';
+import { Button, cn } from '@walletz/ui';
 import {
-  adminApi, apiErrorMessage, fmtAgo, fmtDate, fmtInt, templateLabel,
+  adminApi, apiErrorMessage, customerTypeLabel, fmtAgo, fmtDate, fmtInt, templateLabel,
   type AdminTenantRow, type Paginated,
 } from '../../../../lib/admin-api';
 import {
   EmptyState, ErrorBlock, LoadingBlock, PageHeader, Pagination, TenantStatusBadge, UsageMeter,
 } from '../../_components/admin-ui';
+import { NovoCliente } from './novo-cliente';
 
 const FILTERS = [
   { id: '', label: 'Todos' },
@@ -20,8 +21,16 @@ const FILTERS = [
   { id: 'cancelled', label: 'Cancelados' },
 ];
 
+const TYPE_FILTERS = [
+  { id: '', label: 'PF e PJ' },
+  { id: 'pf', label: 'Pessoa física' },
+  { id: 'pj', label: 'Pessoa jurídica' },
+];
+
 export default function AdminClientesPage() {
   const [status, setStatus] = useState('');
+  const [customerType, setCustomerType] = useState('');
+  const [creating, setCreating] = useState(false);
   const [search, setSearch] = useState('');
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
@@ -33,14 +42,14 @@ export default function AdminClientesPage() {
     setLoading(true);
     setError(null);
     try {
-      const { data } = await adminApi.tenants({ status, search: query, page, pageSize: 25 });
+      const { data } = await adminApi.tenants({ status, customerType, search: query, page, pageSize: 25 });
       setData(data);
     } catch (err) {
       setError(apiErrorMessage(err));
     } finally {
       setLoading(false);
     }
-  }, [status, query, page]);
+  }, [status, customerType, query, page]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -54,8 +63,16 @@ export default function AdminClientesPage() {
     <div className="page-container space-y-5">
       <PageHeader
         title="Clientes"
-        subtitle={data ? `${fmtInt(data.total)} organização(ões) encontrada(s)` : 'Organizações cadastradas na plataforma'}
+        subtitle={data ? `${fmtInt(data.total)} cliente(s) encontrado(s)` : 'Clientes cadastrados na plataforma'}
+        right={!creating && (
+          <Button onClick={() => setCreating(true)} className="gap-2">
+            <UserPlus className="h-4 w-4" />
+            Novo cliente
+          </Button>
+        )}
       />
+
+      {creating && <NovoCliente onClose={() => setCreating(false)} onCreated={() => void load()} />}
 
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative w-full max-w-sm">
@@ -63,7 +80,7 @@ export default function AdminClientesPage() {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por nome, slug ou e-mail"
+            placeholder="Buscar por nome, e-mail, CPF ou CNPJ"
             className="w-full rounded-lg border border-border bg-surface-1 py-2 pl-9 pr-3 text-sm focus:border-primary/50 focus:outline-none"
           />
         </div>
@@ -81,6 +98,20 @@ export default function AdminClientesPage() {
             </button>
           ))}
         </div>
+        <div className="flex flex-wrap gap-1">
+          {TYPE_FILTERS.map((f) => (
+            <button
+              key={f.id || 'all'}
+              onClick={() => { setCustomerType(f.id); setPage(1); }}
+              className={cn(
+                'rounded-full border px-3 py-1 text-xs transition-colors',
+                customerType === f.id ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {error ? (
@@ -88,13 +119,14 @@ export default function AdminClientesPage() {
       ) : loading && !data ? (
         <LoadingBlock />
       ) : !data || data.items.length === 0 ? (
-        <EmptyState text="Nenhuma organização encontrada." />
+        <EmptyState text="Nenhum cliente encontrado." />
       ) : (
         <div className="overflow-x-auto rounded-xl border border-border bg-card">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border text-left text-xs text-muted-foreground">
-                <th className="px-4 py-3 font-medium">Organização</th>
+                <th className="px-4 py-3 font-medium">Cliente</th>
+                <th className="px-3 py-3 font-medium">Tipo / documento</th>
                 <th className="px-3 py-3 font-medium">Status</th>
                 <th className="px-3 py-3 font-medium text-right">Membros</th>
                 <th className="px-3 py-3 font-medium text-right">Agentes</th>
@@ -110,6 +142,12 @@ export default function AdminClientesPage() {
                   <td className="px-4 py-3">
                     <Link href={`/admin/clientes/${t.id}`} className="font-medium text-foreground hover:text-primary">{t.name}</Link>
                     <p className="text-xs text-muted-foreground">{t.ownerEmail ?? t.slug}</p>
+                  </td>
+                  <td className="px-3 py-3 text-xs">
+                    <span className={cn('rounded-full px-2 py-0.5', t.customerType === 'pf' ? 'bg-sky-500/10 text-sky-400' : 'bg-violet-500/10 text-violet-400')}>
+                      {t.customerType === 'pf' ? 'PF' : 'PJ'}
+                    </span>
+                    <p className="mt-1 tabular-nums text-muted-foreground" title={customerTypeLabel(t.customerType)}>{t.taxIdMasked ?? '—'}</p>
                   </td>
                   <td className="px-3 py-3">
                     <TenantStatusBadge status={t.status} />

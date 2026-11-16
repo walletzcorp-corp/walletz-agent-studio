@@ -124,3 +124,22 @@ Ver detalhes em [EXTERNAL_BLOCKERS.md](EXTERNAL_BLOCKERS.md).
 | **Correção de segurança**: `state` do OAuth de agenda | ✅ | antes era o tenant em base64 (forjável: ligar uma agenda a outra organização); agora é código aleatório de uso único no Redis (10 min) com tenant/usuário/provedor |
 | Credenciais Google/Microsoft em produção | ⏳ | faltam `GOOGLE_OAUTH_CLIENT_ID/SECRET/REDIRECT_URI` no `api.env` |
 | Criação da organização no primeiro acesso (`/auth/organizacao`) | ✅ | antes não havia tela para criar o tenant: usuário novo ficava com todas as telas do painel carregando; o layout do painel agora redireciona quem não tem organização |
+
+## Documentação da API (2026-11-13)
+
+| Item | Status | Evidência |
+|------|--------|-----------|
+| Swagger somente local | ✅ | desligado com `NODE_ENV=production/staging` (rotas nem registradas) + só responde a Host `localhost`/`127.0.0.1`/`[::1]`; testado: produção → 404 em `/api/docs` e `/api/docs-json` até via localhost; dev com Host público → 404 |
+| Todas as rotas descritas | ✅ | 121 rotas em 16 módulos, 0 sem resumo |
+| Documentação gerada | ✅ | `docs/api/openapi.json` + `docs/api/REFERENCE.md` via `pnpm --filter @walletz/api docs:openapi`; guia em `docs/api/README.md` |
+| Testes | ✅ | `shared/docs/__tests__/swagger.spec.ts` (6) |
+
+## Cadastro de clientes PF/PJ pelo admin (2026-11-16)
+
+| Item | Status | Evidência |
+|------|--------|-----------|
+| Tipo de cliente PF/PJ, CPF/CNPJ e telefone na organização | ✅ | migration `0005_customer-type` (padrão `pj` para as existentes); documento único entre clientes ativos |
+| `POST /v1/admin/tenants` cria organização + login do responsável + vínculo de dono numa transação | ✅ | e-mail já existente é vinculado sem trocar a senha; trial de 14 dias; auditado como `admin.tenant.created` com CPF mascarado |
+| Validação de CPF/CNPJ (dígitos verificadores) no servidor e no front | ✅ | `shared/validation/tax-id.ts`; 400 "CPF inválido" / 409 "Já existe um cliente com este CPF." |
+| Painel `/admin/clientes`: botão "Novo cliente", filtro PF/PJ, coluna tipo/documento, busca por CPF/CNPJ | ✅ | CPF mascarado na lista (`***.456.789-**`), completo só no detalhe |
+| Testes | ✅ | unit 10 (CPF/CNPJ + DTO); E2E API 13/13 com banco real (inclui 403 para não-admin e campo extra recusado); navegador 6/6 |

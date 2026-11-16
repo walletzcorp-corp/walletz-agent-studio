@@ -11,13 +11,31 @@ import {
   MaxLength,
   Min,
   ValidateIf,
+  Validate,
+  ValidatorConstraint,
+  type ValidationArguments,
+  type ValidatorConstraintInterface,
 } from 'class-validator';
+import { isValidTaxId, type CustomerType } from '../../../shared/validation/tax-id';
+
+@ValidatorConstraint({ name: 'taxIdMatchesType' })
+class TaxIdMatchesType implements ValidatorConstraintInterface {
+  validate(value: unknown, args: ValidationArguments): boolean {
+    const type = (args.object as { type?: CustomerType }).type;
+    return typeof value === 'string' && (type === 'pf' || type === 'pj') && isValidTaxId(type, value);
+  }
+  defaultMessage(args: ValidationArguments): string {
+    return (args.object as { type?: CustomerType }).type === 'pj' ? 'CNPJ inválido' : 'CPF inválido';
+  }
+}
 
 export const TENANT_STATUSES = ['trial', 'active', 'suspended', 'cancelled'] as const;
 export type TenantStatusFilter = (typeof TENANT_STATUSES)[number];
 
+export const CUSTOMER_TYPES = ['pf', 'pj'] as const;
+
 export class ListTenantsQueryDto {
-  @ApiPropertyOptional({ description: 'Busca por nome, slug ou e-mail do dono' })
+  @ApiPropertyOptional({ description: 'Busca por nome, slug, e-mail do dono ou CPF/CNPJ' })
   @IsOptional()
   @IsString()
   @MaxLength(120)
@@ -27,6 +45,11 @@ export class ListTenantsQueryDto {
   @IsOptional()
   @IsIn(TENANT_STATUSES)
   status?: TenantStatusFilter;
+
+  @ApiPropertyOptional({ enum: CUSTOMER_TYPES, description: 'pf = pessoa física, pj = pessoa jurídica' })
+  @IsOptional()
+  @IsIn(CUSTOMER_TYPES)
+  customerType?: CustomerType;
 
   @ApiPropertyOptional({ default: 1, minimum: 1 })
   @IsOptional()
@@ -154,4 +177,45 @@ export class CreateUserDto {
   @IsString()
   @Length(8, 100, { message: 'A senha precisa ter entre 8 e 100 caracteres' })
   password!: string;
+}
+
+/** Cadastro de cliente pelo admin: cria a organização + o login do responsável. */
+export class CreateCustomerDto {
+  @ApiProperty({ enum: CUSTOMER_TYPES, description: 'pf = pessoa física (CPF), pj = pessoa jurídica (CNPJ)' })
+  @IsIn(CUSTOMER_TYPES, { message: 'Tipo deve ser pf ou pj' })
+  type!: CustomerType;
+
+  @ApiProperty({ example: 'Maria da Silva', description: 'PF: nome completo. PJ: nome da empresa' })
+  @IsString()
+  @Length(2, 120, { message: 'Informe o nome (2 a 120 caracteres)' })
+  name!: string;
+
+  @ApiProperty({ example: '529.982.247-25', description: 'CPF (PF) ou CNPJ (PJ), com ou sem pontuação' })
+  @IsString()
+  @MaxLength(20)
+  @Validate(TaxIdMatchesType)
+  taxId!: string;
+
+  @ApiProperty({ example: 'maria@email.com', description: 'E-mail de login do responsável' })
+  @IsEmail({}, { message: 'E-mail inválido' })
+  @MaxLength(254)
+  email!: string;
+
+  @ApiPropertyOptional({ example: '41999998888' })
+  @IsOptional()
+  @IsString()
+  @Length(10, 20, { message: 'Telefone inválido' })
+  phone?: string;
+
+  @ApiPropertyOptional({ example: 'João Souza', description: 'PJ: nome do responsável. PF: ignorado (usa o nome do cliente)' })
+  @ValidateIf((o: CreateCustomerDto) => o.type === 'pj')
+  @IsString()
+  @Length(2, 120, { message: 'Informe o nome do responsável' })
+  contactName?: string;
+
+  @ApiPropertyOptional({ minLength: 8, description: 'Senha inicial. Obrigatória quando o e-mail ainda não tem conta' })
+  @IsOptional()
+  @IsString()
+  @Length(8, 100, { message: 'A senha precisa ter entre 8 e 100 caracteres' })
+  password?: string;
 }

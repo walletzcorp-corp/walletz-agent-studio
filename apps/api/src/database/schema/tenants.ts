@@ -7,7 +7,9 @@ import {
   jsonb,
   pgEnum,
   uniqueIndex,
+  index,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { createId } from '../utils/id';
 
 export const tenantStatusEnum = pgEnum('tenant_status', [
@@ -16,6 +18,9 @@ export const tenantStatusEnum = pgEnum('tenant_status', [
   'suspended',
   'cancelled',
 ]);
+
+/** Tipo do cliente: pessoa física (CPF) ou jurídica (CNPJ). */
+export const customerTypeEnum = pgEnum('customer_type', ['pf', 'pj']);
 
 export const tenants = pgTable(
   'tenants',
@@ -36,12 +41,19 @@ export const tenants = pgTable(
      *  Coluna própria (não `settings`) para o tenant não conseguir alterá-la
      *  via PATCH /settings; só o admin da plataforma define. */
     llmMonthlyTokenLimit: integer('llm_monthly_token_limit'),
+    /** Dados cadastrais do cliente: definidos pelo admin da plataforma, fora de `settings`. */
+    customerType: customerTypeEnum('customer_type').notNull().default('pj'),
+    /** CPF (11 dígitos) ou CNPJ (14 dígitos), só números. */
+    taxId: text('tax_id'),
+    contactPhone: text('contact_phone'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
   (table) => ({
     slugIdx: uniqueIndex('tenants_slug_idx').on(table.slug),
+    taxIdIdx: uniqueIndex('tenants_tax_id_idx').on(table.taxId).where(sql`${table.deletedAt} IS NULL AND ${table.taxId} IS NOT NULL`),
+    customerTypeIdx: index('tenants_customer_type_idx').on(table.customerType),
   }),
 );
 

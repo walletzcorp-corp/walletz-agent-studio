@@ -10,7 +10,9 @@ import * as bcrypt from 'bcryptjs';
 import { and, eq, isNull, sql, type SQL } from 'drizzle-orm';
 import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';
 import { tenants, type Tenant } from '../../database/schema/tenants';
-import { users } from '../../database/schema/users';
+import { memberships, users } from '../../database/schema/users';
+import { randomBytes } from 'crypto';
+import { formatTaxId, maskTaxId, onlyDigits } from '../../shared/validation/tax-id';
 import { AuditService } from '../../shared/audit/audit.service';
 import {
   LlmUsageService,
@@ -18,6 +20,7 @@ import {
   type RateLimitSnapshot,
 } from '../../shared/llm-usage/llm-usage.service';
 import type {
+  CreateCustomerDto,
   CreateUserDto,
   ListActivityQueryDto,
   ListAgentsQueryDto,
@@ -221,9 +224,12 @@ export class AdminService {
 
     const conds: SQL[] = [sql`t.deleted_at IS NULL`];
     if (query.status) conds.push(sql`t.status::text = ${query.status}`);
+    if (query.customerType) conds.push(sql`t.customer_type::text = ${query.customerType}`);
     if (query.search) {
       const like = `%${query.search.trim()}%`;
-      conds.push(sql`(t.name ILIKE ${like} OR t.slug ILIKE ${like} OR EXISTS (
+      const digits = onlyDigits(query.search);
+      const taxCond = digits.length >= 3 ? sql` OR t.tax_id LIKE ${`%${digits}%`}` : sql``;
+      conds.push(sql`(t.name ILIKE ${like} OR t.slug ILIKE ${like}${taxCond} OR EXISTS (
         SELECT 1 FROM memberships m JOIN users us ON us.id = m.user_id
         WHERE m.tenant_id = t.id AND us.email ILIKE ${like}))`);
     }
@@ -232,6 +238,7 @@ export class AdminService {
     const [items, totalRows] = await Promise.all([
       this.rows(sql`
         SELECT t.id, t.name, t.slug, t.status::text AS status, t.plan_id, t.trial_ends_at,
+               t.customer_type::text AS customer_type, t.tax_id,
                t.created_at, t.llm_monthly_token_limit AS token_limit,
                (SELECT us.email FROM memberships m JOIN users us ON us.id = m.user_id
                  WHERE m.tenant_id = t.id AND m.role = 'owner' ORDER BY m.created_at LIMIT 1) AS owner_email,
@@ -314,6 +321,9 @@ export class AdminService {
         slug: tenant.slug,
         status: tenant.status,
         planId: tenant.planId,
+        customerType: tenant.customerType,
+        taxId: tenant.taxId ? formatTaxId(tenant.taxId) : null,
+        contactPhone: tenant.contactPhone,
         trialEndsAt: tenant.trialEndsAt,
         timezone: tenant.timezone,
         locale: tenant.locale,
@@ -612,7 +622,129 @@ export class AdminService {
     return user!;
   }
 
+  /**
+   * Cadastra um cliente (PF ou PJ): organização + login do responsável como dono.
+   * Se o e-mail já tem conta, vincula esse usuário como dono (senha não é alterada).
+   * Tudo numa transação: ou cria tudo, ou nada.
+   */
+  async createCustomer(dto: CreateCustomerDto, actor: AdminActor) {
+    const taxId = onlyDigits(dto.taxId);
+    const email = dto.email.trim().toLowerCase();
+    const name = dto.name.trim().replace(/\s+/g, ' ');
+    const docLabel = dto.type === 'pf' ? 'CPF' : 'CNPJ';
+
+    const [dupTax] = await this.db
+      .select({ id: tenants.id })
+      .from(tenants)
+      .where(and(eq(tenants.taxId, taxId), isNull(tenants.deletedAt)))
+      .limit(1);
+    if (dupTax) throw new ConflictException(`Já existe um cliente com este ${docLabel}.`);
+
+    const [existingUser] = await this.db
+      .select({ id: users.id })
+      .from(users)
+      .where(and(eq(users.email, email), isNull(users.deletedAt)))
+      .limit(1);
+    if (!existingUser && !dto.password) {
+      throw new BadRequestException('Informe a senha inicial: este e-mail ainda não tem conta.');
+    }
+
+    const ownerName = dto.type === 'pf' ? name : (dto.contactName ?? '').trim().replace(/\s+/g, ' ');
+    const [firstName, ...rest] = ownerName.split(' ');
+    const passwordHash = existingUser
+      ? null
+      : await bcrypt.hash(dto.password!, Number(this.config.get('BCRYPT_ROUNDS', 12)));
+
+    let result: { tenantId: string; slug: string; userId: string };
+    try {
+      result = await this.db.transaction(async (tx) => {
+        let userId = existingUser?.id;
+        if (!userId) {
+          const [user] = await tx
+            .insert(users)
+            .values({
+              email,
+              passwordHash: passwordHash!,
+              firstName: firstName ?? name,
+              lastName: rest.join(' ') || null,
+              emailVerifiedAt: new Date(),
+            })
+            .returning({ id: users.id });
+          userId = user!.id;
+        }
+
+        const slug = await this.uniqueSlug(name);
+        const [tenant] = await tx
+          .insert(tenants)
+          .values({
+            name,
+            slug,
+            status: 'trial',
+            trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+            customerType: dto.type,
+            taxId,
+            contactPhone: dto.phone ? onlyDigits(dto.phone) : null,
+          })
+          .returning({ id: tenants.id, slug: tenants.slug });
+
+        await tx.insert(memberships).values({
+          tenantId: tenant!.id,
+          userId,
+          role: 'owner',
+          status: 'active',
+        });
+        return { tenantId: tenant!.id, slug: tenant!.slug, userId };
+      });
+    } catch (err) {
+      if ((err as { code?: string }).code === '23505') {
+        throw new ConflictException(`Já existe um cliente com este ${docLabel} ou e-mail.`);
+      }
+      throw err;
+    }
+
+    void this.audit.log({
+      tenantId: result.tenantId,
+      userId: actor.userId,
+      sessionId: actor.sessionId,
+      action: 'admin.tenant.created',
+      resourceType: 'tenant',
+      resourceId: result.tenantId,
+      // Documento mascarado: auditoria não guarda CPF completo (LGPD)
+      newState: { name, customerType: dto.type, taxId: maskTaxId(taxId), ownerEmail: email },
+      metadata: { platformAdmin: true, ownerUserCreated: !existingUser },
+      ipAddress: actor.ipAddress,
+      userAgent: actor.userAgent,
+      traceId: actor.traceId,
+    });
+
+    return {
+      tenantId: result.tenantId,
+      slug: result.slug,
+      ownerUserId: result.userId,
+      ownerEmail: email,
+      ownerUserCreated: !existingUser,
+    };
+  }
+
   // ── helpers ───────────────────────────────────────────────────
+
+  /** Slug a partir do nome (sem acento), com sufixo aleatório se já existir. */
+  private async uniqueSlug(name: string): Promise<string> {
+    const base =
+      name
+        .normalize('NFD')
+        .replace(/[̀-ͯ]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 40) || 'cliente';
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const slug = attempt === 0 ? base : `${base}-${randomBytes(3).toString('hex')}`;
+      const [taken] = await this.db.select({ id: tenants.id }).from(tenants).where(eq(tenants.slug, slug)).limit(1);
+      if (!taken) return slug;
+    }
+    return `${base}-${randomBytes(6).toString('hex')}`;
+  }
 
   private async findTenantOrThrow(tenantId: string): Promise<Tenant> {
     const [tenant] = await this.db
@@ -674,6 +806,8 @@ function mapTenantRow(r: Row) {
     slug: String(r['slug']),
     status: String(r['status']),
     planId: (r['plan_id'] as string | null) ?? null,
+    customerType: String(r['customer_type'] ?? 'pj') as 'pf' | 'pj',
+    taxIdMasked: maskTaxId(r['tax_id'] as string | null),
     trialEndsAt: r['trial_ends_at'] ?? null,
     createdAt: r['created_at'],
     ownerEmail: (r['owner_email'] as string | null) ?? null,

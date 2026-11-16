@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@walletz/ui';
 import {
-  AGENT_STATUS, adminApi, apiErrorMessage, fmtAgo, fmtCompact, fmtDate, fmtInt, templateLabel,
+  AGENT_STATUS, adminApi, apiErrorMessage, customerTypeLabel, fmtAgo, fmtCompact, fmtDate, fmtInt, templateLabel,
   type AdminTenantDetail,
 } from '../../../../../lib/admin-api';
 import {
@@ -98,6 +98,9 @@ export default function AdminClienteDetailPage() {
         </Section>
         <Section title="Período">
           <dl className="space-y-2 text-sm">
+            <div className="flex justify-between"><dt className="text-muted-foreground">Tipo</dt><dd>{customerTypeLabel(tenant.customerType)}</dd></div>
+            <div className="flex justify-between"><dt className="text-muted-foreground">{tenant.customerType === 'pf' ? 'CPF' : 'CNPJ'}</dt><dd className="tabular-nums">{tenant.taxId ?? 'não informado'}</dd></div>
+            {tenant.contactPhone && <div className="flex justify-between"><dt className="text-muted-foreground">Telefone</dt><dd className="tabular-nums">{tenant.contactPhone}</dd></div>}
             <div className="flex justify-between"><dt className="text-muted-foreground">Status</dt><dd><TenantStatusBadge status={tenant.status} /></dd></div>
             <div className="flex justify-between"><dt className="text-muted-foreground">Trial até</dt><dd>{fmtDate(tenant.trialEndsAt)}</dd></div>
             <div className="flex justify-between"><dt className="text-muted-foreground">Plano</dt><dd>{tenant.planId ?? 'sem plano'}</dd></div>

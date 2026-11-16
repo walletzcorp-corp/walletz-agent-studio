@@ -19,6 +19,7 @@ import type { JwtPayload } from '../auth/auth.service';
 import { PlatformAdminGuard } from './guards/platform-admin.guard';
 import { AdminService, type AdminActor } from './admin.service';
 import {
+  CreateCustomerDto,
   CreateUserDto,
   ExtendTrialDto,
   ListActivityQueryDto,
@@ -66,6 +67,12 @@ export class AdminController {
     const p = Math.max(1, Number(page) || 1);
     const ps = Math.min(200, Math.max(1, Number(pageSize) || 50));
     return this.adminService.listUsers(p, ps);
+  }
+
+  @Post('tenants')
+  @ApiOperation({ summary: 'Cadastrar cliente PF (CPF) ou PJ (CNPJ): cria a organização e o login do responsável' })
+  createCustomer(@Body() dto: CreateCustomerDto, @CurrentUser() user: JwtPayload, @Req() req: Request) {
+    return this.adminService.createCustomer(dto, actorFrom(user, req));
   }
 
   @Post('users')
