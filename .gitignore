@@ -40,6 +40,9 @@ postgres_data/
 redis_data/
 minio_data/
 
+# Local file storage (user-uploaded content — never commit)
+apps/api/storage/
+
 # Security - NEVER commit these
 *.pem
 *.key
