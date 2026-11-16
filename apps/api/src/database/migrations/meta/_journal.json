@@ -57,6 +57,13 @@
       "when": 1794860762178,
       "tag": "0007_whatsapp-cliente",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794864652987,
+      "tag": "0008_conhecimento-rag",
+      "breakpoints": true
     }
   ]
 }

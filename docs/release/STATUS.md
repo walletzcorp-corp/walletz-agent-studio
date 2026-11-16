@@ -179,3 +179,25 @@ Base: *Walletz Studio IA — Planos Sugeridos*, proposta comercial v4.2 (16/11/2
 | `@CurrentUser('userId')` devolvia o objeto inteiro | ✅ corrigido | afetava WhatsApp, conversas, contatos, campanhas e privacidade (id do usuário errado em gravações e auditoria) |
 | Testes | ✅ | E2E local 19/19 (inclui recusa real da Meta para credenciais falsas, assinatura, isolamento) |
 | Teste com número real da Meta | ⏳ | depende de credenciais reais do cliente e de URL pública (`PUBLIC_API_URL`) |
+
+## Objetivo sem limite + base de conhecimento com storage local e RAG (2026-11-16)
+
+Pedido "Correção definitiva — objetivo principal + conhecimento + upload 100% local". Sem serviço externo: PostgreSQL + pgvector + disco local persistente.
+
+| Item | Status | Evidência |
+|------|--------|-----------|
+| Objetivo principal sem limite de caracteres | ✅ | `@MaxLength(500)` removido dos DTOs e `.max(500)` das telas; coluna já era `TEXT`; 64 mil caracteres e 300 parágrafos salvos, reabertos e editados sem truncar |
+| Limite técnico separado | ✅ | corpo JSON até 2 MB (`API_JSON_BODY_LIMIT`) → 413 claro (antes o filtro devolvia 500) |
+| Storage local persistente | ✅ | `STORAGE_PROVIDER=local`, `STORAGE_LOCAL_ROOT` (padrão `<api>/uploads` = `/app/uploads` no volume `prod_agent_studio_uploads`); `tenants/{tenantId}/knowledge/{id}/original.ext`; arquivos antigos continuam legíveis |
+| Segurança do caminho | ✅ | recusa `..`, absoluto, UNC, byte nulo, symlink que escapa; só IDs internos no caminho; arquivos sem permissão de execução, escrita atômica |
+| Validação pelo conteúdo | ✅ | PDF/DOCX/TXT/MD (+CSV/HTML); MIME falso, executável renomeado, vazio, `.doc` antigo e > 50 MB (`KNOWLEDGE_MAX_FILE_SIZE_MB`) recusados |
+| Status reais | ✅ | `uploaded → processing → indexing → ready / failed` (migration `0008_conhecimento-rag`); documentos parados são reenfileirados no boot |
+| Extração | ✅ | PDF (escaneado/corrompido → FAILED com mensagem), DOCX com títulos e listas, TXT/MD com UTF-8 ou Windows-1252, chunking sem perda e com sobreposição |
+| SHA-256 e deduplicação | ✅ | por tenant, sem cruzar organizações |
+| pgvector | ✅ | extensão instalada pela migration, `embedding vector(1536)`, índice HNSW (cosseno) e índice GIN full-text em português |
+| Embeddings com a IA do cliente | ✅ código / ⏳ teste real | OpenAI (`text-embedding-3-small`) ou Gemini (`gemini-embedding-001`, 1536 dim) com a chave BYOK; sem chave capaz → "Aguardando configuração de IA" e a busca textual funciona. Sem Voyage nem outro cadastro |
+| RAG | ✅ | busca vetorial + full-text (sem ILIKE), restrita ao tenant e ao agente; agente respondeu com dado único do documento |
+| Tela de conhecimento | ✅ | agente específico ou compartilhado, progresso do envio, nome/agente/tipo/tamanho/status/data, detalhes, baixar, reprocessar, alterar associação, excluir |
+| Exclusão sem órfãos | ✅ | arquivo, pasta, trechos e embeddings removidos |
+| Testes | ✅ | unit 29 (arquivos, extração, storage); E2E local 44/44 com reinício da API (persistência, F5, login, RAG, isolamento, segurança) |
+| Itens 39–41 (saúde do disco, espaço mínimo, backup) | ⏭ fora do escopo | removidos a pedido |

@@ -48,7 +48,8 @@ const AVAILABLE_TOOLS = [
 const editSchema = z.object({
   name: z.string().min(2).max(80),
   title: z.string().max(120).optional(),
-  objective: z.string().max(500).optional(),
+  // Sem limite funcional de caracteres: texto longo, vários parágrafos.
+  objective: z.string().optional(),
   tone: z.string(),
   language: z.string(),
   personaDescription: z.string().max(500).optional(),
@@ -335,8 +336,8 @@ export default function AgentDetailPage() {
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium">Objetivo</label>
                   <textarea
-                    rows={3}
-                    className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+                    rows={10}
+                    className="w-full min-h-[12rem] rounded-lg border border-input bg-background px-3 py-2 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-primary resize-y"
                     {...form.register('objective')}
                   />
                 </div>
@@ -408,7 +409,7 @@ export default function AgentDetailPage() {
                 {agent.objective && (
                   <div>
                     <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Objetivo</dt>
-                    <dd className="mt-1 text-sm">{agent.objective}</dd>
+                    <dd className="mt-1 text-sm whitespace-pre-wrap break-words">{agent.objective}</dd>
                   </div>
                 )}
                 {(agent.persona as { description?: string })?.description && (

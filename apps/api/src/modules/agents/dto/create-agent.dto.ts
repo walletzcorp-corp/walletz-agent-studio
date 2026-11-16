@@ -33,10 +33,9 @@ export class CreateAgentDto {
   @IsEnum(['sdr', 'commercial', 'reception_scheduling', 'customer_service', 'post_sale', 'collection', 'faq', 'custom'])
   template?: AgentTemplate;
 
-  @ApiProperty({ required: false, maxLength: 500 })
+  @ApiProperty({ required: false, description: 'Objetivo principal: texto longo, vários parágrafos, sem limite funcional de caracteres' })
   @IsOptional()
   @IsString()
-  @MaxLength(500)
   objective?: string;
 
   @ApiProperty({ required: false })

@@ -22,6 +22,7 @@ import { PlanLimitsService } from '../../shared/plans/plan-limits.service';
 import { parseRateLimitHeaders } from '../../shared/llm-usage/llm-usage.service';
 import { getAdapter, pickDefaultModel, PROVIDER_CATALOG, type ProviderInfo } from './llm/provider-catalog';
 import { LlmProviderError, type LlmAdapter } from './llm/llm.types';
+import { embeddingModelId, generateEmbeddings, type EmbeddingPurpose } from './llm/embeddings';
 import type { CreateAiConnectionDto, UpdateAiConnectionDto } from './dto/ai-connection.dto';
 
 /** Conexão como sai da API: a chave nunca é exposta, só a máscara. */
@@ -453,6 +454,48 @@ export class AiProvidersService {
     }
     const apiKey = this.decryptKey(row);
     return { connectionId: row.id, provider: row.provider, model: row.defaultModel, apiKey, adapter: getAdapter(row.provider) };
+  }
+
+  /**
+   * Conexão do cliente capaz de gerar embeddings (OpenAI ou Gemini), preferindo a padrão.
+   * null = nenhuma — os documentos ficam com indexação "aguardando configuração de IA"
+   * (a busca textual continua funcionando).
+   */
+  async resolveEmbedder(tenantId: string): Promise<{
+    connectionId: string;
+    provider: AiProvider;
+    modelId: string;
+    embed: (texts: string[], purpose: EmbeddingPurpose) => Promise<number[][]>;
+  } | null> {
+    const rows = await this.db
+      .select()
+      .from(aiProviderConnections)
+      .where(
+        and(
+          eq(aiProviderConnections.tenantId, tenantId),
+          isNull(aiProviderConnections.deletedAt),
+          eq(aiProviderConnections.status, 'active'),
+        ),
+      )
+      .orderBy(asc(aiProviderConnections.createdAt));
+    const capable = rows.filter((r) => embeddingModelId(r.provider));
+    const row = capable.find((r) => r.isDefault) ?? capable.find((r) => r.provider === 'openai') ?? capable[0];
+    if (!row) return null;
+    const apiKey = this.decryptKey(row);
+    const modelId = embeddingModelId(row.provider)!;
+    return {
+      connectionId: row.id,
+      provider: row.provider,
+      modelId,
+      embed: async (texts, purpose) => {
+        try {
+          return await generateEmbeddings(row.provider, apiKey, texts, purpose);
+        } catch (err) {
+          if (err instanceof LlmProviderError) throw await this.handleProviderFailure(tenantId, row.id, err);
+          throw err;
+        }
+      },
+    };
   }
 
   /**

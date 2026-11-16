@@ -1,4 +1,5 @@
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe, VersioningType } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import helmet from 'helmet';
@@ -11,10 +12,16 @@ import { isSwaggerEnabled, setupSwagger, SWAGGER_PATH } from './shared/docs/swag
 async function bootstrap() {
   const logger = createLogger('Bootstrap');
 
-  const app = await NestFactory.create(AppModule, {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bufferLogs: true,
     rawBody: true,
   });
+
+  // Limite TÉCNICO do corpo JSON (proteção contra abuso), separado dos limites funcionais
+  // dos campos: o objetivo do agente e o conteúdo digitado não têm limite de caracteres.
+  // Uploads de arquivo usam multipart, com limite próprio (KNOWLEDGE_MAX_FILE_SIZE_MB).
+  app.useBodyParser('json', { limit: process.env['API_JSON_BODY_LIMIT'] ?? '2mb' });
+  app.useBodyParser('urlencoded', { limit: '1mb', extended: true });
 
   const configService = app.get(ConfigService);
 

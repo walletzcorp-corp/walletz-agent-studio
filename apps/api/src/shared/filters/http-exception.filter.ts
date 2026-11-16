@@ -19,13 +19,17 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const request = ctx.getRequest<Request>();
 
     const errorId = uuidv7();
-    const status =
-      exception instanceof HttpException ? exception.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
+    // Erros do body-parser (corpo grande demais, JSON malformado) chegam como Error com
+    // status/type próprios: viram 413/400 claros, não 500.
+    const parserError = clientErrorFromBodyParser(exception);
+    const status = exception instanceof HttpException
+      ? exception.getStatus()
+      : parserError?.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
 
     const message =
       exception instanceof HttpException
         ? exception.getResponse()
-        : 'Internal server error';
+        : parserError?.message ?? 'Internal server error';
 
     if (status >= 500) {
       logger.error({
@@ -46,4 +50,16 @@ export class HttpExceptionFilter implements ExceptionFilter {
       ...(typeof message === 'object' ? message : { message }),
     });
   }
+}
+
+function clientErrorFromBodyParser(exception: unknown): { status: number; message: string } | null {
+  if (!exception || typeof exception !== 'object') return null;
+  const e = exception as { type?: unknown; status?: unknown };
+  if (e.type === 'entity.too.large' || e.status === 413) {
+    return { status: HttpStatus.PAYLOAD_TOO_LARGE, message: 'A requisição é grande demais.' };
+  }
+  if (e.type === 'entity.parse.failed') {
+    return { status: HttpStatus.BAD_REQUEST, message: 'JSON inválido no corpo da requisição.' };
+  }
+  return null;
 }

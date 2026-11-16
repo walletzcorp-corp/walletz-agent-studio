@@ -1,4 +1,5 @@
-import { IsString, IsOptional, IsEnum, IsArray, IsInt, Min, Max } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsArray, IsInt, Min, Max, MaxLength, MinLength, ValidateIf } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export type KnowledgeSourceType = 'pdf' | 'docx' | 'xlsx' | 'csv' | 'txt' | 'html' | 'url' | 'faq' | 'typed';
@@ -7,6 +8,7 @@ export class UploadSourceDto {
   @ApiPropertyOptional({ description: 'Custom name for the source (defaults to filename)' })
   @IsOptional()
   @IsString()
+  @MaxLength(255)
   name?: string;
 
   @ApiPropertyOptional({ description: 'Restrict this source to a specific agent' })
@@ -22,6 +24,7 @@ export class UploadSourceDto {
 
   @ApiPropertyOptional({ description: 'Priority 0-100 for RAG retrieval', default: 0 })
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   @Min(0)
   @Max(100)
@@ -63,13 +66,22 @@ export class CreateUrlSourceDto {
 }
 
 export class CreateTypedSourceDto {
-  @ApiProperty({ description: 'Source name / title' })
+  @ApiProperty({ description: 'Título' })
   @IsString()
+  @MinLength(1)
+  @MaxLength(255)
   name!: string;
 
-  @ApiProperty({ description: 'Text content' })
+  @ApiProperty({ description: 'Conteúdo (sem limite funcional; o limite técnico é KNOWLEDGE_MAX_FILE_SIZE_MB)' })
   @IsString()
+  @MinLength(1)
   content!: string;
+
+  @ApiPropertyOptional({ description: 'Contexto opcional (quando/como usar este conteúdo)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  context?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -81,4 +93,11 @@ export class CreateTypedSourceDto {
   @IsArray()
   @IsString({ each: true })
   tags?: string[];
+}
+
+export class SetSourceAgentDto {
+  @ApiProperty({ nullable: true, description: 'Agente específico; null = compartilhado com todos os agentes' })
+  @ValidateIf((_o, v) => v !== null)
+  @IsString()
+  agentId!: string | null;
 }

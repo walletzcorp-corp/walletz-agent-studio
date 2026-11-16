@@ -23,10 +23,9 @@ export class UpdateAgentDto {
   @MaxLength(100)
   title?: string;
 
-  @ApiProperty({ required: false, maxLength: 500 })
+  @ApiProperty({ required: false, description: 'Objetivo principal: texto longo, vários parágrafos, sem limite funcional de caracteres' })
   @IsOptional()
   @IsString()
-  @MaxLength(500)
   objective?: string;
 
   @ApiProperty({ required: false })

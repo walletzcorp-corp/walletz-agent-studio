@@ -46,7 +46,8 @@ const AVAILABLE_TOOLS = [
 const step2Schema = z.object({
   name: z.string().min(2, 'Nome muito curto').max(80),
   title: z.string().max(120).optional(),
-  objective: z.string().max(500).optional(),
+  // Sem limite funcional de caracteres: texto longo, vários parágrafos.
+  objective: z.string().optional(),
 });
 
 const step3Schema = z.object({
@@ -244,9 +245,9 @@ export default function NovoAgentePage() {
             </label>
             <textarea
               id="objective"
-              rows={3}
-              placeholder="Descreva o que este agente deve fazer..."
-              className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+              rows={8}
+              placeholder="Descreva o que este agente deve fazer. Pode ser um texto longo, com vários parágrafos."
+              className="w-full min-h-[10rem] rounded-lg border border-input bg-background px-3 py-2 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-primary resize-y"
               {...form2.register('objective')}
             />
           </div>

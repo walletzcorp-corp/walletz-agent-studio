@@ -1,8 +1,9 @@
 import { Injectable, Inject, Logger, NotFoundException } from '@nestjs/common';
-import { eq, and, isNull, isNotNull, ilike, or } from 'drizzle-orm';
+import { eq, and, isNull, isNotNull } from 'drizzle-orm';
 import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';
 import { agents } from '../../database/schema/agents';
-import { knowledgeChunks, knowledgeSources, knowledgeItems } from '../../database/schema/knowledge';
+import { knowledgeItems } from '../../database/schema/knowledge';
+import { KnowledgeRetrievalService } from '../knowledge/knowledge-retrieval.service';
 import { createId } from '../../database/utils/id';
 import { SchedulingToolsService, type ToolContext } from '../calendars/scheduling-tools.service';
 import { PcConnectorService } from '../pc-connector/pc-connector.service';
@@ -141,6 +142,7 @@ export class LabService {
     private readonly pcConnector: PcConnectorService,
     private readonly llmUsage: LlmUsageService,
     private readonly aiProviders: AiProvidersService,
+    private readonly retrieval: KnowledgeRetrievalService,
   ) {}
 
   async chat(
@@ -299,55 +301,14 @@ export class LabService {
     }
   }
 
+  /** RAG: busca vetorial (pgvector) + full-text em português, restrita ao tenant e ao agente. */
   private async retrieveRelevantChunks(
     query: string,
     tenantId: string,
     agentId: string,
-    limit = 5,
   ): Promise<Array<{ content: string; sourceName: string }>> {
-    const words = query
-      .toLowerCase()
-      .split(/\s+/)
-      .filter((w) => w.length > 3)
-      .slice(0, 5);
-
-    if (words.length === 0) return [];
-
-    const processedSources = await this.db
-      .select({ id: knowledgeSources.id, name: knowledgeSources.name })
-      .from(knowledgeSources)
-      .where(
-        and(
-          eq(knowledgeSources.tenantId, tenantId),
-          eq(knowledgeSources.status, 'processed'),
-          isNull(knowledgeSources.deletedAt),
-          or(eq(knowledgeSources.agentId, agentId), isNull(knowledgeSources.agentId)),
-        ),
-      );
-
-    if (processedSources.length === 0) return [];
-
-    const sourceMap = new Map(processedSources.map((s) => [s.id, s.name]));
-    const sourceIds = processedSources.map((s) => s.id);
-    const firstWord = words[0]!;
-
-    const chunks = await this.db
-      .select({ content: knowledgeChunks.content, sourceId: knowledgeChunks.sourceId })
-      .from(knowledgeChunks)
-      .where(
-        and(
-          eq(knowledgeChunks.tenantId, tenantId),
-          ilike(knowledgeChunks.content, `%${firstWord}%`),
-        ),
-      )
-      .limit(limit);
-
-    return chunks
-      .filter((c) => sourceIds.includes(c.sourceId))
-      .map((c) => ({
-        content: c.content.slice(0, 500),
-        sourceName: sourceMap.get(c.sourceId) ?? 'Documento',
-      }));
+    const hits = await this.retrieval.search(tenantId, agentId, query, 5);
+    return hits.map((h) => ({ content: h.content.slice(0, 1500), sourceName: h.sourceName }));
   }
 
   private buildSystemPrompt(

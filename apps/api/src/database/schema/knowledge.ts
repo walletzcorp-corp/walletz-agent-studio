@@ -11,6 +11,7 @@ import {
   uniqueIndex,
   customType,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { createId } from '../utils/id';
 import { tenants } from './tenants';
 import { users } from './users';
@@ -41,13 +42,21 @@ export const knowledgeSourceTypeEnum = pgEnum('knowledge_source_type', [
   'typed',
 ]);
 
+/**
+ * Ciclo de vida de um documento: uploaded (arquivo salvo, na fila) → processing (extração e
+ * chunking) → indexing (embeddings) → ready | failed. UPLOADING existe só no cliente.
+ */
 export const knowledgeSourceStatusEnum = pgEnum('knowledge_source_status', [
-  'pending',
+  'uploaded',
   'processing',
-  'processed',
+  'indexing',
+  'ready',
   'failed',
   'outdated',
 ]);
+
+/** Situação da indexação vetorial (independente do texto, que já serve à busca textual). */
+export type KnowledgeIndexStatus = 'pending' | 'indexed' | 'awaiting_ai' | 'failed';
 
 export const knowledgeItemTypeEnum = pgEnum('knowledge_item_type', [
   'fact',
@@ -67,17 +76,22 @@ export const knowledgeSources = pgTable(
     agentId: text('agent_id').references(() => agents.id),
     name: text('name').notNull(),
     type: knowledgeSourceTypeEnum('type').notNull(),
-    status: knowledgeSourceStatusEnum('status').notNull().default('pending'),
+    status: knowledgeSourceStatusEnum('status').notNull().default('uploaded'),
     storageKey: text('storage_key'),
     url: text('url'),
     checksum: text('checksum'),
     mimeType: text('mime_type'),
+    /** Extensão validada pelo conteúdo (pdf, docx, txt, md, csv, html). */
+    extension: text('extension'),
     fileSizeBytes: integer('file_size_bytes'),
     tags: jsonb('tags').notNull().default([]),
     language: text('language').default('pt-BR'),
     priority: integer('priority').notNull().default(0),
     validUntil: timestamp('valid_until', { withTimezone: true }),
     processingError: text('processing_error'),
+    indexStatus: text('index_status').$type<KnowledgeIndexStatus>().notNull().default('pending'),
+    indexError: text('index_error'),
+    indexedAt: timestamp('indexed_at', { withTimezone: true }),
     processedAt: timestamp('processed_at', { withTimezone: true }),
     uploadedByUserId: text('uploaded_by_user_id').references(() => users.id),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -103,6 +117,8 @@ export const knowledgeChunks = pgTable(
       .references(() => knowledgeSources.id),
     content: text('content').notNull(),
     embedding: vector('embedding'),
+    /** provedor/modelo que gerou o embedding (só se compara vetores do mesmo modelo). */
+    embeddingModel: text('embedding_model'),
     metadata: jsonb('metadata').notNull().default({}),
     chunkIndex: integer('chunk_index').notNull(),
     tokenCount: integer('token_count'),
@@ -113,6 +129,10 @@ export const knowledgeChunks = pgTable(
     embeddingIdx: index('knowledge_chunks_embedding_idx').using(
       'hnsw',
       table.embedding.op('vector_cosine_ops'),
+    ),
+    contentFtsIdx: index('knowledge_chunks_content_fts_idx').using(
+      'gin',
+      sql`to_tsvector('portuguese', ${table.content})`,
     ),
   }),
 );
