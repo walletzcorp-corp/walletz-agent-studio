@@ -1,7 +1,7 @@
 # Status da Release — Walletz Agent Studio
 
-**Última atualização**: 2026-11-05  
-**Sprint atual**: fix/production-readiness — isolamento multi-tenant, WhatsApp→agenda, tools do agente
+**Última atualização**: 2026-11-16  
+**Sprint atual**: fix/production-readiness — isolamento multi-tenant, WhatsApp→agenda, tools do agente, objetivo sem limite, storage local, embeddings
 
 ---
 
@@ -17,7 +17,12 @@
 | ✅ Dependências | `pnpm audit --audit-level=high` sem achados (Next 15.5.29, drizzle-orm 0.45, zod 4, nodemailer 10, axios/multer/etc. + overrides) |
 | ✅ MFA em repouso | Segredo TOTP selado com AES-256-GCM (`enc:v1:`); segredos antigos em texto são selados no primeiro login com MFA; `ENCRYPTION_KEY` obrigatória em produção |
 | ✅ Worker | `apps/worker` + `QUEUE_ROLE=api|worker|all`: consumidores BullMQ e relay do outbox rodam em processo próprio (provado: job fica `waiting` só com a API e `completed` ao subir o worker) |
-| ⏳ Pendente | RAG (E), Billing (M, módulo não implementado), Analytics (L) |
+| ✅ Objetivo sem limite de caracteres | `@MaxLength(500)` removido dos DTOs e schemas Zod; textarea `rows=5`, `resize-y`; DB já era TEXT |
+| ✅ Storage local — base de conhecimento | `StorageService` reescrito: `tenants/{id}/knowledge/{fileId}/original.ext`, path traversal bloqueado, `0o644` (nunca executável), guard de disco (`STORAGE_MIN_FREE_GB=5`), endpoint `/health/storage`, SHA-256 por-tenant para deduplicação |
+| ✅ Embeddings (infraestrutura) | `EmbeddingService` via Voyage AI (parceiro recomendado pela Anthropic para RAG com Claude); degradação graciosa quando `VOYAGE_API_KEY` não configurada; `KnowledgeProcessor` persiste embeddings pós-chunking; tolerante a pgvector ausente |
+| ✅ Download de arquivo original | `GET /tenants/:tid/knowledge/:sid/download` autenticado; botão de download na página de conhecimento |
+| ✅ Página de conhecimento melhorada | Seletor de agente, barra de progresso de upload %, filtro por agente, labels de status em PT-BR, aceita `.md` |
+| ⏳ Pendente | RAG full (pgvector em produção + VOYAGE_API_KEY), Billing (M, módulo não implementado), Analytics (L) |
 | 🔴 Bloqueado externamente | `ANTHROPIC_API_KEY` real (testes dependentes ficam `BLOCKED_EXTERNAL_MISSING_CREDENTIAL`), app Meta/WhatsApp em produção, consentimento Google/Microsoft, Stripe |
 
 ### Evidência executada (2026-11-05, banco E2E recriado do zero + migrações)
