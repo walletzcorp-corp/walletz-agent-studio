@@ -146,6 +146,24 @@ export class LabService {
   ) {}
 
   /**
+   * Runs one agent turn using an externally-supplied history (from persisted lab_messages).
+   * Called by the new conversation-aware controller; the old `chat()` method is kept for
+   * backward compatibility.
+   */
+  async chatWithHistory(
+    dto: { agentId: string; message: string },
+    history: Array<{ role: 'user' | 'assistant'; content: string }>,
+    ctx: AgentExecutionContext,
+  ): Promise<LabChatResult> {
+    const compatDto: LabChatDto = {
+      agentId: dto.agentId,
+      message: dto.message,
+      history: history.map((m) => ({ role: m.role, content: m.content })),
+    };
+    return this.chat(compatDto, ctx);
+  }
+
+  /**
    * Runs one agent turn. Everything security-relevant comes from `ctx`, which only the server
    * can build: the model, the request body and tool inputs can never change tenant, contact,
    * conversation or channel.

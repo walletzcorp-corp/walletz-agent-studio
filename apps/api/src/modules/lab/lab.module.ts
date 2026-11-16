@@ -5,6 +5,7 @@ import { CalendarsModule } from '../calendars/calendars.module';
 import { PcConnectorModule } from '../pc-connector/pc-connector.module';
 import { LabController } from './lab.controller';
 import { LabService } from './lab.service';
+import { LabConversationsService } from './lab-conversations.service';
 import { LLM_PROVIDER } from './llm/llm-provider';
 import { createLlmProvider } from './llm/llm-provider.factory';
 
@@ -13,12 +14,13 @@ import { createLlmProvider } from './llm/llm-provider.factory';
   controllers: [LabController],
   providers: [
     LabService,
+    LabConversationsService,
     {
       provide: LLM_PROVIDER,
       inject: [ConfigService],
       useFactory: (config: ConfigService) => createLlmProvider(config),
     },
   ],
-  exports: [LabService],
+  exports: [LabService, LabConversationsService],
 })
 export class LabModule {}

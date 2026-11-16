@@ -10,3 +10,4 @@ export * from './whatsapp';
 export * from './campaigns';
 export * from './calendars';
 export * from './pc-devices';
+export * from './lab';
