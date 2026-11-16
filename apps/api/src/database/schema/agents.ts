@@ -62,6 +62,8 @@ export const agents = pgTable(
     workingHours: jsonb('working_hours').notNull().default({}),
     handoffCriteria: jsonb('handoff_criteria').notNull().default({}),
     currentReleaseId: text('current_release_id'),
+    /** Conexão de IA (BYOK) usada por este agente. null = conexão padrão do tenant. */
+    aiConnectionId: text('ai_connection_id'),
     createdByUserId: text('created_by_user_id').references(() => users.id),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

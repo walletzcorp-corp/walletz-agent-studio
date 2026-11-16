@@ -53,7 +53,7 @@ export default function AdminUsuariosPage() {
             <thead>
               <tr className="border-b border-border text-left text-xs text-muted-foreground">
                 <th className="px-4 py-3 font-medium">Usuário</th>
-                <th className="px-3 py-3 font-medium">Organizações</th>
+                <th className="px-3 py-3 font-medium">Organizações e plano</th>
                 <th className="px-3 py-3 font-medium">E-mail verificado</th>
                 <th className="px-3 py-3 font-medium">Último login</th>
                 <th className="px-3 py-3 font-medium">Cadastro</th>
@@ -72,7 +72,8 @@ export default function AdminUsuariosPage() {
                   <td className="px-3 py-3 text-xs">
                     {u.memberships.length === 0 ? <span className="text-muted-foreground">—</span> : u.memberships.map((m) => (
                       <Link key={m.tenantId} href={`/admin/clientes/${m.tenantId}`} className="mr-2 hover:text-primary">
-                        {m.tenantName} <span className="text-muted-foreground">({m.role})</span>
+                        {m.tenantName} <span className="text-muted-foreground">({m.role})</span>{' '}
+                        <span className="rounded-full border border-border px-1.5 py-0.5 text-[10px] uppercase text-muted-foreground">{m.plan}</span>
                       </Link>
                     ))}
                   </td>

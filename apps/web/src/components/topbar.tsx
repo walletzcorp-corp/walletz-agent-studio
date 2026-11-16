@@ -1,6 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { plansApi } from '../lib/studio-api';
 import { usePathname } from 'next/navigation';
 import { Bell, HelpCircle, Search, CheckCircle2, CreditCard, LogOut } from 'lucide-react';
 
@@ -12,6 +14,8 @@ const ROUTE_LABELS: Record<string, string> = {
   '/ensinar':              'Ensinar IA',
   '/laboratorio':          'Laboratório',
   '/canais/whatsapp':      'WhatsApp',
+  '/canais/webchat':       'Webchat',
+  '/integracoes/webhooks': 'Webhooks',
   '/integracoes':          'Integrações',
   '/conversas':            'Conversas',
   '/contatos':             'Contatos',
@@ -19,7 +23,7 @@ const ROUTE_LABELS: Record<string, string> = {
   '/agendas':              'Agendas',
   '/resultados':           'Resultados',
   '/custos':               'Central de Custos',
-  '/billing':              'Billing',
+  '/billing':              'Plano e assinatura',
   '/meta':                 'Central Meta',
   '/meta/templates':       'Templates WhatsApp',
   '/configuracoes':        'Configurações',
@@ -38,11 +42,18 @@ function getRouteLabel(pathname: string): string {
 interface TopbarProps {
   email?: string | null | undefined;
   tenantName?: string | undefined;
+  tenantId?: string | undefined;
   onLogout?: (() => void) | undefined;
 }
 
-export function Topbar({ tenantName, onLogout }: TopbarProps) {
+export function Topbar({ tenantName, tenantId, onLogout }: TopbarProps) {
   const pathname = usePathname();
+  const [planName, setPlanName] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!tenantId) return;
+    plansApi.summary(tenantId).then((r) => setPlanName(r.data.plan.name)).catch(() => setPlanName(null));
+  }, [tenantId]);
   const pageTitle = getRouteLabel(pathname);
   const [searchOpen, setSearchOpen] = useState(false);
 
@@ -104,10 +115,12 @@ export function Topbar({ tenantName, onLogout }: TopbarProps) {
         </button>
 
         {/* Plan badge */}
-        <div className="hidden sm:flex items-center gap-1.5 rounded-full border border-border bg-surface-1 px-2.5 py-1 ml-1">
-          <CreditCard className="h-3 w-3 text-muted-foreground/60" />
-          <span className="text-[11px] text-muted-foreground font-medium">Professional</span>
-        </div>
+        {planName && (
+          <Link href="/billing" className="hidden sm:flex items-center gap-1.5 rounded-full border border-border bg-surface-1 px-2.5 py-1 ml-1 hover:border-primary/40">
+            <CreditCard className="h-3 w-3 text-muted-foreground/60" />
+            <span className="text-[11px] text-muted-foreground font-medium">{planName}</span>
+          </Link>
+        )}
 
         {/* Logout */}
         {onLogout && (

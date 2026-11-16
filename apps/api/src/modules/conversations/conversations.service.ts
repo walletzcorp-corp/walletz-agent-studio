@@ -3,10 +3,14 @@ import { eq, and, desc, isNull, or } from 'drizzle-orm';
 import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';
 import { conversations, messages } from '../../database/schema/conversations';
 import { createId } from '../../database/utils/id';
+import { WebhooksService } from '../webhooks/webhooks.service';
 
 @Injectable()
 export class ConversationsService {
-  constructor(@Inject(DRIZZLE_TOKEN) private readonly db: DrizzleDB) {}
+  constructor(
+    @Inject(DRIZZLE_TOKEN) private readonly db: DrizzleDB,
+    private readonly webhooks: WebhooksService,
+  ) {}
 
   async listConversations(
     tenantId: string,
@@ -85,6 +89,7 @@ export class ConversationsService {
         updatedAt: new Date(),
       })
       .where(and(eq(conversations.id, conversationId), eq(conversations.tenantId, tenantId)));
+    void this.webhooks.emit(tenantId, 'conversation.handoff', { conversationId, assignedToUserId: userId });
     return this.getConversation(tenantId, conversationId);
   }
 
@@ -106,6 +111,7 @@ export class ConversationsService {
       .update(conversations)
       .set({ status: 'resolved', resolvedAt: new Date(), updatedAt: new Date() })
       .where(and(eq(conversations.id, conversationId), eq(conversations.tenantId, tenantId)));
+    void this.webhooks.emit(tenantId, 'conversation.resolved', { conversationId });
     return this.getConversation(tenantId, conversationId);
   }
 }

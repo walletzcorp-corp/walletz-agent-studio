@@ -5,6 +5,7 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  HttpException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
@@ -20,6 +21,8 @@ import {
   type CalendarMeeting,
 } from '../../database/schema/calendars';
 import { AuditService } from '../../shared/audit/audit.service';
+import { PlanLimitsService } from '../../shared/plans/plan-limits.service';
+import { WebhooksService } from '../webhooks/webhooks.service';
 import { GoogleCalendarService } from './google.service';
 import { MicrosoftCalendarService } from './microsoft.service';
 import { MicrosoftGraphAuthService } from './ms-graph-auth.service';
@@ -48,6 +51,8 @@ export class CalendarsService {
     private readonly msGraphAuth: MicrosoftGraphAuthService,
     private readonly availabilityService: AvailabilityService,
     @Inject(REDIS_TOKEN) private readonly redis: Redis,
+    private readonly planLimits: PlanLimitsService,
+    private readonly webhooks: WebhooksService,
   ) {
     const raw = this.config.get<string>('CALENDAR_ENCRYPTION_KEY', '');
     this.encKey = raw
@@ -125,6 +130,7 @@ export class CalendarsService {
    * tem login, então o tenant nunca pode vir de algo que o navegador controla.
    */
   async createAuthUrl(tenantId: string, provider: Provider, userId: string): Promise<string> {
+    await this.planLimits.assertFeature(tenantId, 'calendars');
     const nonce = crypto.randomBytes(32).toString('base64url');
     const url = provider === 'google'
       ? this.googleService.buildAuthUrl(nonce)
@@ -167,6 +173,16 @@ export class CalendarsService {
         ),
       )
       .limit(1);
+
+    if (existing.length === 0) {
+      try {
+        await this.planLimits.assertCanAdd(tenantId, 'calendars');
+      } catch (err: unknown) {
+        // O callback mostra só mensagens de BadRequest ao usuário.
+        const body = err instanceof HttpException ? (err.getResponse() as { message?: string }) : null;
+        throw new BadRequestException(body?.message ?? 'Limite de agendas do plano atingido.');
+      }
+    }
 
     if (existing.length > 0) {
       await this.db
@@ -449,6 +465,13 @@ export class CalendarsService {
       resourceId: meeting.id,
       metadata: { title: dto.title, externalEventId },
     });
+    void this.webhooks.emit(tenantId, 'meeting.created', {
+      meetingId: meeting.id,
+      title: meeting.title,
+      startAt: meeting.startAt,
+      endAt: meeting.endAt,
+      conversationId: meeting.conversationId ?? null,
+    });
 
     return meeting;
   }
@@ -562,6 +585,7 @@ export class CalendarsService {
       resourceId: meetingId,
       metadata: { reason },
     });
+    void this.webhooks.emit(tenantId, 'meeting.canceled', { meetingId, reason: reason ?? null });
   }
 
   async listMeetings(tenantId: string, from?: Date, to?: Date): Promise<CalendarMeeting[]> {

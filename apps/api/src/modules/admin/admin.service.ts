@@ -14,11 +14,9 @@ import { memberships, users } from '../../database/schema/users';
 import { randomBytes } from 'crypto';
 import { formatTaxId, maskTaxId, onlyDigits } from '../../shared/validation/tax-id';
 import { AuditService } from '../../shared/audit/audit.service';
-import {
-  LlmUsageService,
-  startOfCurrentMonthUtc,
-  type RateLimitSnapshot,
-} from '../../shared/llm-usage/llm-usage.service';
+import { LlmUsageService, startOfCurrentMonthUtc } from '../../shared/llm-usage/llm-usage.service';
+import { PlanLimitsService } from '../../shared/plans/plan-limits.service';
+import { DEFAULT_PLAN, resolvePlan, type PlanSlug } from '../../shared/plans/plan-catalog';
 import type {
   CreateCustomerDto,
   CreateUserDto,
@@ -57,6 +55,7 @@ export class AdminService {
     private readonly audit: AuditService,
     private readonly llmUsage: LlmUsageService,
     private readonly config: ConfigService,
+    private readonly planLimits: PlanLimitsService,
   ) {}
 
   private async rows<T extends Row = Row>(query: SQL): Promise<T[]> {
@@ -81,7 +80,7 @@ export class AdminService {
       agentsPerTenant,
       topTokenTenants,
       recentActivity,
-      rateLimits,
+      aiConnections,
     ] = await Promise.all([
       this.rows(sql`
         SELECT status::text AS status, count(*)::int AS n
@@ -147,7 +146,16 @@ export class AdminService {
         ORDER BY tokens DESC
         LIMIT 10`),
       this.activityRows({ limit: 15, offset: 0 }),
-      this.llmUsage.getRateLimits(),
+      this.rows(sql`
+        SELECT
+          (SELECT count(*)::int FROM tenants t WHERE t.deleted_at IS NULL AND NOT EXISTS (
+             SELECT 1 FROM ai_provider_connections c WHERE c.tenant_id = t.id AND c.deleted_at IS NULL)) AS without_key,
+          (SELECT coalesce(jsonb_object_agg(provider, n), '{}'::jsonb) FROM (
+             SELECT provider::text AS provider, count(*)::int AS n FROM ai_provider_connections
+             WHERE deleted_at IS NULL GROUP BY provider) p) AS by_provider,
+          (SELECT coalesce(jsonb_object_agg(status, n), '{}'::jsonb) FROM (
+             SELECT status::text AS status, count(*)::int AS n FROM ai_provider_connections
+             WHERE deleted_at IS NULL GROUP BY status) s) AS by_status`),
     ]);
 
     const statusCount = (list: Row[]) =>
@@ -184,13 +192,17 @@ export class AdminService {
       },
       knowledge: { sources: num(k['sources']), items: num(k['items']) },
       llm: {
-        model: this.config.get<string>('ANTHROPIC_DEFAULT_MODEL') ?? 'claude-sonnet-4-6',
         monthStart: monthStart.toISOString(),
         inputTokensMonth: num(tk['input_month']),
         outputTokensMonth: num(tk['output_month']),
         tokensToday: num(tk['total_today']),
         callsMonth: num(tk['calls_month']),
-        rateLimits,
+        // BYOK: cada cliente usa a própria chave; a Walletz não tem conta de IA.
+        connections: {
+          tenantsWithoutKey: num(aiConnections[0]?.['without_key']),
+          byProvider: (aiConnections[0]?.['by_provider'] ?? {}) as Record<string, number>,
+          byStatus: (aiConnections[0]?.['by_status'] ?? {}) as Record<string, number>,
+        },
         topTenants: topTokenTenants.map((r) => ({
           id: String(r['id']),
           name: String(r['name']),
@@ -320,7 +332,9 @@ export class AdminService {
         name: tenant.name,
         slug: tenant.slug,
         status: tenant.status,
-        planId: tenant.planId,
+        planId: resolvePlan(tenant.planId).slug,
+        planName: resolvePlan(tenant.planId).name,
+        featureOverrides: tenant.featureFlags ?? {},
         customerType: tenant.customerType,
         taxId: tenant.taxId ? formatTaxId(tenant.taxId) : null,
         contactPhone: tenant.contactPhone,
@@ -425,7 +439,7 @@ export class AdminService {
       this.rows(sql`
         SELECT us.id, us.email, us.first_name, us.last_name, us.is_platform_admin,
                us.email_verified_at, us.last_login_at, us.created_at,
-               coalesce(jsonb_agg(jsonb_build_object('tenantId', t.id, 'tenantName', t.name, 'role', m.role))
+               coalesce(jsonb_agg(jsonb_build_object('tenantId', t.id, 'tenantName', t.name, 'role', m.role, 'plan', coalesce(t.plan_id, 'starter')))
                  FILTER (WHERE t.id IS NOT NULL), '[]'::jsonb) AS memberships
         FROM users us
         LEFT JOIN memberships m ON m.user_id = us.id
@@ -445,7 +459,7 @@ export class AdminService {
         emailVerified: r['email_verified_at'] !== null,
         lastLoginAt: r['last_login_at'] ?? null,
         createdAt: r['created_at'],
-        memberships: r['memberships'] as Array<{ tenantId: string; tenantName: string; role: string }>,
+        memberships: r['memberships'] as Array<{ tenantId: string; tenantName: string; role: string; plan: string }>,
       })),
       total: num(totalRows[0]?.['n']),
       page,
@@ -508,10 +522,39 @@ export class AdminService {
     }));
   }
 
-  async llmStatus(): Promise<{ model: string; rateLimits: RateLimitSnapshot | null }> {
+  /** Conexões de IA (BYOK) de todos os clientes: provedor, modelo e situação. Nunca expõe chaves. */
+  async llmStatus() {
+    const [connections, withoutKey] = await Promise.all([
+      this.rows(sql`
+        SELECT c.id, c.tenant_id, t.name AS tenant_name, c.provider::text AS provider, c.default_model,
+               c.status::text AS status, c.is_default, c.key_last4, c.last_validated_at, c.last_error,
+               c.last_error_at, c.rate_limits
+        FROM ai_provider_connections c
+        JOIN tenants t ON t.id = c.tenant_id AND t.deleted_at IS NULL
+        WHERE c.deleted_at IS NULL
+        ORDER BY (c.status <> 'active') DESC, t.name`),
+      this.rows(sql`
+        SELECT t.id, t.name, t.status::text AS status FROM tenants t
+        WHERE t.deleted_at IS NULL AND NOT EXISTS (
+          SELECT 1 FROM ai_provider_connections c WHERE c.tenant_id = t.id AND c.deleted_at IS NULL)
+        ORDER BY t.created_at DESC`),
+    ]);
     return {
-      model: this.config.get<string>('ANTHROPIC_DEFAULT_MODEL') ?? 'claude-sonnet-4-6',
-      rateLimits: await this.llmUsage.getRateLimits(),
+      connections: connections.map((r) => ({
+        id: String(r['id']),
+        tenantId: String(r['tenant_id']),
+        tenantName: String(r['tenant_name']),
+        provider: String(r['provider']),
+        model: String(r['default_model']),
+        status: String(r['status']),
+        isDefault: Boolean(r['is_default']),
+        maskedKey: `••••••••${String(r['key_last4'])}`,
+        lastValidatedAt: r['last_validated_at'] ?? null,
+        lastError: r['last_error'] ?? null,
+        lastErrorAt: r['last_error_at'] ?? null,
+        rateLimits: r['rate_limits'] ?? null,
+      })),
+      tenantsWithoutKey: withoutKey.map((r) => ({ id: String(r['id']), name: String(r['name']), status: String(r['status']) })),
     };
   }
 
@@ -569,6 +612,30 @@ export class AdminService {
     return updated;
   }
 
+  async setPlan(tenantId: string, plan: PlanSlug, actor: AdminActor) {
+    const tenant = await this.findTenantOrThrow(tenantId);
+    const [updated] = await this.db
+      .update(tenants)
+      .set({ planId: plan, updatedAt: new Date() })
+      .where(eq(tenants.id, tenantId))
+      .returning({ id: tenants.id, planId: tenants.planId, updatedAt: tenants.updatedAt });
+    this.logAction(actor, tenantId, 'admin.tenant.plan_changed', { plan: resolvePlan(tenant.planId).slug }, { plan });
+    // Rebaixar não apaga nada: o que exceder o novo limite continua, mas não se cria mais.
+    return { ...updated!, summary: await this.planLimits.getSummary(tenantId) };
+  }
+
+  /** Exceção "sob medida" a um recurso do plano (true/false) ou volta ao padrão (null). */
+  async setFeatureOverride(tenantId: string, feature: string, enabled: boolean | null, actor: AdminActor) {
+    const tenant = await this.findTenantOrThrow(tenantId);
+    const previous = (tenant.featureFlags ?? {}) as Record<string, unknown>;
+    const next: Record<string, unknown> = { ...previous };
+    if (enabled === null) delete next[feature];
+    else next[feature] = enabled;
+    await this.db.update(tenants).set({ featureFlags: next, updatedAt: new Date() }).where(eq(tenants.id, tenantId));
+    this.logAction(actor, tenantId, 'admin.tenant.feature_override', { [feature]: previous[feature] ?? null }, { [feature]: enabled });
+    return this.planLimits.getSummary(tenantId);
+  }
+
   async setTokenLimit(tenantId: string, limit: number | null, actor: AdminActor) {
     const tenant = await this.findTenantOrThrow(tenantId);
     const updated = await this.updateTenant(tenantId, { llmMonthlyTokenLimit: limit });
@@ -596,30 +663,53 @@ export class AdminService {
     if (existing) throw new ConflictException('Já existe um usuário com este e-mail.');
 
     const rounds = Number(this.config.get('BCRYPT_ROUNDS', 12));
-    const [user] = await this.db
-      .insert(users)
-      .values({
-        email,
-        passwordHash: await bcrypt.hash(dto.password, rounds),
-        firstName: dto.firstName.trim(),
-        lastName: dto.lastName?.trim() || null,
-        emailVerifiedAt: new Date(),
-      })
-      .returning({ id: users.id, email: users.email, createdAt: users.createdAt });
+    const passwordHash = await bcrypt.hash(dto.password, rounds);
+    const firstName = dto.firstName.trim();
+    const lastName = dto.lastName?.trim() || null;
+
+    // Com plano: usuário + organização no plano + vínculo de dono, numa transação.
+    const result = await this.db.transaction(async (tx) => {
+      const [user] = await tx
+        .insert(users)
+        .values({ email, passwordHash, firstName, lastName, emailVerifiedAt: new Date() })
+        .returning({ id: users.id, email: users.email, createdAt: users.createdAt });
+      if (!dto.plan) return { user: user!, tenant: null };
+
+      const orgName = (dto.organizationName?.trim() || [firstName, lastName].filter(Boolean).join(' ')).replace(/\s+/g, ' ');
+      const slug = await this.uniqueSlug(orgName);
+      const [tenant] = await tx
+        .insert(tenants)
+        .values({
+          name: orgName,
+          slug,
+          status: 'trial',
+          trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+          planId: dto.plan,
+        })
+        .returning({ id: tenants.id, name: tenants.name, slug: tenants.slug, planId: tenants.planId });
+      await tx.insert(memberships).values({ tenantId: tenant!.id, userId: user!.id, role: 'owner', status: 'active' });
+      return { user: user!, tenant: tenant! };
+    });
 
     void this.audit.log({
+      tenantId: result.tenant?.id,
       userId: actor.userId,
       sessionId: actor.sessionId,
       action: 'admin.user.created',
       resourceType: 'user',
-      resourceId: user!.id,
-      newState: { email, firstName: dto.firstName.trim() },
+      resourceId: result.user.id,
+      newState: { email, firstName, plan: dto.plan ?? null, organization: result.tenant?.name ?? null },
       metadata: { platformAdmin: true },
       ipAddress: actor.ipAddress,
       userAgent: actor.userAgent,
       traceId: actor.traceId,
     });
-    return user!;
+    return {
+      ...result.user,
+      organization: result.tenant
+        ? { id: result.tenant.id, name: result.tenant.name, slug: result.tenant.slug, plan: resolvePlan(result.tenant.planId).slug }
+        : null,
+    };
   }
 
   /**
@@ -645,8 +735,12 @@ export class AdminService {
       .from(users)
       .where(and(eq(users.email, email), isNull(users.deletedAt)))
       .limit(1);
-    if (!existingUser && !dto.password) {
-      throw new BadRequestException('Informe a senha inicial: este e-mail ainda não tem conta.');
+    // Novo cliente = nova organização com login novo: nunca reaproveita usuário de outro cliente.
+    if (existingUser) {
+      throw new ConflictException('Este e-mail já tem conta na plataforma. Um novo cliente precisa de um e-mail de acesso novo, sem vínculo com outra organização.');
+    }
+    if (!dto.password) {
+      throw new BadRequestException('Informe a senha inicial do responsável.');
     }
 
     const ownerName = dto.type === 'pf' ? name : (dto.contactName ?? '').trim().replace(/\s+/g, ' ');
@@ -658,8 +752,8 @@ export class AdminService {
     let result: { tenantId: string; slug: string; userId: string };
     try {
       result = await this.db.transaction(async (tx) => {
-        let userId = existingUser?.id;
-        if (!userId) {
+        let userId: string | undefined;
+        {
           const [user] = await tx
             .insert(users)
             .values({
@@ -681,6 +775,7 @@ export class AdminService {
             slug,
             status: 'trial',
             trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+            planId: dto.plan ?? DEFAULT_PLAN,
             customerType: dto.type,
             taxId,
             contactPhone: dto.phone ? onlyDigits(dto.phone) : null,
@@ -710,7 +805,7 @@ export class AdminService {
       resourceType: 'tenant',
       resourceId: result.tenantId,
       // Documento mascarado: auditoria não guarda CPF completo (LGPD)
-      newState: { name, customerType: dto.type, taxId: maskTaxId(taxId), ownerEmail: email },
+      newState: { name, customerType: dto.type, taxId: maskTaxId(taxId), ownerEmail: email, plan: dto.plan ?? DEFAULT_PLAN },
       metadata: { platformAdmin: true, ownerUserCreated: !existingUser },
       ipAddress: actor.ipAddress,
       userAgent: actor.userAgent,

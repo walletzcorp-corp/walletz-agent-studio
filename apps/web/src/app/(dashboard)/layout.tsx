@@ -62,7 +62,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* Main area */}
       <div className="flex flex-1 flex-col overflow-hidden">
-        <Topbar email={email} tenantName={tenantName ?? undefined} onLogout={() => void logout()} />
+        <Topbar email={email} tenantName={tenantName ?? undefined} tenantId={tenantId ?? undefined} onLogout={() => void logout()} />
         <main className="flex-1 overflow-auto">
           {children}
         </main>

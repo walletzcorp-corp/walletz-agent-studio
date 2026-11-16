@@ -5,6 +5,6 @@ import { OutboxRelayService } from './outbox-relay.service';
 @Global()
 @Module({
   providers: [OutboxService, OutboxRelayService],
-  exports: [OutboxService],
+  exports: [OutboxService, OutboxRelayService],
 })
 export class OutboxModule {}

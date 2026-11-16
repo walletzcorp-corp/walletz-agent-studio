@@ -7,6 +7,7 @@ import { segments, campaigns, campaignRecipients } from '../../database/schema/c
 import { contacts, contactIdentities, consents, suppressions } from '../../database/schema/contacts';
 import { whatsappAccounts, whatsappTemplates, whatsappMessageLogs } from '../../database/schema/whatsapp';
 import { AuditService } from '../../shared/audit/audit.service';
+import { PlanLimitsService } from '../../shared/plans/plan-limits.service';
 
 // Frequency-cap window: a contact may receive at most 1 outbound campaign message per window
 const FREQUENCY_CAP_HOURS = 24;
@@ -26,6 +27,7 @@ export class CampaignsService {
   constructor(
     @Inject(DRIZZLE_TOKEN) private readonly db: DrizzleDB,
     private readonly auditService: AuditService,
+    private readonly planLimits: PlanLimitsService,
   ) {}
 
   // ─── Segments ────────────────────────────────────────────────────────────────
@@ -320,6 +322,7 @@ export class CampaignsService {
   }
 
   async launchCampaign(tenantId: string, campaignId: string, userId: string) {
+    await this.planLimits.assertFeature(tenantId, 'campaigns');
     const campaign = await this.getCampaign(tenantId, campaignId);
 
     if (!['draft', 'scheduled'].includes(campaign.status)) {

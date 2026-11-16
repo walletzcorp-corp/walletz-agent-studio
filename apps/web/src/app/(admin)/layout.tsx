@@ -16,7 +16,7 @@ const NAV = [
   { href: '/admin/agentes', label: 'Agentes', icon: Bot },
   { href: '/admin/usuarios', label: 'Usuários', icon: Users },
   { href: '/admin/atividade', label: 'Atividade', icon: Activity },
-  { href: '/admin/ia', label: 'IA (Claude)', icon: Cpu },
+  { href: '/admin/ia', label: 'IA dos clientes', icon: Cpu },
 ];
 
 /**

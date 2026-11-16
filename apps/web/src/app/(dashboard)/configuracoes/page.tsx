@@ -1,14 +1,17 @@
 'use client';
 
+import Link from 'next/link';
+
 import { useState } from 'react';
 import {
   Building2, Palette, Users, Bot, Smartphone, Calendar,
-  Megaphone, Shield, CreditCard, FileText, Save,
+  Megaphone, Shield, CreditCard, Save,
   ChevronRight, Plus, Trash2, Eye, EyeOff, Check,
   AlertTriangle, ExternalLink, RefreshCw, Zap, Globe,
   Mail, Clock, Key, UserCheck, Activity,
 } from 'lucide-react';
 import { useAuth } from '../../../hooks/use-auth';
+import { TabUsuarios } from './usuarios-tab';
 import { withBasePath } from '../../../lib/paths';
 
 /* ── Tab definitions ── */
@@ -22,7 +25,6 @@ const TABS = [
   { id: 'campanhas',     label: 'Leads & Campanhas',   icon: Megaphone },
   { id: 'seguranca',     label: 'Segurança',           icon: Shield },
   { id: 'billing',       label: 'Assinatura',          icon: CreditCard },
-  { id: 'logs',          label: 'Logs',                icon: FileText },
 ];
 
 /* ── Reusable field ── */
@@ -210,71 +212,6 @@ function TabIdentidade() {
       </div>
       <div className="flex justify-end pt-2">
         <SaveButton />
-      </div>
-    </div>
-  );
-}
-
-function TabUsuarios() {
-  const users = [
-    { name: 'demo@walletz.dev', role: 'owner', status: 'active', since: 'Out 2026' },
-  ];
-
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <SectionTitle title="Usuários e permissões" description="Gerencie acesso ao workspace" />
-        <button className="btn-primary rounded-lg px-3 py-2 text-sm flex items-center gap-2">
-          <Plus className="h-4 w-4" />
-          Convidar usuário
-        </button>
-      </div>
-
-      <div className="neural-card overflow-hidden">
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Usuário</th>
-              <th>Papel</th>
-              <th>Status</th>
-              <th>Desde</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((u) => (
-              <tr key={u.name}>
-                <td>
-                  <div className="flex items-center gap-2.5">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-neural-violet/10 text-neural-violet text-xs font-bold">
-                      {u.name.charAt(0).toUpperCase()}
-                    </div>
-                    <span className="text-sm text-foreground">{u.name}</span>
-                  </div>
-                </td>
-                <td>
-                  <span className="badge-primary inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize">
-                    {u.role}
-                  </span>
-                </td>
-                <td>
-                  <span className="badge-success inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium">
-                    <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                    Ativo
-                  </span>
-                </td>
-                <td className="text-sm">{u.since}</td>
-                <td>
-                  {u.role !== 'owner' && (
-                    <button className="p-1.5 text-muted-foreground hover:text-neural-danger rounded">
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
       </div>
     </div>
   );
@@ -645,158 +582,18 @@ function TabSeguranca() {
 function TabBilling() {
   return (
     <div className="space-y-6">
-      <SectionTitle title="Assinatura" description="Plano atual, consumo e histórico" />
-
-      <div className="neural-card p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-lg font-display font-semibold text-foreground">Plano Starter</p>
-            <p className="text-sm text-muted-foreground">Período de demonstração — 30 dias restantes</p>
-          </div>
-          <button className="btn-primary rounded-lg px-4 py-2 text-sm font-medium">
-            Fazer upgrade
-          </button>
-        </div>
-        <div className="grid grid-cols-3 gap-3 pt-2">
-          {[
-            { label: 'Mensagens', used: 612, limit: 5000 },
-            { label: 'Agentes', used: 1, limit: 3 },
-            { label: 'Contatos', used: 0, limit: 1000 },
-          ].map((item) => (
-            <div key={item.label} className="p-3 rounded-lg bg-surface-2 space-y-2">
-              <div className="flex justify-between text-xs">
-                <span className="text-muted-foreground">{item.label}</span>
-                <span className="text-foreground">{item.used}/{item.limit}</span>
-              </div>
-              <div className="h-1.5 rounded-full bg-surface-3 overflow-hidden">
-                <div
-                  className="h-full rounded-full bg-primary"
-                  style={{ width: `${(item.used / item.limit) * 100}%` }}
-                />
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Plans comparison */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {[
-          { name: 'Starter', price: 'Grátis', current: true, features: ['1 agente', '5k mensagens/mês', '1.000 contatos', 'WhatsApp Sandbox'] },
-          { name: 'Pro', price: 'R$ 297/mês', current: false, features: ['5 agentes', '50k mensagens/mês', '25.000 contatos', 'WhatsApp Oficial', 'Campanhas', 'Análises'] },
-          { name: 'Enterprise', price: 'Custom', current: false, features: ['Agentes ilimitados', 'Mensagens ilimitadas', 'Contatos ilimitados', 'SLA dedicado', 'Onboarding premium'] },
-        ].map((plan) => (
-          <div key={plan.name} className={`neural-card p-5 space-y-4 ${plan.current ? 'border-primary/40' : ''}`}>
-            <div>
-              <p className="text-sm font-display font-semibold text-foreground">{plan.name}</p>
-              <p className={`text-xl font-bold ${plan.current ? 'text-primary' : 'text-foreground'}`}>{plan.price}</p>
-            </div>
-            <ul className="space-y-1.5">
-              {plan.features.map((f) => (
-                <li key={f} className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Check className="h-3 w-3 text-neural-success shrink-0" />
-                  {f}
-                </li>
-              ))}
-            </ul>
-            {!plan.current && (
-              <button className="w-full btn-primary rounded-lg py-2 text-sm font-medium">
-                Assinar {plan.name}
-              </button>
-            )}
-            {plan.current && (
-              <span className="w-full flex justify-center text-xs text-primary font-medium py-2">
-                Plano atual
-              </span>
-            )}
-          </div>
-        ))}
+      <SectionTitle title="Assinatura" description="Plano, limites e comparação entre planos" />
+      <div className="neural-card p-5 flex flex-wrap items-center justify-between gap-4">
+        <p className="text-sm text-muted-foreground max-w-xl">
+          Veja o plano contratado, o uso de cada limite (agentes, usuários, canais, conexões de IA) e compare os planos.
+          Nenhum plano inclui tokens de IA: o consumo é pago diretamente ao provedor da sua chave.
+        </p>
+        <Link href="/billing" className="btn-primary rounded-lg px-4 py-2 text-sm font-medium">Ver plano e limites</Link>
       </div>
     </div>
   );
 }
 
-function TabLogs() {
-  const logs = [
-    { time: '20:00:14', level: 'info', service: 'API', message: 'Server started on port 3001' },
-    { time: '20:00:07', level: 'info', service: 'Auth', message: 'User demo@walletz.dev authenticated' },
-    { time: '19:58:00', level: 'warn', service: 'BullMQ', message: 'Queue outbox: 0 jobs pending' },
-    { time: '19:55:10', level: 'info', service: 'WhatsApp', message: 'Webhook verified for account tenant' },
-    { time: '19:50:00', level: 'error', service: 'Lab', message: 'ANTHROPIC_API_KEY not set — lab unavailable' },
-  ];
-
-  const levelConfig: Record<string, string> = {
-    info:  'badge-blue',
-    warn:  'badge-warning',
-    error: 'badge-danger',
-  };
-
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <SectionTitle title="Logs e diagnóstico" description="Últimos eventos e erros da plataforma" />
-        <button className="btn-ghost rounded-lg px-3 py-2 text-sm flex items-center gap-2">
-          <RefreshCw className="h-4 w-4" />
-          Atualizar
-        </button>
-      </div>
-
-      {/* Diagnostics */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        {[
-          { label: 'API', status: 'ok', icon: Activity },
-          { label: 'Banco de dados', status: 'ok', icon: Activity },
-          { label: 'Redis', status: 'ok', icon: Activity },
-          { label: 'WhatsApp', status: 'pending', icon: AlertTriangle },
-        ].map((s) => {
-          const Icon = s.icon;
-          return (
-            <div key={s.label} className="stat-card flex items-center gap-3">
-              <span className={`flex h-8 w-8 items-center justify-center rounded-lg ${s.status === 'ok' ? 'bg-neural-success/10' : 'bg-neural-warning/10'}`}>
-                <Icon className={`h-4 w-4 ${s.status === 'ok' ? 'text-neural-success' : 'text-neural-warning'}`} />
-              </span>
-              <div>
-                <p className="text-sm font-medium text-foreground">{s.label}</p>
-                <p className={`text-xs ${s.status === 'ok' ? 'text-neural-success' : 'text-neural-warning'}`}>
-                  {s.status === 'ok' ? 'Operacional' : 'Configurar'}
-                </p>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="neural-card overflow-hidden">
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th className="w-24">Hora</th>
-              <th className="w-20">Nível</th>
-              <th className="w-24">Serviço</th>
-              <th>Mensagem</th>
-            </tr>
-          </thead>
-          <tbody>
-            {logs.map((log, i) => (
-              <tr key={i}>
-                <td className="font-mono text-xs">{log.time}</td>
-                <td>
-                  <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium ${levelConfig[log.level]}`}>
-                    {log.level}
-                  </span>
-                </td>
-                <td className="text-xs font-medium text-foreground">{log.service}</td>
-                <td className="text-xs font-mono">{log.message}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-/* ── Main page ── */
 export default function ConfiguracoesPage() {
   const [activeTab, setActiveTab] = useState('geral');
   const { tenantName } = useAuth();
@@ -811,7 +608,6 @@ export default function ConfiguracoesPage() {
     campanhas:  <TabCampanhas />,
     seguranca:  <TabSeguranca />,
     billing:    <TabBilling />,
-    logs:       <TabLogs />,
   };
 
   return (

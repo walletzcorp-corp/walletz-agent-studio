@@ -25,6 +25,8 @@ import {
   ListActivityQueryDto,
   ListAgentsQueryDto,
   ListTenantsQueryDto,
+  SetFeatureOverrideDto,
+  SetPlanDto,
   SetTokenLimitDto,
   SuspendTenantDto,
 } from './dto/admin.dto';
@@ -88,7 +90,7 @@ export class AdminController {
   }
 
   @Get('llm')
-  @ApiOperation({ summary: 'Modelo em uso e limites de taxa da conta Anthropic' })
+  @ApiOperation({ summary: 'Conexões de IA (chave do próprio cliente) de todas as organizações' })
   llmStatus() {
     return this.adminService.llmStatus();
   }
@@ -122,6 +124,28 @@ export class AdminController {
     @Req() req: Request,
   ) {
     return this.adminService.extendTrial(tenantId, dto.days, actorFrom(user, req));
+  }
+
+  @Patch('tenants/:tenantId/plan')
+  @ApiOperation({ summary: 'Alterar o plano comercial da organização (Starter, Pro, Business, Agency)' })
+  setPlan(
+    @Param('tenantId') tenantId: string,
+    @Body() dto: SetPlanDto,
+    @CurrentUser() user: JwtPayload,
+    @Req() req: Request,
+  ) {
+    return this.adminService.setPlan(tenantId, dto.plan, actorFrom(user, req));
+  }
+
+  @Patch('tenants/:tenantId/features')
+  @ApiOperation({ summary: 'Liberar/bloquear um recurso fora do plano (sob medida); null volta ao padrão' })
+  setFeature(
+    @Param('tenantId') tenantId: string,
+    @Body() dto: SetFeatureOverrideDto,
+    @CurrentUser() user: JwtPayload,
+    @Req() req: Request,
+  ) {
+    return this.adminService.setFeatureOverride(tenantId, dto.feature, dto.enabled, actorFrom(user, req));
   }
 
   @Patch('tenants/:tenantId/token-limit')

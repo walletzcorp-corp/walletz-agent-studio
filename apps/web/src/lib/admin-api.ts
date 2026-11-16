@@ -39,13 +39,13 @@ export interface AdminOverview {
   conversations: { total: number; last30d: number; messages30d: number; contacts: number };
   knowledge: { sources: number; items: number };
   llm: {
-    model: string;
     monthStart: string;
     inputTokensMonth: number;
     outputTokensMonth: number;
     tokensToday: number;
     callsMonth: number;
-    rateLimits: RateLimitSnapshot | null;
+    /** BYOK: situação das chaves de IA dos clientes (a Walletz não tem conta de IA). */
+    connections: { tenantsWithoutKey: number; byProvider: Record<string, number>; byStatus: Record<string, number> };
     topTenants: Array<{ id: string; name: string; tokens: number; limit: number | null }>;
   };
   daily: Array<{ day: string; tenants: number; agents: number; tokens: number }>;
@@ -78,6 +78,36 @@ export interface CreateCustomerInput {
   phone?: string;
   contactName?: string;
   password?: string;
+  plan?: PlanSlug;
+}
+
+export type PlanSlug = 'starter' | 'pro' | 'business' | 'agency';
+
+export const PLAN_OPTIONS: Array<{ slug: PlanSlug; label: string }> = [
+  { slug: 'starter', label: 'Starter · R$ 99/mês' },
+  { slug: 'pro', label: 'Pro · R$ 399/mês' },
+  { slug: 'business', label: 'Business · R$ 899/mês' },
+  { slug: 'agency', label: 'Agency / White Label · R$ 1.990/mês' },
+];
+
+export interface AdminAiConnection {
+  id: string;
+  tenantId: string;
+  tenantName: string;
+  provider: string;
+  model: string;
+  status: 'active' | 'invalid' | 'billing_error' | 'revoked';
+  isDefault: boolean;
+  maskedKey: string;
+  lastValidatedAt: string | null;
+  lastError: string | null;
+  lastErrorAt: string | null;
+  rateLimits: RateLimitSnapshot | null;
+}
+
+export interface AdminLlmStatus {
+  connections: AdminAiConnection[];
+  tenantsWithoutKey: Array<{ id: string; name: string; status: string }>;
 }
 
 export interface CreatedCustomer {
@@ -116,6 +146,8 @@ export interface AdminTenantDetail {
     slug: string;
     status: string;
     planId: string | null;
+    planName?: string;
+    featureOverrides?: Record<string, boolean>;
     customerType: CustomerType;
     taxId: string | null;
     contactPhone: string | null;
@@ -185,7 +217,7 @@ export interface AdminUserRow {
   emailVerified: boolean;
   lastLoginAt: string | null;
   createdAt: string;
-  memberships: Array<{ tenantId: string; tenantName: string; role: string }>;
+  memberships: Array<{ tenantId: string; tenantName: string; role: string; plan: string }>;
 }
 
 type Query = Record<string, string | number | undefined>;
@@ -205,18 +237,26 @@ export const adminApi = {
   agents: (q: Query = {}) => api.get<Paginated<AdminAgentRow>>('/admin/agents', { params: clean(q) }),
   users: (q: Query = {}) => api.get<Paginated<AdminUserRow>>('/admin/users', { params: clean(q) }),
   activity: (q: Query = {}) => api.get<Paginated<ActivityItem>>('/admin/activity', { params: clean(q) }),
-  llm: () => api.get<{ model: string; rateLimits: RateLimitSnapshot | null }>('/admin/llm'),
+  llm: () => api.get<AdminLlmStatus>('/admin/llm'),
 
   createCustomer: (data: CreateCustomerInput) => api.post<CreatedCustomer>('/admin/tenants', data),
 
-  createUser: (data: { email: string; firstName: string; lastName?: string; password: string }) =>
-    api.post<{ id: string; email: string; createdAt: string }>('/admin/users', data),
+  createUser: (data: { email: string; firstName: string; lastName?: string; password: string; plan?: PlanSlug; organizationName?: string }) =>
+    api.post<{
+      id: string;
+      email: string;
+      createdAt: string;
+      organization: { id: string; name: string; slug: string; plan: PlanSlug } | null;
+    }>('/admin/users', data),
 
   suspend: (id: string, reason: string) => api.post(`/admin/tenants/${id}/suspend`, { reason }),
   reactivate: (id: string) => api.post(`/admin/tenants/${id}/reactivate`),
   extendTrial: (id: string, days: number) => api.post(`/admin/tenants/${id}/extend-trial`, { days }),
   setTokenLimit: (id: string, limit: number | null) =>
     api.patch(`/admin/tenants/${id}/token-limit`, { limit }),
+  setPlan: (id: string, plan: PlanSlug) => api.patch(`/admin/tenants/${id}/plan`, { plan }),
+  setFeature: (id: string, feature: string, enabled: boolean | null) =>
+    api.patch(`/admin/tenants/${id}/features`, { feature, enabled }),
 };
 
 /* ── Rótulos ──────────────────────────────────────────────────────────── */

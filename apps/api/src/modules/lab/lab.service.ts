@@ -1,6 +1,4 @@
-import { Injectable, Inject, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
-import Anthropic from '@anthropic-ai/sdk';
-import { ConfigService } from '@nestjs/config';
+import { Injectable, Inject, Logger, NotFoundException } from '@nestjs/common';
 import { eq, and, isNull, isNotNull, ilike, or } from 'drizzle-orm';
 import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';
 import { agents } from '../../database/schema/agents';
@@ -10,18 +8,33 @@ import { SchedulingToolsService, type ToolContext } from '../calendars/schedulin
 import { PcConnectorService } from '../pc-connector/pc-connector.service';
 import { LlmUsageService } from '../../shared/llm-usage/llm-usage.service';
 import type { LabChatDto, ChatMessageDto } from './dto/chat.dto';
+import { AiProvidersService } from '../ai-providers/ai-providers.service';
+import { LlmProviderError } from '../ai-providers/llm/llm.types';
+
+/** Definição de ferramenta (JSON Schema), convertida para o formato de cada provedor. */
+interface ToolDef {
+  name: string;
+  description: string;
+  input_schema: { type: 'object'; properties: Record<string, unknown>; required?: string[] };
+}
+
+/** Evita laço infinito de ferramentas (o custo é da conta do cliente). */
+const MAX_TOOL_ROUNDS = 8;
 
 export interface LabChatResult {
   traceId: string;
   reply: string;
   inputTokens: number;
   outputTokens: number;
+  /** Provedor e modelo da conexão do cliente usada nesta resposta. */
+  provider: string;
+  model: string;
   retrievedChunks: Array<{ content: string; source: string }>;
   toolCallsExecuted?: string[];
 }
 
-/* ── Anthropic tool definitions for conversational scheduling ── */
-const SCHEDULING_TOOLS: Anthropic.Tool[] = [
+/* ── Tool definitions for conversational scheduling ── */
+const SCHEDULING_TOOLS: ToolDef[] = [
   {
     name: 'get_availability',
     description:
@@ -121,29 +134,14 @@ const SCHEDULING_TOOLS: Anthropic.Tool[] = [
 @Injectable()
 export class LabService {
   private readonly logger = new Logger(LabService.name);
-  private readonly client: Anthropic;
-  private readonly defaultModel: string;
 
   constructor(
     @Inject(DRIZZLE_TOKEN) private readonly db: DrizzleDB,
-    private readonly config: ConfigService,
     private readonly schedulingTools: SchedulingToolsService,
     private readonly pcConnector: PcConnectorService,
     private readonly llmUsage: LlmUsageService,
-  ) {
-    const apiKey = this.config.get<string>('ANTHROPIC_API_KEY') ?? '';
-    this.client = new Anthropic({ apiKey });
-    this.defaultModel = this.config.get<string>('ANTHROPIC_DEFAULT_MODEL') ?? 'claude-sonnet-4-6';
-  }
-
-  /** Chama o Messages API e guarda os limites de taxa da conta (headers). */
-  private async createMessage(
-    params: Anthropic.MessageCreateParamsNonStreaming,
-  ): Promise<Anthropic.Message> {
-    const { data, response } = await this.client.messages.create(params).withResponse();
-    await this.llmUsage.recordRateLimits(response.headers);
-    return data;
-  }
+    private readonly aiProviders: AiProvidersService,
+  ) {}
 
   async chat(
     dto: LabChatDto,
@@ -161,7 +159,10 @@ export class LabService {
 
     if (!agent) throw new NotFoundException('Agent not found');
 
-    /* Limite mensal de tokens definido pelo admin da plataforma (429 se atingido) */
+    /* Chave de IA do próprio cliente (BYOK). Sem conexão válida, nada é enviado ao provedor. */
+    const llm = await this.aiProviders.resolveForAgent(tenantId, agent.aiConnectionId);
+
+    /* Limite mensal opcional definido pelo admin da plataforma (429 se atingido) */
     await this.llmUsage.assertWithinMonthlyLimit(tenantId);
 
     /* Retrieve relevant knowledge chunks */
@@ -200,16 +201,7 @@ export class LabService {
       pcEnabled ? onlineDevice : null,
     );
 
-    /* Message history */
-    const messages: Anthropic.MessageParam[] = [
-      ...(dto.history ?? []).map((m: ChatMessageDto) => ({
-        role: m.role as 'user' | 'assistant',
-        content: m.content,
-      })),
-      { role: 'user', content: dto.message },
-    ];
-
-    const tools: Anthropic.Tool[] = [
+    const toolDefs: ToolDef[] = [
       ...(schedulingEnabled ? SCHEDULING_TOOLS : []),
       ...(pcEnabled ? buildPcTools(onlineDevice!.id, onlineDevice!.capabilities as Record<string, unknown>) : []),
     ];
@@ -220,83 +212,68 @@ export class LabService {
       contactId: options?.contactId,
     };
 
+    const session = llm.adapter.createSession({
+      apiKey: llm.apiKey,
+      model: llm.model,
+      system: systemPrompt,
+      history: [
+        ...(dto.history ?? []).map((m: ChatMessageDto) => ({
+          role: m.role as 'user' | 'assistant',
+          content: m.content,
+        })),
+        { role: 'user' as const, content: dto.message },
+      ],
+      tools: toolDefs.map((t) => ({
+        name: t.name,
+        description: t.description,
+        inputSchema: { properties: t.input_schema.properties, required: t.input_schema.required ?? [] },
+      })),
+      maxTokens: 2048,
+      onResponseHeaders: (headers) => this.aiProviders.recordResponseHeaders(llm.connectionId, headers),
+    });
+
     const toolCallsExecuted: string[] = [];
     let totalInputTokens = 0;
     let totalOutputTokens = 0;
 
     try {
-      /* Agentic loop — keeps running while model requests tool calls */
-      let response = await this.createMessage({
-        model: this.defaultModel,
-        max_tokens: 2048,
-        system: systemPrompt,
-        messages,
-        tools: tools.length > 0 ? tools : undefined,
-      });
+      /* Agentic loop — keeps running while the model requests tool calls */
+      let turn = await session.send();
+      totalInputTokens += turn.inputTokens;
+      totalOutputTokens += turn.outputTokens;
 
-      totalInputTokens += response.usage.input_tokens;
-      totalOutputTokens += response.usage.output_tokens;
+      let rounds = 0;
+      while (turn.toolCalls.length > 0 && rounds < MAX_TOOL_ROUNDS) {
+        rounds += 1;
+        const results: Array<{ id: string; output: string }> = [];
 
-      while (response.stop_reason === 'tool_use') {
-        const toolResults: Anthropic.ToolResultBlockParam[] = [];
-
-        for (const block of response.content) {
-          if (block.type !== 'tool_use') continue;
-
-          this.logger.debug(`Tool call: ${block.name} — ${JSON.stringify(block.input)}`);
-          toolCallsExecuted.push(block.name);
+        for (const call of turn.toolCalls) {
+          this.logger.debug(`Tool call: ${call.name}`);
+          toolCallsExecuted.push(call.name);
 
           let toolOutput: unknown;
           try {
-            if (block.name.startsWith('pc.') && onlineDevice) {
-              toolOutput = await this.pcConnector.enqueueCommand(
-                tenantId,
-                onlineDevice.id,
-                block.name,
-                block.input as Record<string, unknown>,
-                dto.agentId,
-              );
+            if (call.name.startsWith('pc.') && onlineDevice) {
+              toolOutput = await this.pcConnector.enqueueCommand(tenantId, onlineDevice.id, call.name, call.input, dto.agentId);
             } else {
-              toolOutput = await this.schedulingTools.dispatch(
-                block.name,
-                block.input as Record<string, unknown>,
-                toolCtx,
-              );
+              toolOutput = await this.schedulingTools.dispatch(call.name, call.input, toolCtx);
             }
           } catch (err) {
             toolOutput = { error: err instanceof Error ? err.message : String(err) };
           }
-
-          toolResults.push({
-            type: 'tool_result',
-            tool_use_id: block.id,
-            content: JSON.stringify(toolOutput),
-          });
+          results.push({ id: call.id, output: JSON.stringify(toolOutput) });
         }
 
-        /* Feed tool results back and continue the loop */
-        messages.push({ role: 'assistant', content: response.content });
-        messages.push({ role: 'user', content: toolResults });
-
-        response = await this.createMessage({
-          model: this.defaultModel,
-          max_tokens: 2048,
-          system: systemPrompt,
-          messages,
-          tools: tools.length > 0 ? tools : undefined,
-        });
-
-        totalInputTokens += response.usage.input_tokens;
-        totalOutputTokens += response.usage.output_tokens;
+        session.addToolResults(results);
+        turn = await session.send();
+        totalInputTokens += turn.inputTokens;
+        totalOutputTokens += turn.outputTokens;
       }
-
-      const textBlock = response.content.find((b) => b.type === 'text');
-      const reply = textBlock?.type === 'text' ? textBlock.text : '';
 
       await this.llmUsage.recordUsage({
         tenantId,
         agentId: dto.agentId,
-        model: this.defaultModel,
+        model: `${llm.provider}/${llm.model}`,
         inputTokens: totalInputTokens,
         outputTokens: totalOutputTokens,
         source: options?.conversationId ? 'conversation' : 'lab',
@@ -305,20 +282,18 @@ export class LabService {
 
       return {
         traceId,
-        reply,
+        reply: turn.text,
         inputTokens: totalInputTokens,
         outputTokens: totalOutputTokens,
+        provider: llm.provider,
+        model: llm.model,
         retrievedChunks: retrievedChunks.map((c) => ({ content: c.content, source: c.sourceName })),
         toolCallsExecuted: toolCallsExecuted.length > 0 ? toolCallsExecuted : undefined,
       };
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      this.logger.error(`LLM call failed: ${msg}`);
-
-      if (msg.includes('authentication') || msg.includes('invalid') || msg.includes('placeholder')) {
-        throw new BadRequestException(
-          'ANTHROPIC_API_KEY não está configurada. Configure uma chave real no .env.local para usar o laboratório.',
-        );
+      if (err instanceof LlmProviderError) {
+        this.logger.warn(`LLM call failed (trace ${traceId}): ${err.message}`);
+        throw await this.aiProviders.handleProviderFailure(tenantId, llm.connectionId, err, llm.model);
       }
       throw err;
     }
@@ -465,10 +440,10 @@ Você está conectado ao computador "${pcDevice.deviceName}" e pode executar tar
   }
 }
 
-// ── PC Tool Definitions (Anthropic API format) ─────────────────────────────
+// ── PC Tool Definitions (JSON Schema; convertidas por provedor) ─────────────────────────────
 
-function buildPcTools(deviceId: string, capabilities: Record<string, unknown>): Anthropic.Tool[] {
-  const tools: Anthropic.Tool[] = [];
+function buildPcTools(deviceId: string, capabilities: Record<string, unknown>): ToolDef[] {
+  const tools: ToolDef[] = [];
   const files = (capabilities.files ?? {}) as Record<string, boolean>;
   const appsCapabilities = (capabilities.apps ?? {}) as Record<string, boolean>;
   const browser = (capabilities.browser ?? {}) as Record<string, boolean>;

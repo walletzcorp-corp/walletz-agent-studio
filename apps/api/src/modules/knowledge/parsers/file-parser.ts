@@ -47,11 +47,18 @@ function splitIntoChunks(text: string, source: string): ParsedChunk[] {
 }
 
 export async function parsePdf(buffer: Buffer, filename: string): Promise<ParsedChunk[]> {
-  const mod = await import('pdf-parse');
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const pdfParse = (mod.default ?? mod) as unknown as (buf: Buffer) => Promise<{ text: string }>;
-  const data = await pdfParse(buffer);
-  return splitIntoChunks(data.text, filename);
+  // pdf-parse 2.x: API em classe (PDFParse). A v1 exportava uma função.
+  const { PDFParse } = await import('pdf-parse');
+  const parser = new PDFParse({ data: new Uint8Array(buffer) });
+  try {
+    const result = await parser.getText();
+    if (!result.text.trim()) {
+      throw new Error('O PDF não tem texto selecionável (provavelmente é imagem escaneada). Envie um PDF com texto ou converta com OCR.');
+    }
+    return splitIntoChunks(result.text, filename);
+  } finally {
+    await parser.destroy();
+  }
 }
 
 export async function parseDocx(buffer: Buffer, filename: string): Promise<ParsedChunk[]> {

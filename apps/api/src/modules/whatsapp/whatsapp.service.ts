@@ -19,12 +19,42 @@ import {
 } from '../../database/schema/contacts';
 import { agents } from '../../database/schema/agents';
 import { AuditService } from '../../shared/audit/audit.service';
+import { PlanLimitsService } from '../../shared/plans/plan-limits.service';
+import { WebhooksService } from '../webhooks/webhooks.service';
 import { EncryptionService } from '../../shared/crypto/encryption.service';
 import { createId } from '../../database/utils/id';
 import { LabService } from '../lab/lab.service';
 import type { ConnectWhatsappDto, EmbeddedSignupDto, SendMessageDto } from './dto/connect-account.dto';
 
 const META_GRAPH_URL = 'https://graph.facebook.com/v22.0';
+
+export interface WhatsappAccountView {
+  id: string;
+  tenantId: string;
+  displayName: string | null;
+  phoneNumber: string | null;
+  phoneNumberId: string;
+  wabaId: string;
+  status: WhatsappAccount['status'];
+  qualityRating: string | null;
+  messagingLimitTier: string | null;
+  lastSyncedAt: Date | null;
+  agentId: string | null;
+  credentialSource: 'client' | 'embedded';
+  hasAppSecret: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface WhatsappAccountConnectResult {
+  account: WhatsappAccountView;
+  /** Dados para colar no app Meta do cliente (WhatsApp → Configuração → Webhook). */
+  webhook: { callbackUrl: string; verifyToken: string; fields: string[] };
+  /** App inscrito na WABA (subscribed_apps). */
+  subscribed: boolean;
+  /** null = token permanente. */
+  tokenExpiresAt: Date | null;
+}
 
 // Keywords that trigger opt-out (case-insensitive, trimmed)
 const OPT_OUT_KEYWORDS = new Set([
@@ -48,7 +78,27 @@ export class WhatsappService {
     private readonly auditService: AuditService,
     private readonly encryptionService: EncryptionService,
     private readonly labService: LabService,
+    private readonly planLimits: PlanLimitsService,
+    private readonly webhooks: WebhooksService,
   ) {}
+
+  /** WhatsApp oficial só nos planos que o incluem, até o limite de números. */
+  private async assertCanConnectNumber(tenantId: string, phoneNumberId?: string): Promise<void> {
+    await this.planLimits.assertFeature(tenantId, 'whatsapp');
+    if (phoneNumberId) {
+      const [same] = await this.db
+        .select({ id: whatsappAccounts.id })
+        .from(whatsappAccounts)
+        .where(and(
+          eq(whatsappAccounts.tenantId, tenantId),
+          eq(whatsappAccounts.phoneNumberId, phoneNumberId),
+          isNull(whatsappAccounts.deletedAt),
+        ))
+        .limit(1);
+      if (same) return;
+    }
+    await this.planLimits.assertCanAdd(tenantId, 'whatsappNumbers');
+  }
 
   // ─── Accounts ────────────────────────────────────────────────────────────────
 
@@ -72,66 +122,179 @@ export class WhatsappService {
     return account;
   }
 
-  async connectAccount(dto: ConnectWhatsappDto, tenantId: string, userId: string): Promise<WhatsappAccount> {
+  /** Conta como sai da API: nunca expõe token, App Secret nem token de verificação. */
+  toView(account: WhatsappAccount): WhatsappAccountView {
+    return {
+      id: account.id,
+      tenantId: account.tenantId,
+      displayName: account.displayName,
+      phoneNumber: account.phoneNumber,
+      phoneNumberId: account.phoneNumberId,
+      wabaId: account.wabaId,
+      status: account.status,
+      qualityRating: account.qualityRating,
+      messagingLimitTier: account.messagingLimitTier,
+      lastSyncedAt: account.lastSyncedAt,
+      agentId: account.agentId,
+      credentialSource: account.credentialSource === 'client' ? 'client' : 'embedded',
+      hasAppSecret: Boolean(account.appSecret),
+      createdAt: account.createdAt,
+      updatedAt: account.updatedAt,
+    };
+  }
+
+  /** URL pública do webhook exclusivo deste número (configurada no app Meta do cliente). */
+  webhookUrlFor(accountId: string): string {
+    const base = (process.env.PUBLIC_API_URL ?? 'http://localhost:3001/api').replace(/\/$/, '');
+    return `${base}/v1/webhook/whatsapp/${accountId}`;
+  }
+
+  /** Dados que o cliente cola no painel da Meta (Webhook → Callback URL e Verify token). */
+  async webhookSetup(tenantId: string, accountId: string): Promise<{ callbackUrl: string; verifyToken: string; fields: string[] }> {
+    const account = await this.getAccount(tenantId, accountId);
+    if (account.credentialSource !== 'client') {
+      throw new BadRequestException('Este número foi conectado pelo app da Walletz; o webhook já é gerenciado pela plataforma.');
+    }
+    return { callbackUrl: this.webhookUrlFor(account.id), verifyToken: account.verifyToken, fields: ['messages'] };
+  }
+
+  /** Mensagem de erro legível de uma resposta da Graph API (axios). */
+  private metaError(err: unknown): string {
+    const data = (err as { response?: { data?: { error?: { message?: string; code?: number } } } })?.response?.data?.error;
+    if (data?.message) return `${data.message}${data.code ? ` (código ${data.code})` : ''}`;
+    return err instanceof Error ? err.message : String(err);
+  }
+
+  /**
+   * Valida as credenciais do app Meta do próprio cliente:
+   * - debug_token (App ID|App Secret): token válido, do mesmo app, com permissão de WhatsApp; App Secret correto
+   * - o número pertence à conta WhatsApp Business (WABA) informada
+   */
+  private async validateClientCredentials(input: {
+    appId: string;
+    appSecret: string;
+    accessToken: string;
+    wabaId: string;
+    phoneNumberId: string;
+  }): Promise<{ displayName?: string; phoneNumber?: string; tokenExpiresAt: Date | null }> {
+    let debug: { is_valid?: boolean; app_id?: string; scopes?: string[]; expires_at?: number; error?: { message?: string } } | undefined;
+    try {
+      const resp = await firstValueFrom(
+        this.httpService.get(`${META_GRAPH_URL}/debug_token`, {
+          params: { input_token: input.accessToken, access_token: `${input.appId}|${input.appSecret}` },
+        }),
+      );
+      debug = (resp.data as { data?: typeof debug }).data;
+    } catch (err) {
+      throw new BadRequestException(`A Meta recusou o App ID/App Secret: ${this.metaError(err)}`);
+    }
+    if (!debug?.is_valid) {
+      throw new BadRequestException(`Token de acesso inválido ou expirado${debug?.error?.message ? `: ${debug.error.message}` : '.'}`);
+    }
+    if (debug.app_id && debug.app_id !== input.appId) {
+      throw new BadRequestException('O token de acesso pertence a outro app da Meta (App ID diferente).');
+    }
+    const scopes = debug.scopes ?? [];
+    if (!scopes.includes('whatsapp_business_messaging')) {
+      throw new BadRequestException('O token não tem a permissão "whatsapp_business_messaging". Gere um token de Usuário do Sistema com essa permissão.');
+    }
+
+    let phones: Array<{ id: string; display_phone_number?: string; verified_name?: string }> = [];
+    try {
+      const resp = await firstValueFrom(
+        this.httpService.get(`${META_GRAPH_URL}/${input.wabaId}/phone_numbers`, {
+          params: { access_token: input.accessToken, fields: 'id,display_phone_number,verified_name' },
+        }),
+      );
+      phones = (resp.data as { data?: typeof phones }).data ?? [];
+    } catch (err) {
+      throw new BadRequestException(`Não foi possível ler a conta WhatsApp Business (WABA ID): ${this.metaError(err)}`);
+    }
+    const phone = phones.find((p) => p.id === input.phoneNumberId);
+    if (!phone) {
+      throw new BadRequestException('Este Phone Number ID não pertence à conta WhatsApp Business (WABA) informada.');
+    }
+    return {
+      ...(phone.verified_name ? { displayName: phone.verified_name } : {}),
+      ...(phone.display_phone_number ? { phoneNumber: phone.display_phone_number } : {}),
+      tokenExpiresAt: debug.expires_at ? new Date(debug.expires_at * 1000) : null,
+    };
+  }
+
+  /** Inscreve o app do cliente para receber os eventos da WABA (sem isso o webhook não recebe mensagens). */
+  private async subscribeApp(wabaId: string, accessToken: string): Promise<boolean> {
+    try {
+      await firstValueFrom(
+        this.httpService.post(`${META_GRAPH_URL}/${wabaId}/subscribed_apps`, null, { params: { access_token: accessToken } }),
+      );
+      return true;
+    } catch (err) {
+      this.logger.warn(`Falha ao inscrever app na WABA ${wabaId}: ${this.metaError(err)}`);
+      return false;
+    }
+  }
+
+  private async assertAgentOfTenant(tenantId: string, agentId: string | null | undefined): Promise<void> {
+    if (!agentId) return;
+    const [agent] = await this.db
+      .select({ id: agents.id })
+      .from(agents)
+      .where(and(eq(agents.id, agentId), eq(agents.tenantId, tenantId), isNull(agents.deletedAt)))
+      .limit(1);
+    if (!agent) throw new NotFoundException('Agente não encontrado');
+  }
+
+  /**
+   * Conecta um número usando o app Meta do PRÓPRIO cliente (token permanente de
+   * Usuário do Sistema + App Secret). Cada número ganha webhook e token de verificação próprios.
+   */
+  async connectAccount(dto: ConnectWhatsappDto, tenantId: string, userId: string): Promise<WhatsappAccountConnectResult> {
+    const phoneNumberId = dto.phoneNumberId.trim();
     const [existing] = await this.db
       .select()
       .from(whatsappAccounts)
-      .where(eq(whatsappAccounts.phoneNumberId, dto.phoneNumberId));
+      .where(eq(whatsappAccounts.phoneNumberId, phoneNumberId));
 
-    if (existing && existing.tenantId !== tenantId) {
-      throw new ConflictException('Phone Number ID already registered to another tenant');
+    if (existing && existing.tenantId !== tenantId && !existing.deletedAt) {
+      throw new ConflictException('Este número já está conectado em outra organização.');
     }
+    await this.assertCanConnectNumber(tenantId, phoneNumberId);
+    await this.assertAgentOfTenant(tenantId, dto.agentId);
 
-    let displayName: string | undefined;
-    let phoneNumber: string | undefined;
+    const accessToken = dto.accessToken.trim();
+    const appSecret = dto.appSecret.trim();
+    const meta = await this.validateClientCredentials({
+      appId: dto.appId.trim(),
+      appSecret,
+      accessToken,
+      wabaId: dto.wabaId.trim(),
+      phoneNumberId,
+    });
 
-    try {
-      const resp = await firstValueFrom(
-        this.httpService.get(`${META_GRAPH_URL}/${dto.phoneNumberId}`, {
-          params: { fields: 'display_phone_number,verified_name', access_token: dto.accessToken },
-        }),
-      );
-      const data = resp.data as { display_phone_number?: string; verified_name?: string };
-      phoneNumber = data.display_phone_number;
-      displayName = data.verified_name;
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      this.logger.warn(`Meta API verification failed: ${msg}`);
-      throw new BadRequestException(`Falha ao verificar credenciais com a Meta: ${msg}`);
-    }
-
-    const encryptedToken = this.encryptionService.encrypt(dto.accessToken);
-    const encryptedAppSecret = dto.appSecret ? this.encryptionService.encrypt(dto.appSecret) : undefined;
+    const accountId = existing && existing.tenantId === tenantId ? existing.id : createId();
+    const verifyToken = crypto.randomBytes(24).toString('base64url');
+    const values = {
+      wabaId: dto.wabaId.trim(),
+      accessToken: this.encryptionService.encrypt(accessToken),
+      appSecret: this.encryptionService.encrypt(appSecret),
+      verifyToken,
+      webhookUrl: this.webhookUrlFor(accountId),
+      displayName: meta.displayName ?? null,
+      phoneNumber: meta.phoneNumber ?? null,
+      status: 'connected' as const,
+      credentialSource: 'client',
+      agentId: dto.agentId ?? null,
+      deletedAt: null,
+      updatedAt: new Date(),
+    };
 
     const [account] = await this.db
       .insert(whatsappAccounts)
-      .values({
-        tenantId,
-        phoneNumberId: dto.phoneNumberId,
-        wabaId: dto.wabaId,
-        accessToken: encryptedToken,
-        appSecret: encryptedAppSecret,
-        verifyToken: dto.verifyToken,
-        webhookUrl: dto.webhookUrl,
-        displayName,
-        phoneNumber,
-        status: 'connected',
-        connectedByUserId: userId,
-      })
-      .onConflictDoUpdate({
-        target: whatsappAccounts.phoneNumberId,
-        set: {
-          accessToken: encryptedToken,
-          appSecret: encryptedAppSecret,
-          verifyToken: dto.verifyToken,
-          webhookUrl: dto.webhookUrl,
-          displayName,
-          phoneNumber,
-          status: 'connected',
-          updatedAt: new Date(),
-        },
-      })
+      .values({ id: accountId, tenantId, phoneNumberId, connectedByUserId: userId, ...values })
+      .onConflictDoUpdate({ target: whatsappAccounts.phoneNumberId, set: { tenantId, connectedByUserId: userId, ...values } })
       .returning();
+
+    const subscribed = await this.subscribeApp(values.wabaId, accessToken);
 
     await this.auditService.log({
       action: 'whatsapp.account_connected',
@@ -139,19 +302,86 @@ export class WhatsappService {
       resourceId: account!.id,
       tenantId,
       userId,
-      metadata: { phoneNumberId: dto.phoneNumberId, wabaId: dto.wabaId },
+      metadata: { phoneNumberId, wabaId: values.wabaId, source: 'client', subscribed, tokenExpiresAt: meta.tokenExpiresAt?.toISOString() ?? 'never' },
     });
 
-    void this.syncTemplates(account!.id, tenantId).catch((e) =>
-      this.logger.warn(`Template sync failed: ${e}`),
-    );
+    void this.syncTemplates(account!.id, tenantId).catch((e) => this.logger.warn(`Template sync failed: ${e}`));
 
-    return account!;
+    return {
+      account: this.toView(account!),
+      webhook: { callbackUrl: this.webhookUrlFor(account!.id), verifyToken, fields: ['messages'] },
+      subscribed,
+      tokenExpiresAt: meta.tokenExpiresAt,
+    };
+  }
+
+  /** Troca o token e/ou o App Secret (validados antes de substituir). */
+  async updateCredentials(
+    tenantId: string,
+    accountId: string,
+    dto: { appId: string; accessToken?: string; appSecret?: string },
+    userId: string,
+  ): Promise<WhatsappAccountView> {
+    const account = await this.getAccount(tenantId, accountId);
+    const accessToken = dto.accessToken?.trim() || this.decryptToken(account);
+    const appSecret = dto.appSecret?.trim() || (account.appSecret ? this.encryptionService.tryDecrypt(account.appSecret) : null);
+    if (!appSecret) throw new BadRequestException('Informe o App Secret do app da Meta.');
+    const meta = await this.validateClientCredentials({
+      appId: dto.appId.trim(),
+      appSecret,
+      accessToken,
+      wabaId: account.wabaId,
+      phoneNumberId: account.phoneNumberId,
+    });
+    const [updated] = await this.db
+      .update(whatsappAccounts)
+      .set({
+        accessToken: this.encryptionService.encrypt(accessToken),
+        appSecret: this.encryptionService.encrypt(appSecret),
+        credentialSource: 'client',
+        status: 'connected',
+        ...(meta.displayName ? { displayName: meta.displayName } : {}),
+        updatedAt: new Date(),
+      })
+      .where(and(eq(whatsappAccounts.id, accountId), eq(whatsappAccounts.tenantId, tenantId)))
+      .returning();
+    await this.subscribeApp(account.wabaId, accessToken);
+    await this.auditService.log({
+      action: 'whatsapp.credentials_updated',
+      resourceType: 'whatsapp_account',
+      resourceId: accountId,
+      tenantId,
+      userId,
+      metadata: { tokenRotated: Boolean(dto.accessToken), appSecretRotated: Boolean(dto.appSecret) },
+    });
+    return this.toView(updated!);
+  }
+
+  /** Define qual agente responde neste número (null = primeiro agente publicado). */
+  async setAccountAgent(tenantId: string, accountId: string, agentId: string | null, userId: string): Promise<WhatsappAccountView> {
+    const account = await this.getAccount(tenantId, accountId);
+    await this.assertAgentOfTenant(tenantId, agentId);
+    const [updated] = await this.db
+      .update(whatsappAccounts)
+      .set({ agentId, updatedAt: new Date() })
+      .where(and(eq(whatsappAccounts.id, accountId), eq(whatsappAccounts.tenantId, tenantId)))
+      .returning();
+    await this.auditService.log({
+      action: 'whatsapp.agent_set',
+      resourceType: 'whatsapp_account',
+      resourceId: accountId,
+      tenantId,
+      userId,
+      previousState: { agentId: account.agentId },
+      newState: { agentId },
+    });
+    return this.toView(updated!);
   }
 
   // ─── Embedded Signup ─────────────────────────────────────────────────────────
 
   async embeddedSignup(dto: EmbeddedSignupDto, tenantId: string, userId: string): Promise<WhatsappAccount> {
+    await this.assertCanConnectNumber(tenantId, dto.phoneNumberId);
     const appId = process.env.META_APP_ID;
     const appSecret = process.env.META_APP_SECRET;
     if (!appId || !appSecret) {
@@ -536,23 +766,60 @@ export class WhatsappService {
     return challenge;
   }
 
+  /** GET do webhook exclusivo de um número: confere o token de verificação daquele número. */
+  async verifyAccountWebhook(accountId: string, mode: string, challenge: string, token: string): Promise<string> {
+    if (mode !== 'subscribe') throw new BadRequestException('Invalid mode');
+    const [account] = await this.db
+      .select({ verifyToken: whatsappAccounts.verifyToken })
+      .from(whatsappAccounts)
+      .where(and(eq(whatsappAccounts.id, accountId), isNull(whatsappAccounts.deletedAt)))
+      .limit(1);
+    const expected = account?.verifyToken ?? '';
+    if (!account || !token || token.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(token), Buffer.from(expected))) {
+      throw new UnauthorizedException('Invalid verify token');
+    }
+    return challenge;
+  }
+
+  /** POST do webhook exclusivo: assinatura obrigatória com o App Secret do cliente; só aceita eventos do próprio número. */
+  async handleAccountWebhook(accountId: string, payload: unknown, signature: string | undefined, rawBody: Buffer): Promise<void> {
+    const [account] = await this.db
+      .select()
+      .from(whatsappAccounts)
+      .where(and(eq(whatsappAccounts.id, accountId), isNull(whatsappAccounts.deletedAt)))
+      .limit(1);
+    const secret = account?.appSecret ? this.encryptionService.tryDecrypt(account.appSecret) : null;
+    if (!account || !secret) throw new UnauthorizedException('Webhook desconhecido');
+    this.assertSignature(secret, signature, rawBody);
+    await this.dispatchWebhookPayload(payload, account.phoneNumberId);
+  }
+
+  private assertSignature(appSecret: string, signature: string | undefined, rawBody: Buffer): void {
+    if (!signature) throw new UnauthorizedException('Missing webhook signature');
+    const expected = `sha256=${this.encryptionService.hmacSha256(appSecret, rawBody)}`;
+    if (signature.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) {
+      this.logger.warn('Webhook signature mismatch — request rejected');
+      throw new UnauthorizedException('Invalid webhook signature');
+    }
+  }
+
+  /** Webhook global (app Meta da Walletz / Embedded Signup). */
   async handleWebhookEvent(
     payload: unknown,
     signature: string | undefined,
     rawBody: Buffer,
   ): Promise<void> {
-    // Validate Meta signature (x-hub-signature-256: sha256=<hex>)
     const appSecret = process.env.META_APP_SECRET;
-    if (appSecret && signature) {
-      const expected = `sha256=${this.encryptionService.hmacSha256(appSecret, rawBody)}`;
-      if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) {
-        this.logger.warn('Webhook signature mismatch — request rejected');
-        throw new UnauthorizedException('Invalid webhook signature');
-      }
-    } else if (appSecret && !signature) {
-      this.logger.warn('Webhook received without x-hub-signature-256 header');
+    if (appSecret) {
+      this.assertSignature(appSecret, signature, rawBody);
+    } else if (process.env.NODE_ENV === 'production') {
+      // Sem App Secret não há como saber se o evento veio da Meta.
+      throw new UnauthorizedException('Webhook global desativado (META_APP_SECRET não configurado)');
     }
+    await this.dispatchWebhookPayload(payload);
+  }
 
+  private async dispatchWebhookPayload(payload: unknown, onlyPhoneNumberId?: string): Promise<void> {
     const body = payload as WebhookPayload;
 
     if (body.object !== 'whatsapp_business_account') return;
@@ -562,8 +829,10 @@ export class WhatsappService {
         if (change.field !== 'messages') continue;
         const value = change.value;
 
+        const phoneNumberId = value.metadata?.phone_number_id;
+        if (onlyPhoneNumberId && phoneNumberId !== onlyPhoneNumberId) continue;
         for (const message of value.messages ?? []) {
-          await this.processInboundMessage(value.metadata?.phone_number_id, message, value.contacts?.[0]);
+          await this.processInboundMessage(phoneNumberId, message, value.contacts?.[0]);
         }
 
         for (const status of value.statuses ?? []) {
@@ -586,7 +855,7 @@ export class WhatsappService {
       .where(eq(whatsappAccounts.phoneNumberId, phoneNumberId))
       .limit(1);
 
-    if (!account) {
+    if (!account || account.deletedAt) {
       this.logger.warn(`No account found for phoneNumberId: ${phoneNumberId}`);
       return;
     }
@@ -648,9 +917,17 @@ export class WhatsappService {
         })
         .returning();
       conversationId = newConv!.id;
+      void this.webhooks.emit(tenantId, 'conversation.created', { conversationId, channel: 'whatsapp', contactId });
     }
 
     // ── Insert inbound message into messages table ──
+    void this.webhooks.emit(tenantId, 'message.received', {
+      conversationId,
+      channel: 'whatsapp',
+      contactId,
+      text: message.type === 'text' ? message.text?.body ?? '' : null,
+      messageType: message.type,
+    });
     await this.db.insert(messages).values({
       conversationId,
       tenantId,
@@ -804,16 +1081,19 @@ export class WhatsappService {
     userMessage: string,
     tenantId: string,
   ): Promise<void> {
-    // Find active agent for tenant
-    const [agent] = await this.db
-      .select({ id: agents.id })
+    // Agente do número; sem agente definido, o primeiro publicado (depois qualquer não arquivado)
+    const candidates = await this.db
+      .select({ id: agents.id, status: agents.status })
       .from(agents)
       .where(and(
         eq(agents.tenantId, tenantId),
         isNull(agents.deletedAt),
         ne(agents.status, 'archived'),
-      ))
-      .limit(1);
+      ));
+    const agent =
+      (account.agentId ? candidates.find((a) => a.id === account.agentId) : undefined) ??
+      candidates.find((a) => a.status === 'published') ??
+      candidates[0];
 
     if (!agent) {
       this.logger.log(`No active agent found for tenant ${tenantId}, skipping AI response`);
@@ -824,6 +1104,7 @@ export class WhatsappService {
       const result = await this.labService.chat(
         { agentId: agent.id, message: userMessage },
         tenantId,
+        { conversationId, contactId },
       );
 
       if (!result.reply) return;
@@ -838,6 +1119,12 @@ export class WhatsappService {
         result.traceId,
       );
 
+      void this.webhooks.emit(tenantId, 'message.replied', {
+        conversationId,
+        channel: 'whatsapp',
+        agentId: agent.id,
+        text: result.reply,
+      });
       this.logger.log(`AI reply sent for conversation ${conversationId} (trace: ${result.traceId})`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

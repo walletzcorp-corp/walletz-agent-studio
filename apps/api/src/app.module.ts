@@ -24,6 +24,10 @@ import { HealthModule } from './modules/health/health.module';
 import { PcConnectorModule } from './modules/pc-connector/pc-connector.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { LlmUsageModule } from './shared/llm-usage/llm-usage.module';
+import { PlansModule } from './shared/plans/plans.module';
+import { AiProvidersModule } from './modules/ai-providers/ai-providers.module';
+import { WebchatModule } from './modules/webchat/webchat.module';
+import { WebhooksModule } from './modules/webhooks/webhooks.module';
 import { AuditModule } from './shared/audit/audit.module';
 import { CryptoModule } from './shared/crypto/crypto.module';
 import { OutboxModule } from './shared/outbox/outbox.module';
@@ -85,6 +89,7 @@ import { anthropicConfig } from './config/anthropic.config';
     CryptoModule,
     RbacModule,
     LlmUsageModule,
+    PlansModule,
     OutboxModule,
     HealthModule,
     AuthModule,
@@ -103,6 +108,9 @@ import { anthropicConfig } from './config/anthropic.config';
     PrivacyModule,
     PcConnectorModule,
     AdminModule,
+    AiProvidersModule,
+    WebchatModule,
+    WebhooksModule,
   ],
 })
 export class AppModule {}

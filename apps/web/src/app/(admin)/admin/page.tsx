@@ -12,7 +12,6 @@ import {
   ActivityList, BarList, DailyBars, ErrorBlock, KpiCard, LoadingBlock, PageHeader, Section,
   TemplateChips, TenantStatusBadge, UsageMeter,
 } from '../_components/admin-ui';
-import { RateLimitTable } from './ia/rate-limits';
 
 export default function AdminDashboardPage() {
   const [data, setData] = useState<AdminOverview | null>(null);
@@ -122,9 +121,9 @@ export default function AdminDashboardPage() {
           />
         </Section>
 
-        {/* Claude */}
+        {/* IA: chaves dos clientes (BYOK) */}
         <Section
-          title={`Claude · ${llm.model}`}
+          title="IA · chaves dos clientes"
           right={<Link href="/admin/ia" className="text-xs text-primary hover:underline">detalhes</Link>}
         >
           <div className="mb-3 grid grid-cols-2 gap-3 text-sm">
@@ -138,9 +137,14 @@ export default function AdminDashboardPage() {
             </div>
           </div>
           <p className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-            <Gauge className="h-3.5 w-3.5" /> Limites da conta Anthropic (por minuto)
+            <Gauge className="h-3.5 w-3.5" /> Conexões por situação
           </p>
-          <RateLimitTable snapshot={llm.rateLimits} />
+          <div className="flex flex-wrap gap-2 text-xs">
+            <span className="badge-success rounded-full px-2.5 py-1">Ativas: {llm.connections.byStatus['active'] ?? 0}</span>
+            <span className="badge-warning rounded-full px-2.5 py-1">Sem crédito: {llm.connections.byStatus['billing_error'] ?? 0}</span>
+            <span className="badge-danger rounded-full px-2.5 py-1">Chave recusada: {llm.connections.byStatus['invalid'] ?? 0}</span>
+            <span className="rounded-full border border-border px-2.5 py-1 text-muted-foreground">Clientes sem chave: {llm.connections.tenantsWithoutKey}</span>
+          </div>
         </Section>
       </div>
 

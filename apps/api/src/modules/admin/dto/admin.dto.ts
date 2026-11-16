@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  IsBoolean,
   IsEmail,
   IsIn,
   IsInt,
@@ -17,6 +18,7 @@ import {
   type ValidatorConstraintInterface,
 } from 'class-validator';
 import { isValidTaxId, type CustomerType } from '../../../shared/validation/tax-id';
+import { PLAN_SLUGS, type PlanSlug } from '../../../shared/plans/plan-catalog';
 
 @ValidatorConstraint({ name: 'taxIdMatchesType' })
 class TaxIdMatchesType implements ValidatorConstraintInterface {
@@ -177,6 +179,20 @@ export class CreateUserDto {
   @IsString()
   @Length(8, 100, { message: 'A senha precisa ter entre 8 e 100 caracteres' })
   password!: string;
+
+  @ApiPropertyOptional({
+    enum: PLAN_SLUGS,
+    description: 'Com plano: cria também a organização do usuário nesse plano (ele vira dono). Sem plano: ele cria a organização no 1º acesso.',
+  })
+  @IsOptional()
+  @IsIn(PLAN_SLUGS, { message: 'Plano inválido' })
+  plan?: PlanSlug;
+
+  @ApiPropertyOptional({ example: 'Clínica São José', description: 'Nome da organização (padrão: nome do usuário). Só com plano.' })
+  @IsOptional()
+  @IsString()
+  @Length(2, 120, { message: 'Nome da organização: 2 a 120 caracteres' })
+  organizationName?: string;
 }
 
 /** Cadastro de cliente pelo admin: cria a organização + o login do responsável. */
@@ -218,4 +234,42 @@ export class CreateCustomerDto {
   @IsString()
   @Length(8, 100, { message: 'A senha precisa ter entre 8 e 100 caracteres' })
   password?: string;
+
+  @ApiPropertyOptional({ enum: PLAN_SLUGS, default: 'starter', description: 'Plano comercial contratado' })
+  @IsOptional()
+  @IsIn(PLAN_SLUGS, { message: 'Plano inválido' })
+  plan?: PlanSlug;
+}
+
+export class SetPlanDto {
+  @ApiProperty({ enum: PLAN_SLUGS, description: 'Plano comercial v4.2 (nenhum inclui tokens de IA)' })
+  @IsIn(PLAN_SLUGS, { message: 'Plano inválido' })
+  plan!: PlanSlug;
+}
+
+export const OVERRIDABLE_FEATURES = [
+  'webchat',
+  'whatsapp',
+  'calendars',
+  'emailNotifications',
+  'emailInbox',
+  'outboundWebhooks',
+  'publicApi',
+  'crmConnectors',
+  'whiteLabel',
+  'campaigns',
+] as const;
+
+export class SetFeatureOverrideDto {
+  @ApiProperty({ enum: OVERRIDABLE_FEATURES })
+  @IsIn(OVERRIDABLE_FEATURES)
+  feature!: (typeof OVERRIDABLE_FEATURES)[number];
+
+  @ApiProperty({
+    nullable: true,
+    description: 'true libera (sob medida), false bloqueia, null volta ao padrão do plano',
+  })
+  @ValidateIf((_o, v) => v !== null)
+  @IsBoolean()
+  enabled!: boolean | null;
 }

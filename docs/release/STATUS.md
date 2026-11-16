@@ -1,6 +1,6 @@
 # Status da Release — Walletz Agent Studio
 
-**Última atualização**: 2026-11-11  
+**Última atualização**: 2026-11-16  
 **Sprint atual**: 7 — Microsoft Graph Integration + Token Auto-Refresh + Teams Meeting
 
 ---
@@ -143,3 +143,39 @@ Ver detalhes em [EXTERNAL_BLOCKERS.md](EXTERNAL_BLOCKERS.md).
 | Validação de CPF/CNPJ (dígitos verificadores) no servidor e no front | ✅ | `shared/validation/tax-id.ts`; 400 "CPF inválido" / 409 "Já existe um cliente com este CPF." |
 | Painel `/admin/clientes`: botão "Novo cliente", filtro PF/PJ, coluna tipo/documento, busca por CPF/CNPJ | ✅ | CPF mascarado na lista (`***.456.789-**`), completo só no detalhe |
 | Testes | ✅ | unit 10 (CPF/CNPJ + DTO); E2E API 13/13 com banco real (inclui 403 para não-admin e campo extra recusado); navegador 6/6 |
+
+## Planos v4.2 e chave de IA do próprio cliente (BYOK) (2026-11-16)
+
+Base: *Walletz Studio IA — Planos Sugeridos*, proposta comercial v4.2 (16/11/2026). Regra central: nenhum plano inclui tokens de IA.
+
+| Item | Status | Evidência |
+|------|--------|-----------|
+| Chave de IA por cliente (Anthropic, OpenAI, Gemini, OpenRouter) | ✅ | tabela `ai_provider_connections` (migration `0006_byok-planos`), chave AES-256-GCM, só a máscara sai da API; validação com listagem de modelos + chamada mínima de teste |
+| Chave geral da plataforma removida | ✅ | `LabService` usa `AiProvidersService.resolveForAgent`; sem conexão → 422 `AI_PROVIDER_NOT_CONFIGURED`; `ANTHROPIC_API_KEY` não é mais lida |
+| Testar / trocar (rotação validada) / revogar (apaga a chave cifrada) / modelo / conexão padrão / conexão por agente | ✅ | `/v1/tenants/:id/ai-connections/*`; auditoria `ai_connection.*` sem a chave |
+| "Provedor de IA indisponível por faturamento" | ✅ | falha de crédito/quota marca `billing_error` e bloqueia novas chamadas (402) sem bloquear o painel; "Testar novamente" reativa |
+| Planos Starter/Pro/Business/Agency no banco e no código | ✅ | `shared/plans/plan-catalog.ts` + seed na migration; clientes sem plano/legados → Starter |
+| Limites aplicados no servidor | ✅ | agentes, usuários (convite), conexões de IA, números de WhatsApp, agendas, widgets, webhooks → 403 `PLAN_LIMIT_REACHED` |
+| Recursos por plano | ✅ | WhatsApp/agendas fora do Starter, webhooks a partir do Pro, campanhas em massa fora dos planos (só "sob medida" liberado pelo admin) |
+| Admin: plano no cadastro, troca de plano, recursos sob medida, painel de chaves dos clientes | ✅ | `PATCH /v1/admin/tenants/:id/plan` e `/features`; `/admin/ia` lista conexões (sem chaves) e clientes sem chave |
+| Webchat incorporável (canal do Starter) | ✅ | widgets por agente, sites autorizados (Origin), token de sessão por conversa, limite por IP e por sessão; script `GET /v1/public/webchat/widget.js` |
+| Webhooks de saída (Pro+) | ✅ | assinatura HMAC-SHA256, entrega com novas tentativas pelo outbox, bloqueio de rede interna (SSRF) |
+| Telas Billing, Custos, Integrações, Config. IA, Ajuda e cadastro | ✅ | sem valores fictícios; IA sempre "paga direto ao provedor" |
+| Testes | ✅ | unit 86 (planos, adaptadores, BYOK, webhooks/webchat); E2E local 38/38 com banco real e chave real (inclui isolamento entre clientes) |
+| Notificações por e-mail, caixa de e-mail, Trello/CRM, API pública | ⏳ Em desenvolvimento | aparecem como roadmap; o servidor bloqueia com `FEATURE_IN_DEVELOPMENT` |
+| Subcontas e White Label (Agency) | ⏳ Oferta condicionada | depende de validar isolamento, permissões, faturamento por subconta e vazamento de chaves (seção 06 do documento) |
+| Cobrança da assinatura (checkout) | ⏳ | contratação via Walletz (WhatsApp/contrato); módulo billing sem gateway |
+
+## WhatsApp com o app Meta do próprio cliente (2026-11-16)
+
+| Item | Status | Evidência |
+|------|--------|-----------|
+| Conexão com credenciais do cliente (Phone Number ID, WABA ID, App ID, App Secret, token permanente) | ✅ | validação real na Meta (`debug_token`, permissão `whatsapp_business_messaging`, número pertence à WABA) antes de salvar; token e App Secret cifrados |
+| Webhook exclusivo por número | ✅ | `GET/POST /v1/webhook/whatsapp/:accountId`; token de verificação gerado por número; assinatura obrigatória com o App Secret do cliente; eventos de outros números ignorados (migration `0007_whatsapp-cliente`) |
+| Agente por número | ✅ | `PATCH …/whatsapp/accounts/:id/agent`; sem agente definido, o primeiro publicado |
+| Troca de token / App Secret validada | ✅ | `PUT …/whatsapp/accounts/:id/credentials` |
+| Listagem não expõe segredos | ✅ | antes a API devolvia token e App Secret cifrados; agora só a visão segura |
+| Webhook global (app Walletz) sem `META_APP_SECRET` em produção | ✅ | recusado (antes aceitava eventos sem assinatura) |
+| `@CurrentUser('userId')` devolvia o objeto inteiro | ✅ corrigido | afetava WhatsApp, conversas, contatos, campanhas e privacidade (id do usuário errado em gravações e auditoria) |
+| Testes | ✅ | E2E local 19/19 (inclui recusa real da Meta para credenciais falsas, assinatura, isolamento) |
+| Teste com número real da Meta | ⏳ | depende de credenciais reais do cliente e de URL pública (`PUBLIC_API_URL`) |

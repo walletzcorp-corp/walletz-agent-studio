@@ -7,7 +7,7 @@ import {
   Home, Bot, BookOpen, FlaskConical, MessageSquare,
   Users, Megaphone, Calendar, BarChart3, Settings,
   Smartphone, GraduationCap, Puzzle, DollarSign,
-  CreditCard, Brain, ChevronRight, Sparkles, HelpCircle,
+  CreditCard, Brain, ChevronRight, Sparkles, HelpCircle, Globe,
 } from 'lucide-react';
 import { WalletzLogo, WalletzMark } from './walletz-logo';
 
@@ -52,6 +52,7 @@ const NAV_SECTIONS: NavSection[] = [
     label: 'Canais',
     items: [
       { href: '/canais/whatsapp', label: 'WhatsApp',    icon: Smartphone },
+      { href: '/canais/webchat',  label: 'Webchat',     icon: Globe },
       { href: '/integracoes',     label: 'Integrações', icon: Puzzle },
     ],
   },

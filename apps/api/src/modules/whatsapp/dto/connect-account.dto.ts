@@ -1,37 +1,65 @@
-import { IsString, IsNotEmpty, IsOptional, MaxLength } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, MaxLength, Matches, ValidateIf } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
+/** Conexão com o app Meta do PRÓPRIO cliente (WhatsApp Cloud API oficial). */
 export class ConnectWhatsappDto {
-  @ApiProperty({ description: 'Phone Number ID from Meta Developer Console' })
+  @ApiProperty({ description: 'Phone Number ID (WhatsApp → Configuração da API, no app Meta do cliente)' })
   @IsString()
-  @IsNotEmpty()
+  @Matches(/^\d{5,30}$/, { message: 'Phone Number ID deve conter só números' })
   phoneNumberId!: string;
 
-  @ApiProperty({ description: 'WhatsApp Business Account ID' })
+  @ApiProperty({ description: 'ID da conta do WhatsApp Business (WABA ID)' })
   @IsString()
-  @IsNotEmpty()
+  @Matches(/^\d{5,30}$/, { message: 'WABA ID deve conter só números' })
   wabaId!: string;
 
-  @ApiProperty({ description: 'Permanent or System User access token' })
+  @ApiProperty({ description: 'Token permanente de Usuário do Sistema com whatsapp_business_messaging e whatsapp_business_management' })
   @IsString()
   @IsNotEmpty()
+  @MaxLength(1024)
   accessToken!: string;
 
-  @ApiProperty({ description: 'App Secret for webhook signature verification', required: false })
+  @ApiProperty({ description: 'App ID do app Meta do cliente' })
+  @IsString()
+  @Matches(/^\d{5,30}$/, { message: 'App ID deve conter só números' })
+  appId!: string;
+
+  @ApiProperty({ description: 'App Secret do app Meta do cliente (valida a assinatura dos webhooks)' })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(256)
+  appSecret!: string;
+
+  @ApiProperty({ required: false, description: 'Agente que responde neste número' })
   @IsOptional()
   @IsString()
+  agentId?: string;
+}
+
+export class UpdateWhatsappCredentialsDto {
+  @ApiProperty({ description: 'App ID do app Meta (necessário para validar)' })
+  @IsString()
+  @Matches(/^\d{5,30}$/, { message: 'App ID deve conter só números' })
+  appId!: string;
+
+  @ApiProperty({ required: false, description: 'Novo token permanente' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(1024)
+  accessToken?: string;
+
+  @ApiProperty({ required: false, description: 'Novo App Secret' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(256)
   appSecret?: string;
+}
 
-  @ApiProperty({ description: 'Custom webhook verify token' })
+export class SetWhatsappAgentDto {
+  @ApiProperty({ nullable: true, description: 'Agente do número; null = primeiro agente publicado' })
+  @ValidateIf((_o, v) => v !== null)
   @IsString()
-  @IsNotEmpty()
-  @MaxLength(128)
-  verifyToken!: string;
-
-  @ApiProperty({ description: 'Public webhook URL where Meta will send events' })
-  @IsString()
-  @IsNotEmpty()
-  webhookUrl!: string;
+  agentId!: string | null;
 }
 
 export class EmbeddedSignupDto {

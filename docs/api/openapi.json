@@ -343,6 +343,26 @@
         ]
       }
     },
+    "/api/v1/tenants/plans/catalog": {
+      "get": {
+        "operationId": "TenantsController_plansCatalog",
+        "summary": "Catálogo de planos comerciais (v4.2). Nenhum plano inclui tokens de IA.",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "tenants"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/tenants": {
       "post": {
         "operationId": "TenantsController_create",
@@ -464,7 +484,36 @@
     "/api/v1/tenants/{tenantId}/feature-flags": {
       "get": {
         "operationId": "TenantsController_featureFlags",
-        "summary": "Feature flags do tenant",
+        "summary": "Recursos liberados para a organização (plano + exceções)",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "tenants"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/tenants/{tenantId}/plan": {
+      "get": {
+        "operationId": "TenantsController_plan",
+        "summary": "Plano da organização, uso de cada limite e recursos liberados",
         "parameters": [
           {
             "name": "tenantId",
@@ -2675,6 +2724,332 @@
         ]
       }
     },
+    "/api/v1/tenants/{tenantId}/ai-connections/providers": {
+      "get": {
+        "operationId": "AiProvidersController_providers",
+        "summary": "Provedores homologados e links oficiais de compra/chave",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "ai-connections"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/tenants/{tenantId}/ai-connections": {
+      "get": {
+        "operationId": "AiProvidersController_list",
+        "summary": "Listar conexões de IA (chave sempre mascarada)",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "ai-connections"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "operationId": "AiProvidersController_create",
+        "summary": "Conectar chave de IA: valida autenticação, modelo e faturamento com uma chamada de teste",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAiConnectionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "ai-connections"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/tenants/{tenantId}/ai-connections/{connectionId}": {
+      "patch": {
+        "operationId": "AiProvidersController_update",
+        "summary": "Trocar a chave (rotação), o modelo ou o nome; a nova chave é validada antes de substituir",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "connectionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAiConnectionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "ai-connections"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "AiProvidersController_remove",
+        "summary": "Revogar a conexão (a chave cifrada é apagada)",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "connectionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "ai-connections"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/tenants/{tenantId}/ai-connections/{connectionId}/test": {
+      "post": {
+        "operationId": "AiProvidersController_test",
+        "summary": "Testar a chave salva (reativa após regularizar o faturamento no provedor)",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "connectionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "ai-connections"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/tenants/{tenantId}/ai-connections/{connectionId}/models": {
+      "get": {
+        "operationId": "AiProvidersController_models",
+        "summary": "Modelos disponíveis na conta do provedor",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "connectionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "ai-connections"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/tenants/{tenantId}/ai-connections/{connectionId}/default": {
+      "post": {
+        "operationId": "AiProvidersController_setDefault",
+        "summary": "Tornar a conexão padrão da organização",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "connectionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "ai-connections"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/tenants/{tenantId}/ai-connections/agents/{agentId}": {
+      "put": {
+        "operationId": "AiProvidersController_setAgentConnection",
+        "summary": "Definir qual conexão de IA o agente usa (null = padrão da organização)",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "agentId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetAgentAiConnectionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "ai-connections"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/tenants/{tenantId}/conversations": {
       "get": {
         "operationId": "ConversationsController_list",
@@ -4391,7 +4766,7 @@
     "/api/v1/admin/llm": {
       "get": {
         "operationId": "AdminController_llmStatus",
-        "summary": "Modelo em uso e limites de taxa da conta Anthropic",
+        "summary": "Conexões de IA (chave do próprio cliente) de todas as organizações",
         "parameters": [],
         "responses": {
           "200": {
@@ -4515,6 +4890,84 @@
         ]
       }
     },
+    "/api/v1/admin/tenants/{tenantId}/plan": {
+      "patch": {
+        "operationId": "AdminController_setPlan",
+        "summary": "Alterar o plano comercial da organização (Starter, Pro, Business, Agency)",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetPlanDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/tenants/{tenantId}/features": {
+      "patch": {
+        "operationId": "AdminController_setFeature",
+        "summary": "Liberar/bloquear um recurso fora do plano (sob medida); null volta ao padrão",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetFeatureOverrideDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/admin/tenants/{tenantId}/token-limit": {
       "patch": {
         "operationId": "AdminController_setTokenLimit",
@@ -4546,6 +4999,577 @@
         },
         "tags": [
           "admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/tenants/{tenantId}/webchat/widgets": {
+      "get": {
+        "operationId": "WebchatAdminController_list",
+        "summary": "Listar widgets de webchat",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "webchat"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "operationId": "WebchatAdminController_create",
+        "summary": "Criar widget de webchat para incorporar ao site",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWidgetDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "webchat"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/tenants/{tenantId}/webchat/widgets/{widgetId}": {
+      "patch": {
+        "operationId": "WebchatAdminController_update",
+        "summary": "Alterar widget (agente, sites autorizados, aparência, ativo)",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "widgetId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateWidgetDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "webchat"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "WebchatAdminController_remove",
+        "summary": "Remover widget",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "widgetId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "webchat"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/public/webchat/widget.js": {
+      "get": {
+        "operationId": "WebchatPublicController_script",
+        "summary": "Script do widget para incorporar ao site",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "webchat-public"
+        ]
+      }
+    },
+    "/api/v1/public/webchat/{publicKey}/config": {
+      "get": {
+        "operationId": "WebchatPublicController_config",
+        "parameters": [
+          {
+            "name": "publicKey",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "origin",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "webchat-public"
+        ]
+      }
+    },
+    "/api/v1/public/webchat/{publicKey}/sessions": {
+      "post": {
+        "operationId": "WebchatPublicController_startSession",
+        "parameters": [
+          {
+            "name": "publicKey",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "origin",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartSessionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "webchat-public"
+        ]
+      }
+    },
+    "/api/v1/public/webchat/{publicKey}/messages": {
+      "get": {
+        "operationId": "WebchatPublicController_messages",
+        "parameters": [
+          {
+            "name": "publicKey",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-webchat-session",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "origin",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "after",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "webchat-public"
+        ]
+      },
+      "post": {
+        "operationId": "WebchatPublicController_send",
+        "parameters": [
+          {
+            "name": "publicKey",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-webchat-session",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "origin",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VisitorMessageDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "webchat-public"
+        ]
+      }
+    },
+    "/api/v1/tenants/{tenantId}/webhooks/events": {
+      "get": {
+        "operationId": "WebhooksController_events",
+        "summary": "Eventos disponíveis para assinatura",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "webhooks"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/tenants/{tenantId}/webhooks": {
+      "get": {
+        "operationId": "WebhooksController_list",
+        "summary": "Listar webhooks de saída",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "webhooks"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "operationId": "WebhooksController_create",
+        "summary": "Criar webhook de saída (o segredo de assinatura é exibido só nesta resposta)",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWebhookDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "webhooks"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/tenants/{tenantId}/webhooks/{webhookId}": {
+      "patch": {
+        "operationId": "WebhooksController_update",
+        "summary": "Alterar URL, eventos ou pausar/reativar",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "webhookId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateWebhookDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "webhooks"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "WebhooksController_remove",
+        "summary": "Remover webhook",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "webhookId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "webhooks"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/tenants/{tenantId}/webhooks/{webhookId}/rotate-secret": {
+      "post": {
+        "operationId": "WebhooksController_rotate",
+        "summary": "Gerar novo segredo de assinatura",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "webhookId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "webhooks"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/tenants/{tenantId}/webhooks/{webhookId}/test": {
+      "post": {
+        "operationId": "WebhooksController_test",
+        "summary": "Enviar evento de teste agora",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "webhookId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "webhooks"
         ],
         "security": [
           {
@@ -5245,6 +6269,67 @@
           }
         }
       },
+      "CreateAiConnectionDto": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": [
+              "anthropic",
+              "openai",
+              "gemini",
+              "openrouter"
+            ]
+          },
+          "apiKey": {
+            "type": "string",
+            "description": "Chave de API da conta do próprio cliente no provedor. Nunca é devolvida."
+          },
+          "model": {
+            "type": "string",
+            "description": "Modelo. Sem valor, a API escolhe um modelo disponível na conta."
+          },
+          "label": {
+            "type": "string"
+          },
+          "makeDefault": {
+            "type": "boolean",
+            "description": "Tornar a conexão padrão da organização."
+          }
+        },
+        "required": [
+          "provider",
+          "apiKey"
+        ]
+      },
+      "UpdateAiConnectionDto": {
+        "type": "object",
+        "properties": {
+          "apiKey": {
+            "type": "string",
+            "description": "Nova chave (rotação). Validada antes de substituir a atual."
+          },
+          "model": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        }
+      },
+      "SetAgentAiConnectionDto": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "object",
+            "nullable": true,
+            "description": "Conexão usada pelo agente. null = conexão padrão da organização."
+          }
+        },
+        "required": [
+          "connectionId"
+        ]
+      },
       "SendMessageBody": {
         "type": "object",
         "properties": {}
@@ -5382,6 +6467,17 @@
             "type": "string",
             "minLength": 8,
             "description": "Senha inicial. Obrigatória quando o e-mail ainda não tem conta"
+          },
+          "plan": {
+            "type": "string",
+            "enum": [
+              "starter",
+              "pro",
+              "business",
+              "agency"
+            ],
+            "default": "starter",
+            "description": "Plano comercial contratado"
           }
         },
         "required": [
@@ -5445,6 +6541,53 @@
           "days"
         ]
       },
+      "SetPlanDto": {
+        "type": "object",
+        "properties": {
+          "plan": {
+            "type": "string",
+            "enum": [
+              "starter",
+              "pro",
+              "business",
+              "agency"
+            ],
+            "description": "Plano comercial v4.2 (nenhum inclui tokens de IA)"
+          }
+        },
+        "required": [
+          "plan"
+        ]
+      },
+      "SetFeatureOverrideDto": {
+        "type": "object",
+        "properties": {
+          "feature": {
+            "type": "string",
+            "enum": [
+              "webchat",
+              "whatsapp",
+              "calendars",
+              "emailNotifications",
+              "emailInbox",
+              "outboundWebhooks",
+              "publicApi",
+              "crmConnectors",
+              "whiteLabel",
+              "campaigns"
+            ]
+          },
+          "enabled": {
+            "type": "object",
+            "nullable": true,
+            "description": "true libera (sob medida), false bloqueia, null volta ao padrão do plano"
+          }
+        },
+        "required": [
+          "feature",
+          "enabled"
+        ]
+      },
       "SetTokenLimitDto": {
         "type": "object",
         "properties": {
@@ -5459,6 +6602,131 @@
         "required": [
           "limit"
         ]
+      },
+      "CreateWidgetDto": {
+        "type": "object",
+        "properties": {
+          "agentId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "example": "Site principal"
+          },
+          "allowedOrigins": {
+            "example": [
+              "https://www.minhaempresa.com.br"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "title": {
+            "type": "string"
+          },
+          "welcomeMessage": {
+            "type": "string"
+          },
+          "primaryColor": {
+            "type": "string",
+            "example": "#0f766e"
+          }
+        },
+        "required": [
+          "agentId",
+          "name"
+        ]
+      },
+      "UpdateWidgetDto": {
+        "type": "object",
+        "properties": {
+          "agentId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "allowedOrigins": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "title": {
+            "type": "string"
+          },
+          "welcomeMessage": {
+            "type": "string"
+          },
+          "primaryColor": {
+            "type": "string"
+          },
+          "isEnabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "StartSessionDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "VisitorMessageDto": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ]
+      },
+      "CreateWebhookDto": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "example": "https://meusistema.com.br/walletz/webhook"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "description": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "events"
+        ]
+      },
+      "UpdateWebhookDto": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "description": {
+            "type": "string"
+          },
+          "isActive": {
+            "type": "boolean"
+          }
+        }
       }
     }
   }

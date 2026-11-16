@@ -91,6 +91,18 @@ export const authApi = {
     }>('/auth/me'),
 };
 
+export interface TenantMember {
+  id: string;
+  role: string;
+  status: string;
+  createdAt: string;
+  userId: string;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+  avatarUrl: string | null;
+}
+
 export const tenantsApi = {
   create: (data: { name: string; slug: string; timezone?: string; locale?: string }) =>
     api.post('/tenants', data),
@@ -102,10 +114,16 @@ export const tenantsApi = {
 
   updateSettings: (tenantId: string, data: object) => api.patch(`/tenants/${tenantId}/settings`, data),
 
-  getMembers: (tenantId: string) => api.get(`/tenants/${tenantId}/members`),
+  getMembers: (tenantId: string) => api.get<TenantMember[]>(`/tenants/${tenantId}/members`),
 
-  inviteMember: (tenantId: string, data: { email: string; role: string }) =>
-    api.post(`/tenants/${tenantId}/members/invite`, data),
+  addMember: (tenantId: string, data: { email: string; firstName: string; lastName?: string; role: string; password: string }) =>
+    api.post(`/tenants/${tenantId}/members`, data),
+
+  updateMemberRole: (tenantId: string, membershipId: string, role: string) =>
+    api.patch(`/tenants/${tenantId}/members/${membershipId}/role`, { role }),
+
+  removeMember: (tenantId: string, membershipId: string) =>
+    api.delete(`/tenants/${tenantId}/members/${membershipId}`),
 
   featureFlags: (tenantId: string) => api.get(`/tenants/${tenantId}/feature-flags`),
 };

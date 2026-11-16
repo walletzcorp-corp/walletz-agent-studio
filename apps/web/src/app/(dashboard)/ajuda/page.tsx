@@ -169,8 +169,10 @@ const FAQ = [
   { q: 'Como a IA agenda reuniões?', a: 'Ao conectar Google Calendar ou Microsoft Teams, sua IA consulta a disponibilidade real e cria eventos diretamente nas agendas.' },
   { q: 'Posso assumir uma conversa da IA?', a: 'Sim. No Inbox você pode entrar em qualquer conversa em andamento, assumir o atendimento e devolver para a IA quando quiser.' },
   { q: 'Quanto custa o WhatsApp?', a: 'As mensagens de WhatsApp são cobradas diretamente pela Meta conforme seu uso. O Walletz não cobra por mensagens — só pela assinatura do plano.' },
-  { q: 'Posso usar minha própria chave de IA?', a: 'Sim, no plano Business você pode usar sua própria chave BYOK (Anthropic, OpenAI, Gemini).' },
-  { q: 'O que acontece se eu atingir o limite do meu plano?', a: 'O sistema avisa quando você está próximo do limite. Você pode fazer upgrade a qualquer momento. Nunca bloqueamos sem aviso.' },
+  { q: 'A IA está incluída no plano?', a: 'Não. Nenhum plano inclui créditos ou tokens de IA. Você cria conta em um provedor (Claude, OpenAI, Gemini ou OpenRouter), paga o consumo diretamente a ele e conecta sua chave em Config. IA. A Walletz não cobra taxa sobre os tokens.' },
+  { q: 'Minha assinatura do ChatGPT, Claude ou Gemini serve?', a: 'Não automaticamente. Assinaturas como ChatGPT Plus, Claude Pro ou Google AI Pro não incluem a API. É preciso ativar o faturamento da API no provedor e gerar uma chave.' },
+  { q: 'E se acabar o crédito no provedor?', a: 'Os agentes param de gerar respostas e o painel mostra "provedor de IA indisponível por faturamento". Seus dados e configurações continuam acessíveis. Depois de recarregar no provedor, clique em "Testar novamente" em Config. IA.' },
+  { q: 'O que acontece se eu atingir o limite do meu plano?', a: 'Os limites do plano (agentes, usuários, WhatsApp, agendas, conexões de IA) valem para novas inclusões: o que já existe continua funcionando, mas não é possível criar além do limite. Para ampliar, fale com a Walletz sobre mudar de plano.' },
   { q: 'Meus dados são seguros?', a: 'Sim. Os dados de cada empresa ficam completamente isolados. Usamos criptografia AES-256 e seguimos as diretrizes da LGPD.' },
 ];
 

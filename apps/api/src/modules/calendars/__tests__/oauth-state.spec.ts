@@ -4,6 +4,8 @@ import type Redis from 'ioredis';
 import { CalendarsService } from '../calendars.service';
 import type { DrizzleDB } from '../../../database/database.module';
 import type { AuditService } from '../../../shared/audit/audit.service';
+import type { PlanLimitsService } from '../../../shared/plans/plan-limits.service';
+import type { WebhooksService } from '../../webhooks/webhooks.service';
 import type { GoogleCalendarService } from '../google.service';
 import type { MicrosoftCalendarService } from '../microsoft.service';
 import type { MicrosoftGraphAuthService } from '../ms-graph-auth.service';
@@ -47,6 +49,8 @@ function build() {
     {} as MicrosoftGraphAuthService,
     {} as AvailabilityService,
     redis as unknown as Redis,
+    { assertFeature: jest.fn(async () => undefined), assertCanAdd: jest.fn(async () => undefined) } as unknown as PlanLimitsService,
+    { emit: jest.fn(async () => undefined) } as unknown as WebhooksService,
   );
   return { svc, redis, google, inserted };
 }

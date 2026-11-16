@@ -7,11 +7,27 @@ export interface WhatsappAccount {
   phoneNumber: string | null;
   phoneNumberId: string;
   wabaId: string;
-  webhookUrl: string | null;
   status: 'pending' | 'connected' | 'disconnected' | 'suspended' | 'error';
   qualityRating: string | null;
   lastSyncedAt: string | null;
+  agentId: string | null;
+  /** client = app Meta do próprio cliente; embedded = app da Walletz (Embedded Signup). */
+  credentialSource: 'client' | 'embedded';
+  hasAppSecret: boolean;
   createdAt: string;
+}
+
+export interface WebhookSetup {
+  callbackUrl: string;
+  verifyToken: string;
+  fields: string[];
+}
+
+export interface ConnectResult {
+  account: WhatsappAccount;
+  webhook: WebhookSetup;
+  subscribed: boolean;
+  tokenExpiresAt: string | null;
 }
 
 export interface WhatsappTemplate {
@@ -27,9 +43,9 @@ export interface ConnectAccountPayload {
   phoneNumberId: string;
   wabaId: string;
   accessToken: string;
-  appSecret?: string;
-  verifyToken: string;
-  webhookUrl: string;
+  appId: string;
+  appSecret: string;
+  agentId?: string;
 }
 
 export interface EmbeddedSignupPayload {
@@ -50,7 +66,16 @@ export const whatsappApi = {
     api.post<WhatsappAccount>(`/tenants/${tenantId}/whatsapp/embedded-signup`, payload),
 
   connectAccount: (tenantId: string, payload: ConnectAccountPayload) =>
-    api.post<WhatsappAccount>(`/tenants/${tenantId}/whatsapp/accounts`, payload),
+    api.post<ConnectResult>(`/tenants/${tenantId}/whatsapp/accounts`, payload),
+
+  webhookSetup: (tenantId: string, accountId: string) =>
+    api.get<WebhookSetup>(`/tenants/${tenantId}/whatsapp/accounts/${accountId}/webhook-setup`),
+
+  updateCredentials: (tenantId: string, accountId: string, body: { appId: string; accessToken?: string; appSecret?: string }) =>
+    api.put<WhatsappAccount>(`/tenants/${tenantId}/whatsapp/accounts/${accountId}/credentials`, body),
+
+  setAgent: (tenantId: string, accountId: string, agentId: string | null) =>
+    api.patch<WhatsappAccount>(`/tenants/${tenantId}/whatsapp/accounts/${accountId}/agent`, { agentId }),
 
   reconnectAccount: (tenantId: string, accountId: string, payload: EmbeddedSignupPayload) =>
     api.post<WhatsappAccount>(`/tenants/${tenantId}/whatsapp/accounts/${accountId}/reconnect`, payload),

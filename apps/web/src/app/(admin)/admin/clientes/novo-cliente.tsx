@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { Check, Copy, KeyRound, X } from 'lucide-react';
 import { Button, Input, FormField, cn } from '@walletz/ui';
-import { adminApi, apiErrorMessage, type CreatedCustomer, type CustomerType } from '../../../../lib/admin-api';
+import { adminApi, apiErrorMessage, PLAN_OPTIONS, type CreatedCustomer, type CustomerType, type PlanSlug } from '../../../../lib/admin-api';
 import { withBasePath } from '../../../../lib/paths';
 import { isValidCnpj, isValidCpf, maskCnpj, maskCpf, maskPhone, onlyDigits } from '../../../../lib/tax-id';
 
@@ -29,6 +29,7 @@ export function NovoCliente({ onClose, onCreated }: { onClose: () => void; onCre
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState(generatePassword);
+  const [plan, setPlan] = useState<PlanSlug>('starter');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<(CreatedCustomer & { password: string }) | null>(null);
@@ -62,6 +63,7 @@ export function NovoCliente({ onClose, onCreated }: { onClose: () => void; onCre
         taxId: docDigits,
         email: email.trim(),
         password,
+        plan,
         ...(onlyDigits(phone) ? { phone: onlyDigits(phone) } : {}),
         ...(!isPf ? { contactName: contactName.trim() } : {}),
       });
@@ -174,7 +176,17 @@ export function NovoCliente({ onClose, onCreated }: { onClose: () => void; onCre
             </FormField>
           </div>
 
-          <FormField label="Senha inicial" required hint="Mínimo 8 caracteres. Se o e-mail já tiver conta, a senha atual é mantida.">
+          <FormField label="Plano contratado" required hint="Nenhum plano inclui tokens de IA: o cliente conecta a própria chave.">
+            <select
+              value={plan}
+              onChange={(e) => setPlan(e.target.value as PlanSlug)}
+              className="w-full rounded-lg border border-border bg-surface-1 px-3 py-2 text-sm text-foreground"
+            >
+              {PLAN_OPTIONS.map((p) => <option key={p.slug} value={p.slug}>{p.label}</option>)}
+            </select>
+          </FormField>
+
+          <FormField label="Senha inicial" required hint="Mínimo 8 caracteres. O e-mail precisa ser novo: cada cliente é uma organização separada.">
             <div className="flex gap-2">
               <Input value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8} maxLength={100} />
               <Button type="button" variant="outline" onClick={() => setPassword(generatePassword())} className="shrink-0 gap-1.5">

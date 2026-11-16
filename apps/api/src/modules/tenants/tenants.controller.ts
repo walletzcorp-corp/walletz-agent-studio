@@ -14,11 +14,12 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { TenantsService } from './tenants.service';
-import { FeatureFlagsService } from './feature-flags.service';
-import { QuotaService } from './quota.service';
+import { PlanLimitsService } from '../../shared/plans/plan-limits.service';
+import { PLAN_CATALOG, PLAN_SLUGS } from '../../shared/plans/plan-catalog';
+import { LlmUsageService } from '../../shared/llm-usage/llm-usage.service';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import { UpdateTenantSettingsDto } from './dto/update-settings.dto';
-import { InviteMemberDto } from './dto/invite-member.dto';
+import { AddMemberDto, UpdateMemberRoleDto } from './dto/invite-member.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RbacGuard } from '../../shared/rbac/rbac.guard';
 import { Roles } from '../../shared/rbac/roles.decorator';
@@ -34,9 +35,15 @@ import type { TenantContext } from './decorators/current-tenant.decorator';
 export class TenantsController {
   constructor(
     private readonly tenantsService: TenantsService,
-    private readonly featureFlagsService: FeatureFlagsService,
-    private readonly quotaService: QuotaService,
+    private readonly planLimits: PlanLimitsService,
+    private readonly llmUsage: LlmUsageService,
   ) {}
+
+  @Get('plans/catalog')
+  @ApiOperation({ summary: 'Catálogo de planos comerciais (v4.2). Nenhum plano inclui tokens de IA.' })
+  plansCatalog() {
+    return PLAN_SLUGS.map((slug) => PLAN_CATALOG[slug]);
+  }
 
   @Post()
   @ApiOperation({ summary: 'Criar tenant (onboarding)' })
@@ -72,11 +79,22 @@ export class TenantsController {
   @Get(':tenantId/feature-flags')
   @UseGuards(RbacGuard)
   @Roles('viewer')
-  @ApiOperation({ summary: 'Feature flags do tenant' })
+  @ApiOperation({ summary: 'Recursos liberados para a organização (plano + exceções)' })
   async featureFlags(@Param('tenantId') tenantId: string) {
-    const tenant = await this.tenantsService.findById(tenantId);
-    if (!tenant) return {};
-    return this.featureFlagsService.getAll(tenant);
+    return (await this.planLimits.getSummary(tenantId)).enabledFeatures;
+  }
+
+  @Get(':tenantId/plan')
+  @UseGuards(RbacGuard)
+  @Roles('viewer')
+  @ApiOperation({ summary: 'Plano da organização, uso de cada limite e recursos liberados' })
+  async plan(@Param('tenantId') tenantId: string) {
+    const [summary, aiTokensMonth] = await Promise.all([
+      this.planLimits.getSummary(tenantId),
+      this.llmUsage.getMonthTokens(tenantId),
+    ]);
+    // Consumo técnico (tokens) só para acompanhamento: o custo é cobrado pelo provedor do cliente.
+    return { ...summary, aiTokensMonth };
   }
 
   @Get(':tenantId/members')
@@ -87,33 +105,30 @@ export class TenantsController {
     return this.tenantsService.getMembers(tenantId);
   }
 
-  @Post(':tenantId/members/invite')
+  @Post(':tenantId/members')
   @UseGuards(RbacGuard)
   @Roles('admin')
-  @ApiOperation({ summary: 'Convidar membro' })
-  async inviteMember(
+  @ApiOperation({ summary: 'Adicionar usuário à organização (login novo, exclusivo desta organização)' })
+  async addMember(
     @Param('tenantId') tenantId: string,
-    @Body() dto: InviteMemberDto,
+    @Body() dto: AddMemberDto,
     @CurrentUser() user: JwtPayload,
-    @Req() req: Request,
   ) {
-    const tenant = await this.tenantsService.findById(tenantId);
-    if (tenant) {
-      await this.quotaService.assertCanInviteMember(tenantId, tenant.planId ?? 'starter');
-    }
-    return this.tenantsService.inviteMember(tenantId, dto, user.sub);
+    await this.planLimits.assertCanAdd(tenantId, 'users');
+    return this.tenantsService.addMember(tenantId, dto, user.sub);
   }
 
   @Patch(':tenantId/members/:membershipId/role')
   @UseGuards(RbacGuard)
   @Roles('admin')
-  @ApiOperation({ summary: 'Alterar papel do membro' })
+  @ApiOperation({ summary: 'Alterar papel do membro (o dono não muda)' })
   async updateMemberRole(
     @Param('tenantId') tenantId: string,
     @Param('membershipId') membershipId: string,
-    @Body() body: { role: string },
+    @Body() dto: UpdateMemberRoleDto,
+    @CurrentUser() user: JwtPayload,
   ) {
-    return this.tenantsService.updateMemberRole(tenantId, membershipId, body.role);
+    return this.tenantsService.updateMemberRole(tenantId, membershipId, dto.role, user.sub);
   }
 
   @Delete(':tenantId/members/:membershipId')
@@ -124,7 +139,8 @@ export class TenantsController {
   async removeMember(
     @Param('tenantId') tenantId: string,
     @Param('membershipId') membershipId: string,
+    @CurrentUser() user: JwtPayload,
   ) {
-    await this.tenantsService.removeMember(tenantId, membershipId);
+    await this.tenantsService.removeMember(tenantId, membershipId, user.sub);
   }
 }

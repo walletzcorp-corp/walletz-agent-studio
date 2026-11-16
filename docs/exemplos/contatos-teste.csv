@@ -1,0 +1,9 @@
+nome,sobrenome,empresa,telefone,email,origem,segmento,tags,observacao,consentimento_whatsapp,data_consentimento,origem_consentimento,cidade
+Maria,Silva,Clínica Sorriso,(41) 90000-0001,maria.silva@example.com,site,saúde,"vip,retorno",Prefere contato à tarde,sim,2026-11-10,formulário do site,Curitiba
+João,Souza,,11900000002,joao.souza@example.com,indicação,varejo,novo,,não,,,São Paulo
+Ana,Pereira,Pereira Advocacia,+55 21 90000-0003,ana@example.com,evento,jurídico,"evento-2026,decisor",Conheceu no evento de novembro,sim,2026-11-05,lista do evento,Rio de Janeiro
+Carlos,Oliveira,Oficina do Carlos,(51) 3000-0004,carlos.oliveira@example.com,whatsapp,serviços,,Telefone fixo,não,,,Porto Alegre
+Beatriz,Lima,Studio Bia,31900000005,,instagram,beleza,"vip",Sem e-mail,yes,2026-10-28,DM do Instagram,Belo Horizonte
+Pedro,Costa,Costa Imóveis,(41) 90000-0006,pedro.costa@example.com,site,imóveis,"lead-quente",Pediu orçamento,1,2026-11-12,formulário do site,Curitiba
+Fernanda,Alves,,,fernanda.alves@example.com,site,educação,newsletter,Só e-mail,não,,,Florianópolis
+Maria,Silva,Clínica Sorriso,41900000001,maria.silva@example.com,site,saúde,duplicado,Repetida de propósito (mesmo telefone da linha 1),sim,2026-11-10,formulário do site,Curitiba

@@ -34,13 +34,29 @@ async function bootstrap() {
     }),
   );
 
+  // A API fica atrás do nginx: o IP real do cliente vem em X-Forwarded-For
+  // (necessário para limite de taxa por IP e para o audit log).
+  app.getHttpAdapter().getInstance().set('trust proxy', 'loopback, linklocal, uniquelocal');
+
   const allowedOrigins = configService.get<string>('CORS_ALLOWED_ORIGINS', '').split(',');
-  app.enableCors({
+  const panelCors = {
     origin: allowedOrigins,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Idempotency-Key', 'X-Request-Id', 'x-tenant-slug'],
     exposedHeaders: ['X-Request-Id'],
+  };
+  // O webchat roda nos sites dos clientes: qualquer origem passa no CORS, sem
+  // credenciais; a autorização real é a lista de sites do widget (header Origin).
+  const webchatCors = {
+    origin: true,
+    credentials: false,
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'X-Webchat-Session'],
+  };
+  const publicWebchatPath = /^\/api\/v\d+\/public\/webchat\//;
+  app.enableCors((req: { url?: string }, callback: (err: Error | null, options: typeof panelCors | typeof webchatCors) => void) => {
+    callback(null, publicWebchatPath.test(req.url ?? '') ? webchatCors : panelCors);
   });
 
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });

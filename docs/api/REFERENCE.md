@@ -2,14 +2,14 @@
 
 > Arquivo gerado por `pnpm --filter @walletz/api docs:openapi`. Não edite à mão.
 
-Versão 1.0 · 122 rotas · prefixo `/api/v1` · autenticação Bearer (JWT), exceto onde indicado "sem JWT" (login, webhooks, callback OAuth, conector local — protegidos por outros meios).
+Versão 1.0 · 151 rotas · prefixo `/api/v1` · autenticação Bearer (JWT), exceto onde indicado "sem JWT" (login, webhooks, callback OAuth, conector local — protegidos por outros meios).
 
 ## Módulos
 
 | Módulo | Descrição | Rotas |
 |---|---|---|
 | [auth](#auth) | Autenticação e sessões | 12 |
-| [tenants](#tenants) | Organizações e configurações | 9 |
+| [tenants](#tenants) | Organizações e configurações | 11 |
 | [users](#users) | Usuários e convites | 1 |
 | [agents](#agents) | Agentes de IA | 14 |
 | [knowledge](#knowledge) | Base de conhecimento | 7 |
@@ -22,8 +22,12 @@ Versão 1.0 · 122 rotas · prefixo `/api/v1` · autenticação Bearer (JWT), ex
 | [whatsapp](#whatsapp) | WhatsApp Business | 12 |
 | [privacy](#privacy) | LGPD: exportação e exclusão de dados | 4 |
 | [pc-connector](#pc-connector) | Conector local (agente no computador do cliente) | 8 |
-| [admin](#admin) | Administração da plataforma | 13 |
+| [admin](#admin) | Administração da plataforma | 15 |
 | [health](#health) | Health checks | 2 |
+| [ai-connections](#ai-connections) |  | 9 |
+| [webchat](#webchat) |  | 4 |
+| [webchat-public](#webchat-public) |  | 5 |
+| [webhooks](#webhooks) |  | 7 |
 
 ## auth
 
@@ -50,11 +54,13 @@ Organizações e configurações
 
 | Método | Rota | Descrição | Auth |
 |---|---|---|---|
+| `GET` | `/api/v1/tenants/plans/catalog` | Catálogo de planos comerciais (v4.2). Nenhum plano inclui tokens de IA. | Bearer |
 | `POST` | `/api/v1/tenants` | Criar tenant (onboarding) | Bearer |
 | `GET` | `/api/v1/tenants/my` | Listar tenants do usuário autenticado | Bearer |
 | `GET` | `/api/v1/tenants/{tenantId}` | Detalhes do tenant | Bearer |
 | `PATCH` | `/api/v1/tenants/{tenantId}/settings` | Atualizar configurações do tenant | Bearer |
-| `GET` | `/api/v1/tenants/{tenantId}/feature-flags` | Feature flags do tenant | Bearer |
+| `GET` | `/api/v1/tenants/{tenantId}/feature-flags` | Recursos liberados para a organização (plano + exceções) | Bearer |
+| `GET` | `/api/v1/tenants/{tenantId}/plan` | Plano da organização, uso de cada limite e recursos liberados | Bearer |
 | `GET` | `/api/v1/tenants/{tenantId}/members` | Listar membros do tenant | Bearer |
 | `POST` | `/api/v1/tenants/{tenantId}/members/invite` | Convidar membro | Bearer |
 | `PATCH` | `/api/v1/tenants/{tenantId}/members/{membershipId}/role` | Alterar papel do membro | Bearer |
@@ -244,10 +250,12 @@ Administração da plataforma
 | `GET` | `/api/v1/admin/users` | Listar usuários da plataforma | Bearer |
 | `POST` | `/api/v1/admin/users` | Criar conta de cliente (cadastro público é fechado) | Bearer |
 | `GET` | `/api/v1/admin/activity` | Atividade da plataforma (audit log) | Bearer |
-| `GET` | `/api/v1/admin/llm` | Modelo em uso e limites de taxa da conta Anthropic | Bearer |
+| `GET` | `/api/v1/admin/llm` | Conexões de IA (chave do próprio cliente) de todas as organizações | Bearer |
 | `POST` | `/api/v1/admin/tenants/{tenantId}/suspend` | Suspender organização (bloqueia o uso; dados preservados) | Bearer |
 | `POST` | `/api/v1/admin/tenants/{tenantId}/reactivate` | Reativar organização suspensa | Bearer |
 | `POST` | `/api/v1/admin/tenants/{tenantId}/extend-trial` | Estender o período de trial | Bearer |
+| `PATCH` | `/api/v1/admin/tenants/{tenantId}/plan` | Alterar o plano comercial da organização (Starter, Pro, Business, Agency) | Bearer |
+| `PATCH` | `/api/v1/admin/tenants/{tenantId}/features` | Liberar/bloquear um recurso fora do plano (sob medida); null volta ao padrão | Bearer |
 | `PATCH` | `/api/v1/admin/tenants/{tenantId}/token-limit` | Definir limite mensal de tokens de IA (null remove) | Bearer |
 
 ## health
@@ -258,4 +266,49 @@ Health checks
 |---|---|---|---|
 | `GET` | `/api/v1/health` | Health check | sem JWT |
 | `GET` | `/api/v1/ready` | Readiness check | sem JWT |
+
+## ai-connections
+
+| Método | Rota | Descrição | Auth |
+|---|---|---|---|
+| `GET` | `/api/v1/tenants/{tenantId}/ai-connections/providers` | Provedores homologados e links oficiais de compra/chave | Bearer |
+| `GET` | `/api/v1/tenants/{tenantId}/ai-connections` | Listar conexões de IA (chave sempre mascarada) | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/ai-connections` | Conectar chave de IA: valida autenticação, modelo e faturamento com uma chamada de teste | Bearer |
+| `PATCH` | `/api/v1/tenants/{tenantId}/ai-connections/{connectionId}` | Trocar a chave (rotação), o modelo ou o nome; a nova chave é validada antes de substituir | Bearer |
+| `DELETE` | `/api/v1/tenants/{tenantId}/ai-connections/{connectionId}` | Revogar a conexão (a chave cifrada é apagada) | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/ai-connections/{connectionId}/test` | Testar a chave salva (reativa após regularizar o faturamento no provedor) | Bearer |
+| `GET` | `/api/v1/tenants/{tenantId}/ai-connections/{connectionId}/models` | Modelos disponíveis na conta do provedor | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/ai-connections/{connectionId}/default` | Tornar a conexão padrão da organização | Bearer |
+| `PUT` | `/api/v1/tenants/{tenantId}/ai-connections/agents/{agentId}` | Definir qual conexão de IA o agente usa (null = padrão da organização) | Bearer |
+
+## webchat
+
+| Método | Rota | Descrição | Auth |
+|---|---|---|---|
+| `GET` | `/api/v1/tenants/{tenantId}/webchat/widgets` | Listar widgets de webchat | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/webchat/widgets` | Criar widget de webchat para incorporar ao site | Bearer |
+| `PATCH` | `/api/v1/tenants/{tenantId}/webchat/widgets/{widgetId}` | Alterar widget (agente, sites autorizados, aparência, ativo) | Bearer |
+| `DELETE` | `/api/v1/tenants/{tenantId}/webchat/widgets/{widgetId}` | Remover widget | Bearer |
+
+## webchat-public
+
+| Método | Rota | Descrição | Auth |
+|---|---|---|---|
+| `GET` | `/api/v1/public/webchat/widget.js` | Script do widget para incorporar ao site | sem JWT |
+| `GET` | `/api/v1/public/webchat/{publicKey}/config` |  | sem JWT |
+| `POST` | `/api/v1/public/webchat/{publicKey}/sessions` |  | sem JWT |
+| `GET` | `/api/v1/public/webchat/{publicKey}/messages` |  | sem JWT |
+| `POST` | `/api/v1/public/webchat/{publicKey}/messages` |  | sem JWT |
+
+## webhooks
+
+| Método | Rota | Descrição | Auth |
+|---|---|---|---|
+| `GET` | `/api/v1/tenants/{tenantId}/webhooks/events` | Eventos disponíveis para assinatura | Bearer |
+| `GET` | `/api/v1/tenants/{tenantId}/webhooks` | Listar webhooks de saída | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/webhooks` | Criar webhook de saída (o segredo de assinatura é exibido só nesta resposta) | Bearer |
+| `PATCH` | `/api/v1/tenants/{tenantId}/webhooks/{webhookId}` | Alterar URL, eventos ou pausar/reativar | Bearer |
+| `DELETE` | `/api/v1/tenants/{tenantId}/webhooks/{webhookId}` | Remover webhook | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/webhooks/{webhookId}/rotate-secret` | Gerar novo segredo de assinatura | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/webhooks/{webhookId}/test` | Enviar evento de teste agora | Bearer |
 

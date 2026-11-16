@@ -4,12 +4,12 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import {
-  ChevronLeft, Ban, PlayCircle, CalendarPlus, Gauge, Loader2, CheckCircle2,
+  ChevronLeft, Ban, PlayCircle, CalendarPlus, Gauge, Loader2, CheckCircle2, Layers, SlidersHorizontal,
 } from 'lucide-react';
 import { cn } from '@walletz/ui';
 import {
   AGENT_STATUS, adminApi, apiErrorMessage, customerTypeLabel, fmtAgo, fmtCompact, fmtDate, fmtInt, templateLabel,
-  type AdminTenantDetail,
+  PLAN_OPTIONS, type AdminTenantDetail, type PlanSlug,
 } from '../../../../../lib/admin-api';
 import {
   ActivityList, BarList, DailyBars, EmptyState, ErrorBlock, LoadingBlock, PageHeader, Section,
@@ -21,6 +21,15 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 const LIMIT_PRESETS = [100_000, 500_000, 1_000_000, 5_000_000];
+
+/** Recursos que o admin pode liberar/bloquear fora do plano ("sob medida"). */
+const FEATURE_OPTIONS: Array<{ key: string; label: string }> = [
+  { key: 'webchat', label: 'Webchat' },
+  { key: 'whatsapp', label: 'WhatsApp oficial' },
+  { key: 'calendars', label: 'Agendas' },
+  { key: 'outboundWebhooks', label: 'Webhooks de saída' },
+  { key: 'campaigns', label: 'Campanhas em massa' },
+];
 
 export default function AdminClienteDetailPage() {
   const params = useParams<{ id: string }>();
@@ -82,7 +91,7 @@ export default function AdminClienteDetailPage() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <Section title="IA no mês (Claude)">
+        <Section title="IA no mês (chave do cliente)">
           <UsageMeter used={llm.tokensMonth} limit={llm.limit} />
           <div className="mt-4">
             <DailyBars data={tokensDaily} valueKey="tokens" label="tokens 30d" />
@@ -103,7 +112,7 @@ export default function AdminClienteDetailPage() {
             {tenant.contactPhone && <div className="flex justify-between"><dt className="text-muted-foreground">Telefone</dt><dd className="tabular-nums">{tenant.contactPhone}</dd></div>}
             <div className="flex justify-between"><dt className="text-muted-foreground">Status</dt><dd><TenantStatusBadge status={tenant.status} /></dd></div>
             <div className="flex justify-between"><dt className="text-muted-foreground">Trial até</dt><dd>{fmtDate(tenant.trialEndsAt)}</dd></div>
-            <div className="flex justify-between"><dt className="text-muted-foreground">Plano</dt><dd>{tenant.planId ?? 'sem plano'}</dd></div>
+            <div className="flex justify-between"><dt className="text-muted-foreground">Plano</dt><dd>{tenant.planName ?? tenant.planId ?? 'Starter'}</dd></div>
             <div className="flex justify-between"><dt className="text-muted-foreground">País / moeda</dt><dd>{tenant.country} / {tenant.currency}</dd></div>
             <div className="flex justify-between"><dt className="text-muted-foreground">Atualizado</dt><dd>{fmtAgo(tenant.updatedAt)}</dd></div>
           </dl>
@@ -168,7 +177,7 @@ export default function AdminClienteDetailPage() {
 
 /* ── Ações administrativas ─────────────────────────────────────────── */
 
-type Panel = null | 'suspend' | 'trial' | 'limit';
+type Panel = null | 'suspend' | 'trial' | 'limit' | 'plan' | 'features';
 
 function AdminActions({ detail, onDone }: { detail: AdminTenantDetail; onDone: () => Promise<void> }) {
   const { tenant, llm } = detail;
@@ -178,6 +187,8 @@ function AdminActions({ detail, onDone }: { detail: AdminTenantDetail; onDone: (
   const [reason, setReason] = useState('');
   const [days, setDays] = useState(14);
   const [limitInput, setLimitInput] = useState(llm.limit === null ? '' : String(llm.limit));
+  const [plan, setPlan] = useState<PlanSlug>((tenant.planId as PlanSlug | null) ?? 'starter');
+  const overrides = tenant.featureOverrides ?? {};
 
   async function run(action: () => Promise<unknown>, okText: string) {
     setBusy(true);
@@ -233,6 +244,20 @@ function AdminActions({ detail, onDone }: { detail: AdminTenantDetail; onDone: (
           onClick={() => setPanel(panel === 'limit' ? null : 'limit')}
         >
           <Gauge className="h-3.5 w-3.5" /> Limite de tokens
+        </button>
+        <button
+          disabled={busy}
+          className={cn(btn, panel === 'plan' ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:bg-white/5')}
+          onClick={() => setPanel(panel === 'plan' ? null : 'plan')}
+        >
+          <Layers className="h-3.5 w-3.5" /> Plano
+        </button>
+        <button
+          disabled={busy}
+          className={cn(btn, panel === 'features' ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:bg-white/5')}
+          onClick={() => setPanel(panel === 'features' ? null : 'features')}
+        >
+          <SlidersHorizontal className="h-3.5 w-3.5" /> Recursos sob medida
         </button>
         {busy && <Loader2 className="h-4 w-4 animate-spin self-center text-muted-foreground" />}
       </div>
@@ -321,6 +346,60 @@ function AdminActions({ detail, onDone }: { detail: AdminTenantDetail; onDone: (
               </button>
             )}
           </div>
+        </div>
+      )}
+
+      {panel === 'plan' && (
+        <div className="mt-3 space-y-2 rounded-lg border border-border p-3">
+          <p className="text-xs text-muted-foreground">
+            Plano atual: {tenant.planName ?? tenant.planId}. Rebaixar não apaga nada: o que exceder o novo limite continua funcionando, mas não é possível criar mais.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <select value={plan} onChange={(e) => setPlan(e.target.value as PlanSlug)} className="rounded-lg border border-border bg-surface-1 px-3 py-1.5 text-sm">
+              {PLAN_OPTIONS.map((p) => <option key={p.slug} value={p.slug}>{p.label}</option>)}
+            </select>
+            <button
+              disabled={busy || plan === tenant.planId}
+              className={cn(btn, 'border-primary bg-primary text-primary-foreground hover:opacity-90')}
+              onClick={() => void run(() => adminApi.setPlan(tenant.id, plan), 'Plano alterado.')}
+            >
+              Salvar plano
+            </button>
+          </div>
+        </div>
+      )}
+
+      {panel === 'features' && (
+        <div className="mt-3 space-y-2 rounded-lg border border-border p-3">
+          <p className="text-xs text-muted-foreground">
+            Exceções contratadas à parte. "Padrão" segue o plano; a mudança fica na auditoria.
+          </p>
+          <ul className="divide-y divide-border/60">
+            {FEATURE_OPTIONS.map((f) => {
+              const value = overrides[f.key];
+              const current = value === true ? 'on' : value === false ? 'off' : 'default';
+              return (
+                <li key={f.key} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
+                  <span>{f.label}</span>
+                  <div className="flex gap-1">
+                    {(['default', 'on', 'off'] as const).map((opt) => (
+                      <button
+                        key={opt}
+                        disabled={busy || current === opt}
+                        onClick={() => void run(
+                          () => adminApi.setFeature(tenant.id, f.key, opt === 'default' ? null : opt === 'on'),
+                          'Recurso atualizado.',
+                        )}
+                        className={cn('rounded-full border px-2.5 py-1 text-xs', current === opt ? 'border-primary text-primary' : 'border-border text-muted-foreground hover:text-foreground')}
+                      >
+                        {opt === 'default' ? 'Padrão' : opt === 'on' ? 'Liberado' : 'Bloqueado'}
+                      </button>
+                    ))}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
         </div>
       )}
 

@@ -12,6 +12,7 @@ import {
 import { createId } from '../utils/id';
 import { tenants } from './tenants';
 import { users } from './users';
+import { agents } from './agents';
 
 export const waAccountStatusEnum = pgEnum('wa_account_status', [
   'pending',
@@ -51,6 +52,10 @@ export const whatsappAccounts = pgTable(
     messagingLimitTier: text('messaging_limit_tier'),
     lastSyncedAt: timestamp('last_synced_at', { withTimezone: true }),
     connectedByUserId: text('connected_by_user_id').references(() => users.id),
+    /** Agente que responde neste número. null = primeiro agente publicado do tenant. */
+    agentId: text('agent_id').references(() => agents.id),
+    /** Origem das credenciais: app Meta da Walletz (embedded signup) ou app do próprio cliente. */
+    credentialSource: text('credential_source').notNull().default('embedded'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),

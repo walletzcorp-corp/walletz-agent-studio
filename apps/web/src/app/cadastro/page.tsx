@@ -17,7 +17,7 @@ interface CompanyData {
   state: string; city: string; phone: string; website: string;
   segment: string; employeeCount: string; goal: string;
 }
-type PlanId = 'starter' | 'professional' | 'business';
+type PlanId = 'starter' | 'pro' | 'business' | 'agency';
 
 /* ── Constants ── */
 const STEPS = [
@@ -28,25 +28,10 @@ const STEPS = [
 ];
 
 const PLANS: { id: PlanId; name: string; price: string; highlight?: boolean; features: string[] }[] = [
-  {
-    id: 'starter',
-    name: 'Starter',
-    price: 'R$ 197/mês',
-    features: ['1 agente', '1.000 conversas/mês', 'WhatsApp (BYOC)', 'Suporte por e-mail'],
-  },
-  {
-    id: 'professional',
-    name: 'Professional',
-    price: 'R$ 497/mês',
-    highlight: true,
-    features: ['5 agentes', '10.000 conversas/mês', 'WhatsApp + Meta', 'Google/Microsoft Calendar', 'Relatórios avançados'],
-  },
-  {
-    id: 'business',
-    name: 'Business',
-    price: 'R$ 1.197/mês',
-    features: ['Agentes ilimitados', '50.000 conversas/mês', 'BYOK (chave própria de IA)', 'SLA dedicado', 'Onboarding personalizado'],
-  },
+  { id: 'starter', name: 'Starter', price: 'R$ 99/mês', features: ['1 agente', '1 usuário', 'Webchat no site', '1 conexão de IA (sua chave)'] },
+  { id: 'pro', name: 'Pro', price: 'R$ 399/mês', highlight: true, features: ['Até 3 agentes', 'Até 5 usuários', '1 WhatsApp oficial', '1 agenda Google/Microsoft', '1 webhook de saída'] },
+  { id: 'business', name: 'Business', price: 'R$ 899/mês', features: ['Até 8 agentes', 'Até 15 usuários', '2 WhatsApp · 3 agendas', 'Aprovações e auditoria'] },
+  { id: 'agency', name: 'Agency / White Label', price: 'R$ 1.990/mês', features: ['Até 10 agentes no total', 'Até 25 usuários', '5 WhatsApp · 5 agendas', 'Subcontas e White Label (em homologação)'] },
 ];
 
 const SEGMENTS = ['Tecnologia','Saúde','Educação','Varejo','Imóveis','Serviços Financeiros','Logística','Indústria','Alimentação','Consultoria','Outros'];
@@ -227,7 +212,7 @@ function StepCompany({ data, onChange, onNext, onBack }: { data: CompanyData; on
 function StepPlan({ selected, onSelect, onNext, onBack }: { selected: PlanId | null; onSelect: (p: PlanId) => void; onNext: () => void; onBack: () => void }) {
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">Todos os planos incluem 14 dias de trial gratuito. Cancele a qualquer momento.</p>
+      <p className="text-sm text-muted-foreground">Nenhum plano inclui tokens de IA: você conecta a chave da sua conta e paga o consumo diretamente ao provedor.</p>
       <div className="space-y-3">
         {PLANS.map(plan => (
           <button
@@ -294,7 +279,7 @@ export default function CadastroPage() {
   const [step, setStep] = useState(1);
   const [user, setUser] = useState<UserData>(emptyUser);
   const [company, setCompany] = useState<CompanyData>(emptyCompany);
-  const [plan, setPlan] = useState<PlanId | null>('professional');
+  const [plan, setPlan] = useState<PlanId | null>('pro');
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const [done, setDone] = useState(false);

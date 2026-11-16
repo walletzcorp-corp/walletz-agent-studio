@@ -13,8 +13,12 @@ export async function startCalendarConnect(tenantId: string, provider: CalendarP
     const { data } = await api.get<{ url: string }>(`/tenants/${tenantId}/calendars/${provider}/authorize`);
     window.location.href = data.url;
   } catch (err) {
-    const res = (err as { response?: { status?: number; data?: { message?: unknown } } })?.response;
+    const res = (err as { response?: { status?: number; data?: { message?: unknown; error?: unknown } } })?.response;
     const msg = typeof res?.data?.message === 'string' ? res.data.message : null;
+    // 403 pode ser falta de permissão OU recurso fora do plano (ex.: agenda no Starter):
+    // a mensagem do plano vem da API e é mostrada como está.
+    const code = typeof res?.data?.error === 'string' ? res.data.error : '';
+    if (res?.status === 403 && (code.startsWith('FEATURE_') || code === 'PLAN_LIMIT_REACHED') && msg) throw new Error(msg);
     if (res?.status === 403) throw new Error('Só administradores da organização podem conectar agendas.');
     throw new Error(msg ?? 'Não foi possível iniciar a conexão com a agenda. Tente de novo.');
   }

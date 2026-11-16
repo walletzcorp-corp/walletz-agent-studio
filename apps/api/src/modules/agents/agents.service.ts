@@ -21,12 +21,14 @@ import type { UpdateAgentDto } from './dto/update-agent.dto';
 import type { SetToolPermissionDto } from './dto/tool-permission.dto';
 import { AGENT_TEMPLATE_DEFAULTS, AVAILABLE_TOOLS } from './agent-templates';
 import { AuditService } from '../../shared/audit/audit.service';
+import { PlanLimitsService } from '../../shared/plans/plan-limits.service';
 
 @Injectable()
 export class AgentsService {
   constructor(
     @Inject(DRIZZLE_TOKEN) private readonly db: DrizzleDB,
     private readonly auditService: AuditService,
+    private readonly planLimits: PlanLimitsService,
   ) {}
 
   async findAllByTenant(tenantId: string): Promise<Agent[]> {
@@ -49,6 +51,7 @@ export class AgentsService {
   }
 
   async create(dto: CreateAgentDto, tenantId: string, userId: string): Promise<Agent> {
+    await this.planLimits.assertCanAdd(tenantId, 'agents');
     const template = dto.template ?? 'custom';
     const defaults = AGENT_TEMPLATE_DEFAULTS[template]!;
 

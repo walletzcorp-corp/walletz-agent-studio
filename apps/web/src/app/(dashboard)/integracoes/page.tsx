@@ -14,9 +14,14 @@ import { apiUrl, withBasePath } from '../../../lib/paths';
 import {
   startCalendarConnect, type CalendarProvider,
 } from '../../../lib/calendar-connect';
+import {
+  aiConnectionsApi, plansApi, webchatApi, webhooksApi,
+  type AiConnection, type PlanFeatureKey, type TenantPlanSummary,
+} from '../../../lib/studio-api';
+import { whatsappApi, type WhatsappAccount } from '../../../lib/whatsapp-api';
 
 /* ── Types ── */
-type IntegrationStatus = 'connected' | 'disconnected' | 'error' | 'warning' | 'pending' | 'reauth' | 'coming_soon';
+type IntegrationStatus = 'connected' | 'disconnected' | 'error' | 'warning' | 'pending' | 'reauth' | 'coming_soon' | 'not_in_plan';
 type IntegrationCategory = 'all' | 'messaging' | 'ai' | 'calendar' | 'meta' | 'social' | 'crm' | 'automation' | 'payments' | 'developer' | 'devices';
 
 interface Integration {
@@ -58,7 +63,8 @@ const STATUS_CONFIG: Record<IntegrationStatus, { label: string; className: strin
   warning:      { label: 'Atenção',              className: 'badge-warning',                                        icon: AlertTriangle },
   pending:      { label: 'Conectando…',          className: 'badge-primary',                                        icon: Loader2 },
   reauth:       { label: 'Autorização expirada', className: 'badge-warning',                                        icon: AlertTriangle },
-  coming_soon:  { label: 'Em breve',             className: 'bg-surface-2 text-muted-foreground/60 border border-border/50', icon: Clock },
+  coming_soon:  { label: 'Em desenvolvimento',   className: 'bg-surface-2 text-muted-foreground/60 border border-border/50', icon: Clock },
+  not_in_plan:  { label: 'Fora do plano',        className: 'bg-surface-2 text-muted-foreground border border-border', icon: XCircle },
 };
 
 /* ── WhatsApp icon ── */
@@ -100,10 +106,35 @@ function useCalendarConnections(tenantId: string | null) {
 }
 
 /* ── Build integration list from data ── */
+interface StudioData {
+  plan: TenantPlanSummary | null;
+  ai: AiConnection[];
+  whatsapp: WhatsappAccount[];
+  widgets: number;
+  webhooks: number;
+}
+
+/** Recurso fora do plano aparece como "Fora do plano" (o servidor também bloqueia). */
+function gate(data: StudioData, feature: PlanFeatureKey, status: IntegrationStatus): IntegrationStatus {
+  if (!data.plan) return status;
+  if (data.plan.enabledFeatures[feature]) return status;
+  return data.plan.plan.features[feature] === 'in_development' ? 'coming_soon' : 'not_in_plan';
+}
+
+const AI_CARDS: Array<{ id: AiConnection['provider']; name: string; iconBg: string }> = [
+  { id: 'anthropic', name: 'Anthropic Claude', iconBg: 'bg-[#D97706]/10 text-[#D97706]' },
+  { id: 'openai', name: 'OpenAI', iconBg: 'bg-[#10A37F]/10 text-[#10A37F]' },
+  { id: 'gemini', name: 'Google Gemini', iconBg: 'bg-[#4285F4]/10 text-[#4285F4]' },
+  { id: 'openrouter', name: 'OpenRouter', iconBg: 'bg-[#6366F1]/10 text-[#6366F1]' },
+];
+
 function buildIntegrations(
   calConnections: { id: string; provider: string; email: string; syncStatus: string; lastSyncAt: string | null }[],
   pcDevices: { id: string; deviceName: string; pairedAt: string | null; lastSeenAt: string | null }[],
+  data: StudioData,
 ): Integration[] {
+  const wa = data.whatsapp.find((a) => a.status === 'connected') ?? data.whatsapp[0];
+  const waStatus: IntegrationStatus = !wa ? 'disconnected' : wa.status === 'connected' ? 'connected' : wa.status === 'error' ? 'error' : 'warning';
   const googleConn = calConnections.find(c => c.provider === 'google');
   const msConn     = calConnections.find(c => c.provider === 'microsoft');
 
@@ -143,12 +174,23 @@ function buildIntegrations(
       name: 'WhatsApp Business',
       description: 'Conecte seu número oficial, publique seu agente e comece a conversar com seus clientes.',
       category: ['messaging', 'meta'],
-      status: 'disconnected',
-      provider: 'Meta',
+      status: gate(data, 'whatsapp', waStatus),
+      provider: 'Meta · requer conta e aprovação da Meta',
       icon: <WhatsAppIcon />,
       iconBg: 'bg-[#25D366]/10 text-[#25D366]',
       href: '/canais/whatsapp',
-      featured: true,
+      meta: wa?.phoneNumber ? { email: wa.phoneNumber } : undefined,
+    },
+    {
+      id: 'webchat',
+      name: 'Webchat no site',
+      description: 'Publique seu agente no seu site com um código de incorporação.',
+      category: ['messaging'],
+      status: gate(data, 'webchat', data.widgets > 0 ? 'connected' : 'disconnected'),
+      provider: 'Walletz',
+      icon: <Globe className="h-6 w-6" />,
+      iconBg: 'bg-primary/10 text-primary',
+      href: '/canais/webchat',
     },
     /* ── CALENDARS ── */
     {
@@ -156,7 +198,7 @@ function buildIntegrations(
       name: 'Google Calendar',
       description: 'Sincronize sua agenda, verifique disponibilidade e crie Google Meet automaticamente.',
       category: ['calendar'],
-      status: calStatus(googleConn),
+      status: gate(data, 'calendars', calStatus(googleConn)),
       provider: 'Google',
       icon: (
         <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none">
@@ -177,7 +219,7 @@ function buildIntegrations(
       name: 'Microsoft 365 / Teams',
       description: 'Conecte seu calendário corporativo e crie reuniões Teams com link real.',
       category: ['calendar'],
-      status: calStatus(msConn),
+      status: gate(data, 'calendars', calStatus(msConn)),
       provider: 'Microsoft',
       icon: (
         <svg viewBox="0 0 24 24" className="h-6 w-6">
@@ -193,37 +235,26 @@ function buildIntegrations(
       lastSync: msConn?.lastSyncAt ?? undefined,
       meta: msConn ? { email: msConn.email } : undefined,
     },
-    /* ── AI ── */
-    {
-      id: 'anthropic',
-      name: 'Anthropic Claude',
-      description: 'Modelos Claude para raciocínio avançado, escrita e uso de ferramentas.',
-      category: ['ai'],
-      status: 'connected',
-      provider: 'Anthropic',
-      icon: (
-        <svg viewBox="0 0 24 24" className="h-6 w-6" fill="currentColor">
-          <path d="M13.8 2.4L20.4 18h-3.2l-1.4-3.4H8.2L6.8 18H3.6L10.2 2.4h3.6zm-1.8 4.2L9.4 12.2h5.2L12 6.6z" fill="#D97706"/>
-        </svg>
-      ),
-      iconBg: 'bg-[#D97706]/10 text-[#D97706]',
-      href: '/configuracoes/ia',
-    },
-    {
-      id: 'gemini',
-      name: 'Google Gemini',
-      description: 'Modelos Gemini para desenvolvimento e testes com custo reduzido.',
-      category: ['ai'],
-      status: 'disconnected',
-      provider: 'Google',
-      icon: (
-        <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none">
-          <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="#4285F4"/>
-        </svg>
-      ),
-      iconBg: 'bg-[#4285F4]/10',
-      href: '/configuracoes/ia',
-    },
+    /* ── AI (chave do próprio cliente) ── */
+    ...AI_CARDS.map((p): Integration => {
+      const conn = data.ai.find((c) => c.provider === p.id);
+      const status: IntegrationStatus = !conn ? 'disconnected'
+        : conn.status === 'active' ? 'connected'
+        : conn.status === 'billing_error' ? 'warning' : 'error';
+      return {
+        id: 'ai-' + p.id,
+        name: p.name,
+        description: conn
+          ? 'Chave ' + conn.maskedKey + ' · modelo ' + conn.defaultModel + (conn.isDefault ? ' · padrão' : '')
+          : 'Conecte a chave da sua conta. O consumo é pago diretamente ao provedor.',
+        category: ['ai'],
+        status,
+        provider: 'Sua chave de API (BYOK)',
+        icon: <Brain className="h-6 w-6" />,
+        iconBg: p.iconBg,
+        href: '/configuracoes/ia',
+      };
+    }),
     /* ── META ── */
     {
       id: 'facebook',
@@ -274,29 +305,13 @@ function buildIntegrations(
       ),
       iconBg: 'bg-[#0A66C2]/10',
     },
-    /* ── PAYMENTS ── */
-    {
-      id: 'stripe',
-      name: 'Stripe',
-      description: 'Cobranças, assinaturas e pagamentos para seus clientes.',
-      category: ['payments'],
-      status: 'coming_soon',
-      provider: 'Stripe',
-      icon: (
-        <svg viewBox="0 0 24 24" className="h-6 w-6" fill="#6772E5">
-          <path d="M13.976 9.15c-2.172-.806-3.356-1.426-3.356-2.409 0-.831.683-1.305 1.901-1.305 2.227 0 4.515.858 6.09 1.631l.89-5.494C18.252.975 15.697 0 12.165 0 9.667 0 7.589.654 6.104 1.872 4.56 3.147 3.757 4.992 3.757 7.218c0 4.039 2.467 5.76 6.476 7.219 2.585.92 3.445 1.574 3.445 2.583 0 .98-.84 1.545-2.354 1.545-1.875 0-4.965-.921-6.99-2.109l-.9 5.555C5.175 22.99 8.385 24 11.714 24c2.641 0 4.843-.624 6.328-1.813 1.664-1.305 2.525-3.236 2.525-5.732 0-4.128-2.524-5.851-6.594-7.305h.003z"/>
-        </svg>
-      ),
-      iconBg: 'bg-[#6772E5]/10',
-      href: '/billing',
-    },
     /* ── EMAIL ── */
     {
       id: 'email',
       name: 'E-mail',
-      description: 'Envie e receba e-mails nos fluxos dos seus agentes.',
+      description: 'Notificações (Pro) e caixa de e-mail corporativa (Business).',
       category: ['messaging', 'automation'],
-      status: 'coming_soon',
+      status: gate(data, 'emailInbox', 'coming_soon'),
       provider: 'SMTP / IMAP',
       icon: <Mail className="h-6 w-6" />,
       iconBg: 'bg-surface-3 text-muted-foreground',
@@ -304,12 +319,23 @@ function buildIntegrations(
     /* ── WEBHOOK ── */
     {
       id: 'webhook',
-      name: 'Webhook',
-      description: 'Receba e envie eventos para qualquer sistema externo via HTTP.',
+      name: 'Webhooks de saída',
+      description: 'Envie eventos assinados (HMAC) das conversas e reuniões para o seu sistema.',
       category: ['developer', 'automation'],
-      status: 'coming_soon',
+      status: gate(data, 'outboundWebhooks', data.webhooks > 0 ? 'connected' : 'disconnected'),
       provider: 'HTTP',
       icon: <Webhook className="h-6 w-6" />,
+      iconBg: 'bg-surface-3 text-muted-foreground',
+      href: '/integracoes/webhooks',
+    },
+    {
+      id: 'crm',
+      name: 'Trello / CRM de catálogo',
+      description: 'Criar e atualizar tarefas ou registros via API documentada (Business).',
+      category: ['crm', 'automation'],
+      status: gate(data, 'crmConnectors', 'coming_soon'),
+      provider: 'Conector de catálogo',
+      icon: <Users className="h-6 w-6" />,
       iconBg: 'bg-surface-3 text-muted-foreground',
     },
   ];
@@ -348,7 +374,23 @@ export default function IntegracoesPage() {
   const [category, setCategory] = useState<IntegrationCategory>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'connected' | 'disconnected' | 'error'>('all');
 
-  const integrations = buildIntegrations(connections, pcDevicesList);
+  const [studio, setStudio] = useState<StudioData>({ plan: null, ai: [], whatsapp: [], widgets: 0, webhooks: 0 });
+
+  useEffect(() => {
+    if (!tenantId) return;
+    const safe = <T,>(p: Promise<{ data: T }>, fallback: T) => p.then((r) => r.data).catch(() => fallback);
+    void Promise.all([
+      safe(plansApi.summary(tenantId), null as TenantPlanSummary | null),
+      safe(aiConnectionsApi.list(tenantId), [] as AiConnection[]),
+      safe(whatsappApi.listAccounts(tenantId), [] as WhatsappAccount[]),
+      safe(webchatApi.list(tenantId), [] as unknown[]),
+      safe(webhooksApi.list(tenantId), [] as unknown[]),
+    ]).then(([plan, ai, whatsapp, widgets, webhooks]) =>
+      setStudio({ plan, ai, whatsapp, widgets: widgets.length, webhooks: webhooks.length }),
+    );
+  }, [tenantId]);
+
+  const integrations = buildIntegrations(connections, pcDevicesList, studio);
 
   const filtered = integrations.filter((i) => {
     const matchCat = category === 'all' || i.category.includes(category);
@@ -356,15 +398,14 @@ export default function IntegracoesPage() {
     const matchStatus = statusFilter === 'all'
       ? true
       : statusFilter === 'connected' ? i.status === 'connected'
-      : statusFilter === 'disconnected' ? ['disconnected', 'coming_soon'].includes(i.status)
+      : statusFilter === 'disconnected' ? ['disconnected', 'coming_soon', 'not_in_plan'].includes(i.status)
       : ['error', 'warning', 'reauth'].includes(i.status);
     return matchCat && matchSearch && matchStatus;
   });
 
   const connectedCount = integrations.filter(i => i.status === 'connected').length;
   const errorCount     = integrations.filter(i => ['error', 'warning', 'reauth'].includes(i.status)).length;
-  const featuredIntegration = integrations.find(i => i.featured);
-  const otherIntegrations   = filtered.filter(i => !i.featured);
+  const otherIntegrations = filtered;
 
   async function handleConnect(integration: Integration) {
     if (!tenantId) return;
@@ -409,53 +450,14 @@ export default function IntegracoesPage() {
               )}
             </span>
           </div>
-          <button className="btn-ghost flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm">
-            <ShieldCheck className="h-4 w-4" />
-            Credenciais
-          </button>
+          {studio.plan && (
+            <Link href="/billing" className="btn-ghost flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm">
+              <ShieldCheck className="h-4 w-4" />
+              Plano {studio.plan.plan.name}
+            </Link>
+          )}
         </div>
       </div>
-
-      {/* Featured — WhatsApp */}
-      {featuredIntegration && (category === 'all' || category === 'messaging' || category === 'meta') && !search && (
-        <div className="relative overflow-hidden rounded-xl border border-[#25D366]/30 bg-gradient-to-r from-[#25D366]/5 via-surface-1 to-surface-1 p-6">
-          <div className="absolute inset-0 bg-gradient-to-r from-[#25D366]/5 to-transparent pointer-events-none" />
-          <div className="relative flex items-center justify-between gap-6 flex-wrap">
-            <div className="flex items-center gap-4">
-              <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-[#25D366]/10 text-[#25D366] shrink-0">
-                <WhatsAppIcon />
-              </div>
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <h3 className="text-base font-display font-semibold text-foreground">WhatsApp Business</h3>
-                  <span className="rounded-full bg-[#25D366]/10 border border-[#25D366]/30 px-2 py-0.5 text-[10px] font-semibold text-[#25D366] uppercase tracking-wide">
-                    Principal
-                  </span>
-                </div>
-                <p className="text-sm text-muted-foreground max-w-lg">
-                  Conecte seu número oficial, publique seu agente e comece a conversar com seus clientes.
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground/60">
-                  Provider: Meta · Requer aprovação Meta Business
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-2 px-2.5 py-1 text-xs text-muted-foreground">
-                <XCircle className="h-3 w-3" />
-                Não conectado
-              </span>
-              <Link
-                href="/canais/whatsapp"
-                className="flex items-center gap-2 rounded-lg bg-[#25D366] hover:bg-[#22c55e] text-white px-4 py-2 text-sm font-semibold transition-colors"
-              >
-                <Smartphone className="h-4 w-4" />
-                Conectar e Testar
-              </Link>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Filters */}
       <div className="flex items-center gap-3 flex-wrap">
@@ -525,7 +527,8 @@ export default function IntegracoesPage() {
           {otherIntegrations.map(integration => {
             const statusCfg = STATUS_CONFIG[integration.status];
             const StatusIcon = statusCfg.icon;
-            const isComingSoon = integration.status === 'coming_soon';
+            const isComingSoon = integration.status === 'coming_soon' || integration.status === 'not_in_plan';
+            const notInPlan = integration.status === 'not_in_plan';
             const isConnected  = integration.status === 'connected';
 
             return (
@@ -546,11 +549,7 @@ export default function IntegracoesPage() {
                       <p className="text-[11px] text-muted-foreground mt-0.5">{integration.provider}</p>
                     </div>
                   </div>
-                  {!isComingSoon && (
-                    <button className="text-muted-foreground hover:text-foreground p-1 rounded transition-colors">
-                      <MoreHorizontal className="h-4 w-4" />
-                    </button>
-                  )}
+
                 </div>
 
                 {/* Description */}
@@ -573,8 +572,10 @@ export default function IntegracoesPage() {
                     {statusCfg.label}
                   </span>
 
-                  {isComingSoon ? (
-                    <span className="text-[11px] text-muted-foreground/50 italic">Disponível em breve</span>
+                  {notInPlan ? (
+                    <Link href="/billing" className="text-[11px] text-neural-blue hover:underline">Ver planos</Link>
+                  ) : isComingSoon ? (
+                    <span className="text-[11px] text-muted-foreground/50 italic">Roadmap, sem data</span>
                   ) : isConnected ? (
                     <Link
                       href={integration.href ?? '#'}
@@ -603,8 +604,8 @@ export default function IntegracoesPage() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
         {[
           { href: '/meta',           label: 'Central Meta',       desc: 'Templates, webhooks e custos Meta',  icon: MetaIcon, color: 'text-blue-400' },
-          { href: '/configuracoes/ia', label: 'Configurar IA',      desc: 'Provider, modelo, fallback e uso',   icon: Brain,    color: 'text-purple-400' },
-          { href: '/billing',        label: 'Billing Walletz',    desc: 'Plano, faturas e pagamento',         icon: CreditCard, color: 'text-green-400' },
+          { href: '/configuracoes/ia', label: 'Configurar IA',      desc: 'Sua chave de API, modelo e status',  icon: Brain,    color: 'text-purple-400' },
+          { href: '/billing',        label: 'Plano Walletz',      desc: 'Plano, limites e comparação',        icon: CreditCard, color: 'text-green-400' },
         ].map(link => {
           const Icon = link.icon;
           return (

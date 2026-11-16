@@ -1,250 +1,359 @@
 'use client';
 
-import { useState } from 'react';
-import {
-  Brain, CheckCircle2, XCircle, AlertTriangle,
-  Eye, EyeOff, Save, Zap, DollarSign,
-  BarChart3, Shield, ChevronDown, Info,
-  Activity, Clock, ArrowLeft,
-} from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import {
+  ArrowLeft, Brain, CheckCircle2, XCircle, AlertTriangle, Shield, ExternalLink,
+  RefreshCw, Star, Trash2, KeyRound, Loader2, Plus, Info, Activity,
+} from 'lucide-react';
+import { useAuth } from '../../../../hooks/use-auth';
+import {
+  aiConnectionsApi, apiErrorMessage, plansApi,
+  type AiConnection, type AiProvider, type AiProviderInfo, type TenantPlanSummary,
+} from '../../../../lib/studio-api';
 
-/* ── Types ── */
-type AIProvider = 'anthropic' | 'google_gemini' | 'openai' | 'ollama';
-type AIStrategy = 'economy' | 'balanced' | 'quality';
+const STATUS = {
+  active: { label: 'Ativa', className: 'badge-success', icon: CheckCircle2 },
+  invalid: { label: 'Chave recusada', className: 'badge-danger', icon: XCircle },
+  billing_error: { label: 'Sem crédito / faturamento', className: 'badge-warning', icon: AlertTriangle },
+  revoked: { label: 'Revogada', className: 'badge-danger', icon: XCircle },
+} as const;
 
-interface ProviderConfig {
-  id: AIProvider;
-  name: string;
-  description: string;
-  models: { id: string; name: string; context: string; cost: string; recommended?: boolean }[];
-  status: 'connected' | 'disconnected' | 'error';
-  keyPrefix: string;
-  docsUrl: string;
-  color: string;
-  bgClass: string;
+function fmtDate(iso: string | null): string {
+  return iso ? new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '—';
 }
 
-const PROVIDERS: ProviderConfig[] = [
-  {
-    id: 'anthropic',
-    name: 'Anthropic Claude',
-    description: 'Modelos Claude para raciocínio avançado e uso de ferramentas.',
-    status: 'connected',
-    keyPrefix: 'sk-ant-',
-    docsUrl: 'https://docs.anthropic.com',
-    color: '#D97706',
-    bgClass: 'bg-[#D97706]/10 text-[#D97706]',
-    models: [
-      { id: 'claude-sonnet-4-6',        name: 'Claude Sonnet 4.6',   context: '200K',  cost: '~R$ 0,12/1K tokens', recommended: true },
-      { id: 'claude-haiku-4-5',         name: 'Claude Haiku 4.5',    context: '200K',  cost: '~R$ 0,02/1K tokens' },
-      { id: 'claude-opus-5-5',          name: 'Claude Opus 5.5',     context: '200K',  cost: '~R$ 0,75/1K tokens' },
-    ],
-  },
-  {
-    id: 'google_gemini',
-    name: 'Google Gemini',
-    description: 'Modelos Gemini para desenvolvimento e testes com custo baixo.',
-    status: 'disconnected',
-    keyPrefix: 'AIza',
-    docsUrl: 'https://ai.google.dev',
-    color: '#4285F4',
-    bgClass: 'bg-[#4285F4]/10 text-[#4285F4]',
-    models: [
-      { id: 'gemini-1.5-flash',      name: 'Gemini 1.5 Flash',    context: '1M',    cost: 'Gratuito (quota)', recommended: true },
-      { id: 'gemini-1.5-pro',        name: 'Gemini 1.5 Pro',      context: '2M',    cost: '~R$ 0,04/1K tokens' },
-      { id: 'gemini-2.0-flash',      name: 'Gemini 2.0 Flash',    context: '1M',    cost: 'Gratuito (quota)' },
-    ],
-  },
-  {
-    id: 'openai',
-    name: 'OpenAI',
-    description: 'Modelos GPT-4 para casos de uso gerais.',
-    status: 'disconnected',
-    keyPrefix: 'sk-',
-    docsUrl: 'https://platform.openai.com',
-    color: '#10A37F',
-    bgClass: 'bg-[#10A37F]/10 text-[#10A37F]',
-    models: [
-      { id: 'gpt-4o-mini', name: 'GPT-4o mini', context: '128K', cost: '~R$ 0,03/1K tokens', recommended: true },
-      { id: 'gpt-4o',      name: 'GPT-4o',      context: '128K', cost: '~R$ 0,25/1K tokens' },
-    ],
-  },
-  {
-    id: 'ollama',
-    name: 'Ollama (local)',
-    description: 'Modelos locais para privacidade total e custo zero.',
-    status: 'disconnected',
-    keyPrefix: 'http://localhost:11434',
-    docsUrl: 'https://ollama.ai',
-    color: '#94A3B8',
-    bgClass: 'bg-surface-2 text-muted-foreground',
-    models: [
-      { id: 'llama3.2',  name: 'Llama 3.2',   context: '128K', cost: 'Gratuito (local)', recommended: true },
-      { id: 'mistral',   name: 'Mistral 7B',  context: '32K',  cost: 'Gratuito (local)' },
-    ],
-  },
-];
-
-const STRATEGIES: { id: AIStrategy; label: string; desc: string; icon: React.ElementType; color: string }[] = [
-  { id: 'economy',  label: 'Econômico',    desc: 'Usa o modelo mais barato disponível',       icon: DollarSign, color: 'text-neural-success' },
-  { id: 'balanced', label: 'Equilibrado',  desc: 'Balanceia custo e qualidade de resposta',   icon: Zap,        color: 'text-neural-blue' },
-  { id: 'quality',  label: 'Qualidade',    desc: 'Usa sempre o melhor modelo disponível',     icon: Brain,      color: 'text-primary' },
-];
-
-/* ── Provider card ── */
-function ProviderCard({
-  provider,
-  isDefault,
-  onSetDefault,
+/* ── Conexão existente ── */
+function ConnectionCard({
+  tenantId, connection, provider, onChanged,
 }: {
-  provider: ProviderConfig;
-  isDefault: boolean;
-  onSetDefault: () => void;
+  tenantId: string;
+  connection: AiConnection;
+  provider: AiProviderInfo | undefined;
+  onChanged: () => void;
 }) {
-  const [expanded, setExpanded] = useState(isDefault);
-  const [showKey, setShowKey] = useState(false);
-  const [keyValue, setKeyValue] = useState(provider.status === 'connected' ? '••••••••••••••••••••••••••' : '');
-  const [selectedModel, setSelectedModel] = useState(provider.models.find(m => m.recommended)?.id ?? provider.models[0]?.id ?? '');
+  const [busy, setBusy] = useState<string | null>(null);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [rotating, setRotating] = useState(false);
+  const [newKey, setNewKey] = useState('');
+  const [models, setModels] = useState<string[] | null>(null);
+  const [model, setModel] = useState(connection.defaultModel);
+  const status = STATUS[connection.status];
+  const StatusIcon = status.icon;
 
-  const statusConfig = {
-    connected:    { label: 'Conectado', className: 'badge-success', icon: CheckCircle2 },
-    disconnected: { label: 'Não configurado', className: 'bg-surface-2 text-muted-foreground border border-border', icon: XCircle },
-    error:        { label: 'Erro', className: 'badge-danger', icon: AlertTriangle },
-  }[provider.status];
+  const run = async (label: string, fn: () => Promise<string>) => {
+    setBusy(label);
+    setMessage(null);
+    try {
+      setMessage({ ok: true, text: await fn() });
+      onChanged();
+    } catch (err) {
+      setMessage({ ok: false, text: apiErrorMessage(err) });
+    } finally {
+      setBusy(null);
+    }
+  };
 
-  const StatusIcon = statusConfig.icon;
+  const loadModels = async () => {
+    try {
+      const { data } = await aiConnectionsApi.models(tenantId, connection.id);
+      setModels(data.length > 0 ? data : [connection.defaultModel]);
+    } catch (err) {
+      setMessage({ ok: false, text: apiErrorMessage(err) });
+    }
+  };
 
   return (
-    <div className={`neural-card overflow-hidden transition-all ${isDefault ? 'border-primary/40' : ''}`}>
-      <div
-        className="flex items-center justify-between px-5 py-4 cursor-pointer hover:bg-surface-2/30 transition-colors"
-        onClick={() => setExpanded(!expanded)}
-      >
+    <div className={`neural-card p-5 space-y-4 ${connection.isDefault ? 'border-primary/40' : ''}`}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className={`flex h-10 w-10 items-center justify-center rounded-xl border border-border shrink-0 ${provider.bgClass}`}>
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-primary/10 text-primary shrink-0">
             <Brain className="h-5 w-5" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <p className="text-sm font-semibold text-foreground">{provider.name}</p>
-              {isDefault && (
-                <span className="badge-primary text-[10px] px-2 py-0.5 rounded-full font-semibold">Padrão</span>
-              )}
+              <p className="text-sm font-semibold text-foreground">{connection.providerName}</p>
+              {connection.isDefault && <span className="badge-primary text-[10px] px-2 py-0.5 rounded-full font-semibold">Padrão</span>}
             </div>
-            <p className="text-xs text-muted-foreground">{provider.description}</p>
+            <p className="text-xs text-muted-foreground font-mono">{connection.maskedKey} · {connection.defaultModel}</p>
           </div>
         </div>
-        <div className="flex items-center gap-3 shrink-0">
-          <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium ${statusConfig.className}`}>
-            <StatusIcon className="h-2.5 w-2.5" />
-            {statusConfig.label}
-          </span>
-          <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${expanded ? 'rotate-180' : ''}`} />
-        </div>
+        <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium ${status.className}`}>
+          <StatusIcon className="h-3 w-3" /> {status.label}
+        </span>
       </div>
 
-      {expanded && (
-        <div className="px-5 pb-5 space-y-4 border-t border-border/50">
-          {/* API Key */}
-          <div className="space-y-1.5 pt-4">
-            <label className="text-xs font-medium text-muted-foreground">
-              {provider.id === 'ollama' ? 'URL base (Ollama)' : 'API Key'}
-            </label>
-            <div className="flex items-center gap-2">
-              <input
-                type={showKey ? 'text' : 'password'}
-                value={keyValue}
-                onChange={e => setKeyValue(e.target.value)}
-                placeholder={provider.id === 'ollama' ? 'http://localhost:11434' : `${provider.keyPrefix}…`}
-                className="flex-1 rounded-lg border border-border bg-surface-1 px-3 py-2.5 text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50"
-              />
-              <button
-                onClick={() => setShowKey(!showKey)}
-                className="btn-ghost rounded-lg px-3 py-2.5 text-sm"
-              >
-                {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
-            <p className="text-[11px] text-muted-foreground/60 flex items-center gap-1">
-              <Shield className="h-3 w-3" />
-              Chave criptografada com AES-256. Nunca visível em logs.
-              <a href={provider.docsUrl} target="_blank" rel="noopener noreferrer" className="text-neural-blue hover:underline ml-1">
-                Obter chave
-              </a>
-            </p>
-          </div>
+      {connection.status !== 'active' && connection.lastError && (
+        <div className="rounded-lg border border-neural-warning/30 bg-neural-warning/5 p-3 text-xs text-foreground">
+          {connection.lastError}
+          {connection.status === 'billing_error' && provider && (
+            <a href={provider.links.buyCredits} target="_blank" rel="noopener noreferrer" className="ml-1 text-neural-blue hover:underline inline-flex items-center gap-1">
+              Abrir faturamento no provedor <ExternalLink className="h-3 w-3" />
+            </a>
+          )}
+        </div>
+      )}
 
-          {/* Model selection */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground">Modelo</label>
-            <div className="space-y-1.5">
-              {provider.models.map(model => (
-                <label
-                  key={model.id}
-                  className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-colors ${
-                    selectedModel === model.id
-                      ? 'border-primary/40 bg-primary/5'
-                      : 'border-border bg-surface-1 hover:border-border/60'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="radio"
-                      name={`model-${provider.id}`}
-                      value={model.id}
-                      checked={selectedModel === model.id}
-                      onChange={() => setSelectedModel(model.id)}
-                      className="accent-primary"
-                    />
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium text-foreground">{model.name}</p>
-                        {model.recommended && (
-                          <span className="text-[10px] text-neural-success font-medium">Recomendado</span>
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground">Contexto: {model.context}</p>
-                    </div>
-                  </div>
-                  <span className="text-xs text-muted-foreground font-mono">{model.cost}</span>
-                </label>
-              ))}
-            </div>
-          </div>
+      <p className="text-[11px] text-muted-foreground">
+        Última validação: {fmtDate(connection.lastValidatedAt)}
+        {connection.lastErrorAt && connection.status !== 'active' ? ` · Último erro: ${fmtDate(connection.lastErrorAt)}` : ''}
+      </p>
 
-          {/* Actions */}
-          <div className="flex items-center gap-2 pt-1">
-            <button className="btn-primary flex-1 rounded-lg py-2.5 text-sm flex items-center justify-center gap-2">
-              <Save className="h-4 w-4" />
-              Salvar configuração
+      {/* Modelo */}
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="space-y-1 flex-1 min-w-[220px]">
+          <label className="text-xs font-medium text-muted-foreground">Modelo usado pelos agentes</label>
+          {models ? (
+            <select
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              className="w-full rounded-lg border border-border bg-surface-1 px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50"
+            >
+              {models.map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
+          ) : (
+            <button onClick={loadModels} className="w-full text-left rounded-lg border border-border bg-surface-1 px-3 py-2 text-sm text-foreground hover:border-primary/40">
+              {connection.defaultModel} <span className="text-xs text-muted-foreground">(clique para ver os modelos da sua conta)</span>
             </button>
-            {!isDefault && provider.status === 'connected' && (
-              <button
-                onClick={onSetDefault}
-                className="btn-ghost rounded-lg px-4 py-2.5 text-sm border border-border"
-              >
-                Definir como padrão
-              </button>
-            )}
+          )}
+        </div>
+        {models && model !== connection.defaultModel && (
+          <button
+            disabled={busy !== null}
+            onClick={() => run('model', async () => {
+              await aiConnectionsApi.update(tenantId, connection.id, { model });
+              return `Modelo alterado para ${model}.`;
+            })}
+            className="btn-primary rounded-lg px-4 py-2 text-sm"
+          >
+            {busy === 'model' ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salvar modelo'}
+          </button>
+        )}
+      </div>
+
+      {rotating && (
+        <div className="space-y-2 rounded-lg border border-border bg-surface-1 p-3">
+          <label className="text-xs font-medium text-muted-foreground">Nova chave de API</label>
+          <input
+            type="password"
+            autoComplete="off"
+            value={newKey}
+            onChange={(e) => setNewKey(e.target.value)}
+            placeholder={provider?.keyHint ?? 'Cole a nova chave'}
+            className="w-full rounded-lg border border-border bg-surface-1 px-3 py-2 text-sm font-mono text-foreground focus:outline-none focus:border-primary/50"
+          />
+          <p className="text-[11px] text-muted-foreground">A nova chave é testada antes de substituir a atual.</p>
+          <div className="flex gap-2">
+            <button
+              disabled={busy !== null || newKey.trim().length < 16}
+              onClick={() => run('rotate', async () => {
+                await aiConnectionsApi.update(tenantId, connection.id, { apiKey: newKey.trim() });
+                setNewKey('');
+                setRotating(false);
+                return 'Chave substituída e validada.';
+              })}
+              className="btn-primary rounded-lg px-4 py-2 text-sm"
+            >
+              {busy === 'rotate' ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Validar e substituir'}
+            </button>
+            <button onClick={() => { setRotating(false); setNewKey(''); }} className="btn-ghost rounded-lg px-4 py-2 text-sm border border-border">
+              Cancelar
+            </button>
           </div>
         </div>
       )}
+
+      {message && (
+        <p className={`text-xs ${message.ok ? 'text-neural-success' : 'text-neural-danger'}`}>{message.text}</p>
+      )}
+
+      <div className="flex flex-wrap gap-2">
+        <button
+          disabled={busy !== null}
+          onClick={() => run('test', async () => (await aiConnectionsApi.test(tenantId, connection.id)).data.message)}
+          className="btn-ghost rounded-lg px-3 py-2 text-xs border border-border inline-flex items-center gap-1.5"
+        >
+          {busy === 'test' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+          {connection.status === 'active' ? 'Testar' : 'Testar novamente'}
+        </button>
+        {!connection.isDefault && (
+          <button
+            disabled={busy !== null}
+            onClick={() => run('default', async () => {
+              await aiConnectionsApi.setDefault(tenantId, connection.id);
+              return 'Agora esta é a conexão padrão.';
+            })}
+            className="btn-ghost rounded-lg px-3 py-2 text-xs border border-border inline-flex items-center gap-1.5"
+          >
+            <Star className="h-3.5 w-3.5" /> Tornar padrão
+          </button>
+        )}
+        <button
+          disabled={busy !== null}
+          onClick={() => setRotating(true)}
+          className="btn-ghost rounded-lg px-3 py-2 text-xs border border-border inline-flex items-center gap-1.5"
+        >
+          <KeyRound className="h-3.5 w-3.5" /> Trocar chave
+        </button>
+        <button
+          disabled={busy !== null}
+          onClick={() => {
+            if (!window.confirm('Revogar esta conexão? A chave será apagada da Walletz e os agentes que a usam param de responder até haver outra conexão.')) return;
+            void run('remove', async () => {
+              await aiConnectionsApi.remove(tenantId, connection.id);
+              return 'Conexão revogada.';
+            });
+          }}
+          className="btn-ghost rounded-lg px-3 py-2 text-xs border border-neural-danger/40 text-neural-danger inline-flex items-center gap-1.5"
+        >
+          <Trash2 className="h-3.5 w-3.5" /> Revogar
+        </button>
+      </div>
     </div>
   );
 }
 
-/* ── Page ── */
-export default function AIConfigPage() {
-  const [defaultProvider, setDefaultProvider] = useState<AIProvider>('anthropic');
-  const [fallbackProvider, setFallbackProvider] = useState<AIProvider | 'none'>('none');
-  const [strategy, setStrategy] = useState<AIStrategy>('balanced');
+/* ── Nova conexão ── */
+function NewConnection({
+  tenantId, providers, onCreated, onCancel,
+}: {
+  tenantId: string;
+  providers: AiProviderInfo[];
+  onCreated: () => void;
+  onCancel: () => void;
+}) {
+  const [providerId, setProviderId] = useState<AiProvider>('anthropic');
+  const [apiKey, setApiKey] = useState('');
+  const [model, setModel] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const provider = providers.find((p) => p.id === providerId);
 
-  const connectedProviders = PROVIDERS.filter(p => p.status === 'connected');
+  const submit = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await aiConnectionsApi.create(tenantId, { provider: providerId, apiKey: apiKey.trim(), ...(model.trim() ? { model: model.trim() } : {}) });
+      setApiKey('');
+      onCreated();
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="neural-card p-5 space-y-4 border-primary/30">
+      <h3 className="text-sm font-semibold text-foreground">Conectar provedor de IA</h3>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        {providers.map((p) => (
+          <button
+            key={p.id}
+            onClick={() => setProviderId(p.id)}
+            className={`rounded-lg border p-3 text-sm font-medium transition-colors ${providerId === p.id ? 'border-primary/50 bg-primary/5 text-foreground' : 'border-border bg-surface-1 text-muted-foreground hover:border-border/60'}`}
+          >
+            {p.name}
+          </button>
+        ))}
+      </div>
+
+      {provider && (
+        <ol className="space-y-2 text-xs text-muted-foreground list-decimal pl-4">
+          <li>
+            Crie a conta e ative o faturamento <strong className="text-foreground">diretamente no provedor</strong>:{' '}
+            <a href={provider.links.buyCredits} target="_blank" rel="noopener noreferrer" className="text-neural-blue hover:underline inline-flex items-center gap-1">
+              comprar créditos / faturamento <ExternalLink className="h-3 w-3" />
+            </a>
+            . {provider.billingNote}
+          </li>
+          <li>
+            Gere uma chave de API:{' '}
+            <a href={provider.links.createKey} target="_blank" rel="noopener noreferrer" className="text-neural-blue hover:underline inline-flex items-center gap-1">
+              criar chave <ExternalLink className="h-3 w-3" />
+            </a>
+            . Recomendamos definir limite de gastos e deixar a recarga automática desligada.
+          </li>
+          <li>Cole a chave abaixo. Nunca envie a chave por WhatsApp, e-mail ou chat.</li>
+        </ol>
+      )}
+
+      <div className="space-y-1.5">
+        <label className="text-xs font-medium text-muted-foreground">Chave de API</label>
+        <input
+          type="password"
+          autoComplete="off"
+          value={apiKey}
+          onChange={(e) => setApiKey(e.target.value)}
+          placeholder={provider?.keyHint ?? ''}
+          className="w-full rounded-lg border border-border bg-surface-1 px-3 py-2.5 text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50"
+        />
+      </div>
+      <div className="space-y-1.5">
+        <label className="text-xs font-medium text-muted-foreground">Modelo (opcional)</label>
+        <input
+          value={model}
+          onChange={(e) => setModel(e.target.value)}
+          placeholder={`Em branco: escolhemos um disponível na sua conta (ex.: ${provider?.preferredModels[0] ?? ''})`}
+          className="w-full rounded-lg border border-border bg-surface-1 px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50"
+        />
+      </div>
+
+      <p className="text-[11px] text-muted-foreground flex items-start gap-1.5">
+        <Info className="h-3.5 w-3.5 shrink-0 mt-px" />
+        Ao conectar, fazemos uma chamada mínima de teste com a sua chave (custo de poucos tokens, cobrado pelo provedor) para confirmar autenticação, modelo e faturamento.
+      </p>
+
+      {error && <p className="text-xs text-neural-danger">{error}</p>}
+
+      <div className="flex gap-2">
+        <button disabled={busy || apiKey.trim().length < 16} onClick={submit} className="btn-primary rounded-lg px-4 py-2.5 text-sm inline-flex items-center gap-2">
+          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Shield className="h-4 w-4" />}
+          Validar e conectar
+        </button>
+        <button onClick={onCancel} className="btn-ghost rounded-lg px-4 py-2.5 text-sm border border-border">Cancelar</button>
+      </div>
+    </div>
+  );
+}
+
+/* ── Página ── */
+export default function AIConfigPage() {
+  const { tenantId } = useAuth();
+  const [connections, setConnections] = useState<AiConnection[]>([]);
+  const [providers, setProviders] = useState<AiProviderInfo[]>([]);
+  const [plan, setPlan] = useState<TenantPlanSummary | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+
+  const load = useCallback(async () => {
+    if (!tenantId) return;
+    try {
+      const [c, p, s] = await Promise.all([
+        aiConnectionsApi.list(tenantId),
+        aiConnectionsApi.providers(tenantId),
+        plansApi.summary(tenantId),
+      ]);
+      setConnections(c.data);
+      setProviders(p.data);
+      setPlan(s.data);
+      setError(null);
+    } catch (err) {
+      setError(apiErrorMessage(err, 'Não foi possível carregar as conexões de IA.'));
+    } finally {
+      setLoading(false);
+    }
+  }, [tenantId]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const limit = plan?.plan.limits.aiConnections ?? 0;
+  const canAdd = connections.length < limit;
 
   return (
     <div className="page-container space-y-6">
-      {/* Header */}
       <div className="flex items-center gap-3">
         <Link href="/configuracoes" className="text-muted-foreground hover:text-foreground transition-colors">
           <ArrowLeft className="h-5 w-5" />
@@ -252,135 +361,84 @@ export default function AIConfigPage() {
         <div>
           <h1 className="text-2xl font-display font-semibold text-foreground">Configurações de IA</h1>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            Gerencie provedores, modelos, estratégias e consumo de IA.
+            Conecte a chave de API da sua própria conta no provedor de IA.
           </p>
         </div>
       </div>
 
-      {/* Usage stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
-          { label: 'Tokens hoje',          value: '12.4K',   icon: Activity, color: 'text-primary' },
-          { label: 'Custo estimado (mês)', value: 'R$ 3,20', icon: DollarSign, color: 'text-neural-warning' },
-          { label: 'Provedores ativos',    value: connectedProviders.length.toString(), icon: Brain, color: 'text-neural-success' },
-          { label: 'Chamadas hoje',        value: '87',      icon: BarChart3, color: 'text-neural-blue' },
-        ].map(stat => {
-          const Icon = stat.icon;
-          return (
-            <div key={stat.label} className="stat-card">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs text-muted-foreground">{stat.label}</span>
-                <Icon className={`h-4 w-4 ${stat.color}`} />
-              </div>
-              <p className={`text-xl font-display font-semibold ${stat.color}`}>{stat.value}</p>
+      <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 flex items-start gap-3">
+        <Shield className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+        <div className="text-xs text-muted-foreground space-y-1">
+          <p className="text-sm font-semibold text-foreground">Nenhum plano inclui créditos ou tokens de IA</p>
+          <p>
+            Você contrata e paga o consumo diretamente ao provedor escolhido (Claude, OpenAI, Gemini ou OpenRouter).
+            A Walletz não compra, revende nem cobra tokens. A chave fica criptografada (AES-256-GCM), separada por empresa,
+            e nunca é exibida de novo após salva.
+          </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <div className="stat-card">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs text-muted-foreground">Conexões no plano</span>
+            <Brain className="h-4 w-4 text-primary" />
+          </div>
+          <p className="text-xl font-display font-semibold text-primary">{connections.length} / {limit || '—'}</p>
+        </div>
+        <div className="stat-card">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs text-muted-foreground">Tokens no mês</span>
+            <Activity className="h-4 w-4 text-neural-blue" />
+          </div>
+          <p className="text-xl font-display font-semibold text-neural-blue">{(plan?.aiTokensMonth ?? 0).toLocaleString('pt-BR')}</p>
+        </div>
+        <div className="stat-card col-span-2 sm:col-span-1">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs text-muted-foreground">Custo da IA</span>
+            <ExternalLink className="h-4 w-4 text-muted-foreground" />
+          </div>
+          <p className="text-xs text-muted-foreground">Consulte saldo e fatura no painel do seu provedor.</p>
+        </div>
+      </div>
+
+      {error && <div className="rounded-lg border border-neural-danger/40 bg-neural-danger/5 p-3 text-sm text-neural-danger">{error}</div>}
+
+      {loading ? (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Carregando…</div>
+      ) : (
+        <div className="space-y-3">
+          {connections.length === 0 && !adding && (
+            <div className="neural-card p-6 text-center space-y-2">
+              <AlertTriangle className="h-6 w-6 text-neural-warning mx-auto" />
+              <p className="text-sm font-semibold text-foreground">Seus agentes ainda não têm IA conectada</p>
+              <p className="text-xs text-muted-foreground">Sem uma chave sua, o laboratório, o webchat e o WhatsApp não geram respostas automáticas.</p>
             </div>
-          );
-        })}
-      </div>
+          )}
 
-      {/* Strategy */}
-      <div className="neural-card p-5 space-y-3">
-        <div className="flex items-center gap-2">
-          <h3 className="text-sm font-semibold text-foreground">Estratégia de IA</h3>
-          <div className="group relative">
-            <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
-          </div>
-        </div>
-        <div className="grid grid-cols-3 gap-2">
-          {STRATEGIES.map(s => {
-            const Icon = s.icon;
-            return (
-              <button
-                key={s.id}
-                onClick={() => setStrategy(s.id)}
-                className={`flex flex-col items-center gap-2 rounded-lg border p-4 text-center transition-colors ${
-                  strategy === s.id
-                    ? 'border-primary/40 bg-primary/5'
-                    : 'border-border bg-surface-1 hover:border-border/60'
-                }`}
-              >
-                <Icon className={`h-5 w-5 ${s.color}`} />
-                <p className="text-sm font-medium text-foreground">{s.label}</p>
-                <p className="text-[11px] text-muted-foreground leading-tight">{s.desc}</p>
-                {strategy === s.id && (
-                  <span className="text-[10px] text-primary font-semibold">Ativo</span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+          {connections.map((c) => (
+            <ConnectionCard
+              key={c.id}
+              tenantId={tenantId!}
+              connection={c}
+              provider={providers.find((p) => p.id === c.provider)}
+              onChanged={load}
+            />
+          ))}
 
-      {/* Global settings */}
-      <div className="neural-card p-5 space-y-4">
-        <h3 className="text-sm font-semibold text-foreground">Configurações globais</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground">Provider padrão</label>
-            <select
-              value={defaultProvider}
-              onChange={e => setDefaultProvider(e.target.value as AIProvider)}
-              className="w-full rounded-lg border border-border bg-surface-1 px-3 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50"
-            >
-              {PROVIDERS.map(p => (
-                <option key={p.id} value={p.id} disabled={p.status !== 'connected'}>
-                  {p.name} {p.status !== 'connected' ? '(não configurado)' : ''}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground">Fallback</label>
-            <select
-              value={fallbackProvider}
-              onChange={e => setFallbackProvider(e.target.value as AIProvider | 'none')}
-              className="w-full rounded-lg border border-border bg-surface-1 px-3 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50"
-            >
-              <option value="none">Sem fallback</option>
-              {PROVIDERS.filter(p => p.id !== defaultProvider).map(p => (
-                <option key={p.id} value={p.id} disabled={p.status !== 'connected'}>
-                  {p.name} {p.status !== 'connected' ? '(não configurado)' : ''}
-                </option>
-              ))}
-            </select>
-          </div>
+          {adding && tenantId ? (
+            <NewConnection tenantId={tenantId} providers={providers} onCreated={() => { setAdding(false); void load(); }} onCancel={() => setAdding(false)} />
+          ) : canAdd ? (
+            <button onClick={() => setAdding(true)} className="btn-primary rounded-lg px-4 py-2.5 text-sm inline-flex items-center gap-2">
+              <Plus className="h-4 w-4" /> Conectar provedor de IA
+            </button>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Seu plano {plan?.plan.name} permite {limit} {limit === 1 ? 'conexão' : 'conexões'} de IA. Para conectar outro provedor, fale com a Walletz sobre mudar de plano.
+            </p>
+          )}
         </div>
-
-        <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-surface-1">
-          <div>
-            <p className="text-sm font-medium text-foreground">Modo de teste (Gemini grátis)</p>
-            <p className="text-xs text-muted-foreground">Usa Gemini Flash no laboratório para economizar créditos</p>
-          </div>
-          <button className="relative h-6 w-11 rounded-full bg-surface-3 transition-colors">
-            <span className="absolute top-1 left-1 h-4 w-4 rounded-full bg-muted-foreground shadow transition-transform" />
-          </button>
-        </div>
-      </div>
-
-      {/* Provider cards */}
-      <div className="space-y-3">
-        <h3 className="text-sm font-semibold text-foreground">Provedores</h3>
-        {PROVIDERS.map(provider => (
-          <ProviderCard
-            key={provider.id}
-            provider={provider}
-            isDefault={defaultProvider === provider.id}
-            onSetDefault={() => setDefaultProvider(provider.id)}
-          />
-        ))}
-      </div>
-
-      {/* BYOK info */}
-      <div className="rounded-lg border border-border bg-surface-1 p-4 flex items-start gap-3">
-        <Shield className="h-5 w-5 text-neural-success shrink-0 mt-0.5" />
-        <div>
-          <p className="text-sm font-semibold text-foreground mb-1">BYOK — Bring Your Own Key</p>
-          <p className="text-xs text-muted-foreground">
-            Cada empresa pode configurar suas próprias chaves de API por segurança e controle de custos.
-            As chaves são criptografadas com AES-256-GCM, isoladas por tenant e jamais aparecem em logs ou no frontend completas.
-          </p>
-        </div>
-      </div>
+      )}
     </div>
   );
 }
