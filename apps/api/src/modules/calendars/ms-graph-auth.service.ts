@@ -1,19 +1,10 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-interface CachedToken {
-  token: string;
-  expiresAt: number; /* ms epoch */
-}
-
 /**
- * Manages Microsoft Graph access tokens.
- *
- * Supports two flows:
- *  1. Client Credentials (app-only) — no user interaction, needs Application permissions in Entra
- *  2. Delegated refresh — renews stored user access tokens with a refresh token
- *
- * Tokens are cached in-memory and refreshed 5 minutes before expiry.
+ * Renews a tenant user's *delegated* Microsoft Graph access token with the refresh token that
+ * user granted. Deliberately no app-only / client-credentials flow: an application-wide token
+ * could read the calendar of any mailbox in the directory, which no tenant of ours consented to.
  * Secrets are NEVER logged.
  */
 @Injectable()
@@ -104,27 +95,27 @@ export class MicrosoftGraphAuthService {
     refreshToken?: string;
     expiresAt: Date;
   }> {
+    if (!this.config.get<string>('MICROSOFT_OAUTH_CLIENT_ID') || !this.config.get<string>('MICROSOFT_OAUTH_CLIENT_SECRET')) {
+      throw new ServiceUnavailableException('Microsoft OAuth is not configured');
+    }
+
     this.logger.log('Refreshing delegated Microsoft access token');
 
-    const res = await fetch(
-      `https://login.microsoftonline.com/${this.msTenantId}/oauth2/v2.0/token`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          grant_type: 'refresh_token',
-          client_id: this.clientId,
-          client_secret: this.clientSecret,
-          refresh_token: refreshToken,
-          scope: MicrosoftGraphAuthService.DELEGATED_SCOPES,
-        }).toString(),
-      },
-    );
+    const res = await fetch(`https://login.microsoftonline.com/${this.msTenantId}/oauth2/v2.0/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'refresh_token',
+        client_id: this.clientId,
+        client_secret: this.clientSecret,
+        refresh_token: refreshToken,
+        scope: MicrosoftGraphAuthService.DELEGATED_SCOPES,
+      }).toString(),
+    });
 
     if (!res.ok) {
-      const body = await res.text();
       this.logger.error(`Delegated token refresh failed: ${res.status}`);
-      throw new ServiceUnavailableException(`Microsoft token refresh failed: ${res.status} — ${body}`);
+      throw new ServiceUnavailableException(`Microsoft token refresh failed (${res.status})`);
     }
 
     const data = (await res.json()) as {
@@ -139,15 +130,9 @@ export class MicrosoftGraphAuthService {
       expiresAt: new Date(Date.now() + data.expires_in * 1000),
     };
   }
+}
 
-  /* ── Admin consent URL (Application permissions) ── */
-
-  buildAdminConsentUrl(redirectUri: string, state?: string): string {
-    const params = new URLSearchParams({
-      client_id: this.clientId,
-      redirect_uri: redirectUri,
-      ...(state ? { state } : {}),
-    });
-    return `https://login.microsoftonline.com/${this.msTenantId}/adminconsent?${params.toString()}`;
-  }
+interface CachedToken {
+  token: string;
+  expiresAt: number;
 }

@@ -18,11 +18,20 @@ export class TeachRepository {
     const [row] = await this.db
       .select()
       .from(knowledgeItems)
-      .where(and(eq(knowledgeItems.id, id), eq(knowledgeItems.tenantId, tenantId), isNull(knowledgeItems.deletedAt)));
+      .where(
+        and(
+          eq(knowledgeItems.id, id),
+          eq(knowledgeItems.tenantId, tenantId),
+          isNull(knowledgeItems.deletedAt),
+        ),
+      );
     return row ?? null;
   }
 
-  async findByTenant(tenantId: string, filters?: { type?: KnowledgeItemType; agentId?: string; approved?: boolean }) {
+  async findByTenant(
+    tenantId: string,
+    filters?: { type?: KnowledgeItemType; agentId?: string; approved?: boolean },
+  ) {
     const conditions = [eq(knowledgeItems.tenantId, tenantId), isNull(knowledgeItems.deletedAt)];
 
     if (filters?.type) conditions.push(eq(knowledgeItems.type, filters.type));

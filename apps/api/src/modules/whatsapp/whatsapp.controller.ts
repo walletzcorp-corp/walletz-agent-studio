@@ -1,26 +1,48 @@
 import {
-  Controller, Get, Post, Delete, Param, Body, Query,
-  UseGuards, Headers, RawBodyRequest, Req, HttpCode, Logger,
+  Controller,
+  Get,
+  Post,
+  Delete,
+  Patch,
+  Param,
+  Body,
+  Query,
+  Headers,
+  RawBodyRequest,
+  Req,
+  HttpCode,
+  Logger,
 } from '@nestjs/common';
 import type { Request } from 'express';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RbacGuard } from '../../shared/rbac/rbac.guard';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { Roles } from '../../shared/rbac/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { WhatsappService } from './whatsapp.service';
-import { ConnectWhatsappDto, EmbeddedSignupDto, SendMessageDto } from './dto/connect-account.dto';
+import { MetaConfigService } from './meta-config.service';
+import {
+  AssignAgentDto,
+  ConnectWhatsappDto,
+  EmbeddedSignupDto,
+  SendMessageDto,
+} from './dto/connect-account.dto';
+import { SaveMetaConfigDto } from './dto/meta-config.dto';
+import { CurrentTenant } from '../../shared/rbac/tenant-context';
+import { Public } from '../../shared/rbac/access-policy.decorators';
 
 @ApiTags('whatsapp')
 @Controller()
 export class WhatsappController {
   private readonly logger = new Logger(WhatsappController.name);
 
-  constructor(private readonly whatsappService: WhatsappService) {}
+  constructor(
+    private readonly whatsappService: WhatsappService,
+    private readonly metaConfigService: MetaConfigService,
+  ) {}
 
   // ─── Webhook (public — no auth) ──────────────────────────────────────────────
 
   @Get('webhook/whatsapp')
+  @Public('Meta verify token (GET challenge)')
   @HttpCode(200)
   @ApiOperation({ summary: 'Meta webhook verification (GET challenge)' })
   verifyWebhook(
@@ -33,6 +55,7 @@ export class WhatsappController {
   }
 
   @Post('webhook/whatsapp')
+  @Public('Assinatura HMAC x-hub-signature-256 da Meta + conta resolvida por phone_number_id')
   @HttpCode(200)
   @ApiOperation({ summary: 'Receive WhatsApp Cloud API webhook events' })
   async receiveWebhook(
@@ -40,38 +63,40 @@ export class WhatsappController {
     @Headers('x-hub-signature-256') signature: string,
     @Req() req: RawBodyRequest<Request>,
   ): Promise<{ status: string }> {
-    await this.whatsappService.handleWebhookEvent(payload, signature, req.rawBody ?? Buffer.alloc(0));
+    await this.whatsappService.handleWebhookEvent(
+      payload,
+      signature,
+      req.rawBody ?? Buffer.alloc(0),
+    );
     return { status: 'ok' };
   }
 
   // ─── Tenant-scoped routes (requires auth) ────────────────────────────────────
 
   @Get('tenants/:tenantId/whatsapp/accounts')
-  @UseGuards(JwtAuthGuard, RbacGuard)
   @ApiBearerAuth()
+  @Roles('viewer')
   @ApiOperation({ summary: 'List WhatsApp accounts for tenant' })
-  listAccounts(@Param('tenantId') tenantId: string) {
+  listAccounts(@CurrentTenant('tenantId') tenantId: string) {
     return this.whatsappService.listAccounts(tenantId);
   }
 
   @Get('tenants/:tenantId/whatsapp/accounts/:accountId')
-  @UseGuards(JwtAuthGuard, RbacGuard)
   @ApiBearerAuth()
+  @Roles('viewer')
   @ApiOperation({ summary: 'Get WhatsApp account details' })
-  getAccount(
-    @Param('tenantId') tenantId: string,
-    @Param('accountId') accountId: string,
-  ) {
+  getAccount(@CurrentTenant('tenantId') tenantId: string, @Param('accountId') accountId: string) {
     return this.whatsappService.getAccount(tenantId, accountId);
   }
 
   @Post('tenants/:tenantId/whatsapp/embedded-signup')
-  @UseGuards(JwtAuthGuard, RbacGuard)
   @ApiBearerAuth()
   @Roles('admin', 'owner')
-  @ApiOperation({ summary: 'Complete WhatsApp connection via Meta Embedded Signup (code exchange on backend)' })
+  @ApiOperation({
+    summary: 'Complete WhatsApp connection via Meta Embedded Signup (code exchange on backend)',
+  })
   embeddedSignup(
-    @Param('tenantId') tenantId: string,
+    @CurrentTenant('tenantId') tenantId: string,
     @Body() dto: EmbeddedSignupDto,
     @CurrentUser('userId') userId: string,
   ) {
@@ -79,12 +104,11 @@ export class WhatsappController {
   }
 
   @Post('tenants/:tenantId/whatsapp/accounts')
-  @UseGuards(JwtAuthGuard, RbacGuard)
   @ApiBearerAuth()
   @Roles('admin', 'owner')
   @ApiOperation({ summary: 'Connect a WhatsApp account (manual — for advanced/technical use)' })
   connectAccount(
-    @Param('tenantId') tenantId: string,
+    @CurrentTenant('tenantId') tenantId: string,
     @Body() dto: ConnectWhatsappDto,
     @CurrentUser('userId') userId: string,
   ) {
@@ -92,12 +116,11 @@ export class WhatsappController {
   }
 
   @Post('tenants/:tenantId/whatsapp/accounts/:accountId/reconnect')
-  @UseGuards(JwtAuthGuard, RbacGuard)
   @ApiBearerAuth()
   @Roles('admin', 'owner')
   @ApiOperation({ summary: 'Reconnect WhatsApp account (renew token via Embedded Signup)' })
   reconnectAccount(
-    @Param('tenantId') tenantId: string,
+    @CurrentTenant('tenantId') tenantId: string,
     @Param('accountId') accountId: string,
     @Body() dto: EmbeddedSignupDto,
     @CurrentUser('userId') userId: string,
@@ -105,14 +128,26 @@ export class WhatsappController {
     return this.whatsappService.reconnectAccount(accountId, dto, tenantId, userId);
   }
 
+  @Patch('tenants/:tenantId/whatsapp/accounts/:accountId/agent')
+  @ApiBearerAuth()
+  @Roles('admin', 'owner')
+  @ApiOperation({ summary: 'Assign the published agent that answers on this WhatsApp number' })
+  assignAgent(
+    @CurrentTenant('tenantId') tenantId: string,
+    @Param('accountId') accountId: string,
+    @Body() dto: AssignAgentDto,
+    @CurrentUser('userId') userId: string,
+  ) {
+    return this.whatsappService.assignAgent(tenantId, accountId, dto.agentId, userId);
+  }
+
   @Delete('tenants/:tenantId/whatsapp/accounts/:accountId')
-  @UseGuards(JwtAuthGuard, RbacGuard)
   @ApiBearerAuth()
   @Roles('admin', 'owner')
   @HttpCode(204)
   @ApiOperation({ summary: 'Disconnect a WhatsApp account' })
   disconnectAccount(
-    @Param('tenantId') tenantId: string,
+    @CurrentTenant('tenantId') tenantId: string,
     @Param('accountId') accountId: string,
     @CurrentUser('userId') userId: string,
   ) {
@@ -120,11 +155,11 @@ export class WhatsappController {
   }
 
   @Post('tenants/:tenantId/whatsapp/accounts/:accountId/send')
-  @UseGuards(JwtAuthGuard, RbacGuard)
   @ApiBearerAuth()
+  @Roles('agent_operator')
   @ApiOperation({ summary: 'Send a text message via WhatsApp' })
   sendMessage(
-    @Param('tenantId') tenantId: string,
+    @CurrentTenant('tenantId') tenantId: string,
     @Param('accountId') accountId: string,
     @Body() dto: SendMessageDto,
   ) {
@@ -132,37 +167,80 @@ export class WhatsappController {
   }
 
   @Post('tenants/:tenantId/whatsapp/accounts/:accountId/sync-templates')
-  @UseGuards(JwtAuthGuard, RbacGuard)
   @ApiBearerAuth()
   @Roles('admin', 'owner')
   @HttpCode(204)
   @ApiOperation({ summary: 'Sync templates from Meta' })
   syncTemplates(
-    @Param('tenantId') tenantId: string,
+    @CurrentTenant('tenantId') tenantId: string,
     @Param('accountId') accountId: string,
   ) {
     return this.whatsappService.syncTemplates(accountId, tenantId);
   }
 
   @Get('tenants/:tenantId/whatsapp/accounts/:accountId/templates')
-  @UseGuards(JwtAuthGuard, RbacGuard)
   @ApiBearerAuth()
+  @Roles('viewer')
   @ApiOperation({ summary: 'List approved templates' })
   listTemplates(
-    @Param('tenantId') tenantId: string,
+    @CurrentTenant('tenantId') tenantId: string,
     @Param('accountId') accountId: string,
   ) {
     return this.whatsappService.listTemplates(tenantId, accountId);
   }
 
   @Get('tenants/:tenantId/whatsapp/accounts/:accountId/stats')
-  @UseGuards(JwtAuthGuard, RbacGuard)
   @ApiBearerAuth()
+  @Roles('viewer')
   @ApiOperation({ summary: 'Get message statistics for account' })
-  getStats(
-    @Param('tenantId') tenantId: string,
-    @Param('accountId') accountId: string,
-  ) {
+  getStats(@CurrentTenant('tenantId') tenantId: string, @Param('accountId') accountId: string) {
     return this.whatsappService.getStats(tenantId, accountId);
+  }
+
+  // ─── Meta App Configuration ────────────────────────────────────────────────
+
+  @Get('tenants/:tenantId/whatsapp/meta-config')
+  @ApiBearerAuth()
+  @Roles('viewer')
+  @ApiOperation({ summary: 'Get Meta app configuration (secrets masked)' })
+  getMetaConfig(@CurrentTenant('tenantId') tenantId: string) {
+    return this.metaConfigService.getConfig(tenantId);
+  }
+
+  @Post('tenants/:tenantId/whatsapp/meta-config')
+  @ApiBearerAuth()
+  @Roles('admin', 'owner')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Save Meta app configuration' })
+  saveMetaConfig(
+    @CurrentTenant('tenantId') tenantId: string,
+    @CurrentUser('userId') userId: string,
+    @Body() dto: SaveMetaConfigDto,
+  ) {
+    return this.metaConfigService.saveConfig(dto, tenantId, userId);
+  }
+
+  @Post('tenants/:tenantId/whatsapp/meta-config/test')
+  @ApiBearerAuth()
+  @Roles('admin', 'owner')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Test Meta app credentials against Graph API' })
+  testMetaConfig(
+    @CurrentTenant('tenantId') tenantId: string,
+    @CurrentUser('userId') userId: string,
+  ) {
+    return this.metaConfigService.testConnection(tenantId, userId);
+  }
+
+  @Post('tenants/:tenantId/whatsapp/meta-config/test-webhook')
+  @ApiBearerAuth()
+  @Roles('admin', 'owner')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Test webhook endpoint reachability and challenge' })
+  testWebhook(
+    @CurrentTenant('tenantId') tenantId: string,
+    @CurrentUser('userId') userId: string,
+  ) {
+    return this.metaConfigService.testWebhook(tenantId, userId);
   }
 }

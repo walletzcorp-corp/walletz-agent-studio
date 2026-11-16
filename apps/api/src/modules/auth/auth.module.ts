@@ -9,6 +9,7 @@ import { JwtRefreshStrategy } from './strategies/jwt-refresh.strategy';
 import { MfaService } from './mfa.service';
 import { SessionService } from './session.service';
 import { UsersModule } from '../users/users.module';
+import { CryptoModule } from '../../shared/crypto/crypto.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { UsersModule } from '../users/users.module';
       }),
     }),
     UsersModule,
+    CryptoModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy, JwtRefreshStrategy, MfaService, SessionService],

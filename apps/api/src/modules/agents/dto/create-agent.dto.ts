@@ -9,7 +9,15 @@ import {
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
-type AgentTemplate = 'sdr' | 'commercial' | 'reception_scheduling' | 'customer_service' | 'post_sale' | 'collection' | 'faq' | 'custom';
+type AgentTemplate =
+  | 'sdr'
+  | 'commercial'
+  | 'reception_scheduling'
+  | 'customer_service'
+  | 'post_sale'
+  | 'collection'
+  | 'faq'
+  | 'custom';
 type AgentTone = 'professional' | 'friendly' | 'formal' | 'casual' | 'empathetic';
 
 export class CreateAgentDto {
@@ -26,17 +34,34 @@ export class CreateAgentDto {
   title?: string;
 
   @ApiProperty({
-    enum: ['sdr', 'commercial', 'reception_scheduling', 'customer_service', 'post_sale', 'collection', 'faq', 'custom'],
+    enum: [
+      'sdr',
+      'commercial',
+      'reception_scheduling',
+      'customer_service',
+      'post_sale',
+      'collection',
+      'faq',
+      'custom',
+    ],
     default: 'custom',
   })
   @IsOptional()
-  @IsEnum(['sdr', 'commercial', 'reception_scheduling', 'customer_service', 'post_sale', 'collection', 'faq', 'custom'])
+  @IsEnum([
+    'sdr',
+    'commercial',
+    'reception_scheduling',
+    'customer_service',
+    'post_sale',
+    'collection',
+    'faq',
+    'custom',
+  ])
   template?: AgentTemplate;
 
-  @ApiProperty({ required: false, maxLength: 500 })
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
-  @MaxLength(500)
   objective?: string;
 
   @ApiProperty({ required: false })

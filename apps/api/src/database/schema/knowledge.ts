@@ -2,13 +2,11 @@ import {
   pgTable,
   text,
   timestamp,
-  boolean,
   integer,
   real,
   jsonb,
   pgEnum,
   index,
-  uniqueIndex,
   customType,
 } from 'drizzle-orm/pg-core';
 import { createId } from '../utils/id';

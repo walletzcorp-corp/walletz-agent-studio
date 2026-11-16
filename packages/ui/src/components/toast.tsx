@@ -11,14 +11,17 @@ const toastVariants = cva(
       variant: {
         default: 'border-border bg-card text-card-foreground',
         destructive: 'border-destructive/30 bg-destructive/10 text-destructive',
-        success: 'border-green-200 bg-green-50 text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-100',
+        success:
+          'border-green-200 bg-green-50 text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-100',
       },
     },
     defaultVariants: { variant: 'default' },
   },
 );
 
-export interface ToastProps extends React.HTMLAttributes<HTMLDivElement>, VariantProps<typeof toastVariants> {
+export interface ToastProps
+  extends React.HTMLAttributes<HTMLDivElement>,
+    VariantProps<typeof toastVariants> {
   title?: string;
   description?: string;
   onClose?: () => void;
@@ -37,7 +40,13 @@ function Toast({ className, variant, title, description, onClose, ...props }: To
           className="shrink-0 rounded-md p-0.5 opacity-70 hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring"
           aria-label="Fechar"
         >
-          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg
+            className="h-4 w-4"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
             <path d="M18 6 6 18M6 6l12 12" />
           </svg>
         </button>

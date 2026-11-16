@@ -182,7 +182,11 @@ function getDeviceInfo() {
 
 function guardPath(filePath) {
   const resolved = path.resolve(filePath);
-  const allowed = authorizedPaths.some(ap => resolved.startsWith(path.resolve(ap)));
+  const allowed = authorizedPaths.some(ap => {
+    const base = path.resolve(ap);
+    const rel = path.relative(base, resolved);
+    return !rel.startsWith('..') && !path.isAbsolute(rel);
+  });
   if (!allowed) {
     throw new Error(`Access denied: path "${resolved}" is outside authorized directories.\nAuthorized: ${authorizedPaths.join(', ')}`);
   }
@@ -281,13 +285,15 @@ function openApplication(appName) {
 }
 
 function openUrl(url) {
-  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+  let parsed;
+  try { parsed = new URL(url); } catch { throw new Error('Invalid URL'); }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
     throw new Error('Only http:// and https:// URLs are allowed');
   }
   return new Promise((resolve, reject) => {
-    execFile('cmd', ['/c', 'start', '', url], { shell: false }, (err) => {
+    execFile('cmd', ['/c', 'start', '', parsed.href], { shell: false }, (err) => {
       if (err) reject(new Error(`Failed to open URL: ${err.message}`));
-      else resolve({ url, opened: true });
+      else resolve({ url: parsed.href, opened: true });
     });
   });
 }

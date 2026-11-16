@@ -6,24 +6,24 @@ import { Bell, HelpCircle, Search, CheckCircle2, CreditCard } from 'lucide-react
 
 /* ── Route label map ── */
 const ROUTE_LABELS: Record<string, string> = {
-  '/dashboard':            'Início',
-  '/agentes':              'Meus Agentes',
-  '/conhecimento':         'Base de Conhecimento',
-  '/ensinar':              'Ensinar IA',
-  '/laboratorio':          'Laboratório',
-  '/canais/whatsapp':      'WhatsApp',
-  '/integracoes':          'Integrações',
-  '/conversas':            'Conversas',
-  '/contatos':             'Contatos',
-  '/campanhas':            'Campanhas',
-  '/agendas':              'Agendas',
-  '/resultados':           'Resultados',
-  '/custos':               'Central de Custos',
-  '/billing':              'Billing',
-  '/meta':                 'Central Meta',
-  '/meta/templates':       'Templates WhatsApp',
-  '/configuracoes':        'Configurações',
-  '/configuracoes/ia':     'Configurações de IA',
+  '/dashboard': 'Início',
+  '/agentes': 'Meus Agentes',
+  '/conhecimento': 'Base de Conhecimento',
+  '/ensinar': 'Ensinar IA',
+  '/laboratorio': 'Laboratório',
+  '/canais/whatsapp': 'WhatsApp',
+  '/integracoes': 'Integrações',
+  '/conversas': 'Conversas',
+  '/contatos': 'Contatos',
+  '/campanhas': 'Campanhas',
+  '/agendas': 'Agendas',
+  '/resultados': 'Resultados',
+  '/custos': 'Central de Custos',
+  '/billing': 'Billing',
+  '/meta': 'Central Meta',
+  '/meta/templates': 'Templates WhatsApp',
+  '/configuracoes': 'Configurações',
+  '/configuracoes/ia': 'Configurações de IA',
 };
 
 function getRouteLabel(pathname: string): string {
@@ -46,12 +46,17 @@ export function Topbar({ tenantName }: TopbarProps) {
   const [searchOpen, setSearchOpen] = useState(false);
 
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between border-b border-border px-6 gap-4" style={{ background: 'hsl(var(--surface-0))' }}>
+    <header
+      className="flex h-14 shrink-0 items-center justify-between border-b border-border px-6 gap-4"
+      style={{ background: 'hsl(var(--surface-0))' }}
+    >
       {/* Left: page title / breadcrumb */}
       <div className="flex items-center gap-2 min-w-0">
         {tenantName && (
           <>
-            <span className="text-xs text-muted-foreground/60 truncate max-w-[120px]">{tenantName}</span>
+            <span className="text-xs text-muted-foreground/60 truncate max-w-[120px]">
+              {tenantName}
+            </span>
             <span className="text-muted-foreground/30 text-xs">/</span>
           </>
         )}

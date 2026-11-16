@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
-import { eq, and, isNull, gte, lte } from 'drizzle-orm';
+import { eq, and, isNull, gte, lte, lt } from 'drizzle-orm';
 import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';
 import {
   calendarConnections,
@@ -17,6 +17,7 @@ import {
   type CalendarConnection,
   type CalendarMeeting,
 } from '../../database/schema/calendars';
+import { agents } from '../../database/schema/agents';
 import { AuditService } from '../../shared/audit/audit.service';
 import { GoogleCalendarService } from './google.service';
 import { MicrosoftCalendarService } from './microsoft.service';
@@ -27,10 +28,16 @@ import type { UpdateAgentCalendarSettingsDto } from './dto/update-agent-settings
 
 type Provider = 'google' | 'microsoft';
 
+/** Restricts a meeting operation to one contact's own meetings (external channels). */
+export interface MeetingScope {
+  contactId?: string;
+}
+
 @Injectable()
 export class CalendarsService {
   private readonly logger = new Logger(CalendarsService.name);
   private readonly encKey: Buffer;
+  private readonly oauthStateSecret: string;
 
   constructor(
     @Inject(DRIZZLE_TOKEN) private readonly db: DrizzleDB,
@@ -42,9 +49,25 @@ export class CalendarsService {
     private readonly availabilityService: AvailabilityService,
   ) {
     const raw = this.config.get<string>('CALENDAR_ENCRYPTION_KEY', '');
-    this.encKey = raw
-      ? Buffer.from(raw, 'hex')
-      : crypto.randomBytes(32); /* dev fallback — not persistent across restarts */
+    if (!raw && this.config.get('NODE_ENV') === 'production') {
+      throw new Error(
+        'CALENDAR_ENCRYPTION_KEY must be set in production — stored OAuth tokens cannot be decrypted without it',
+      );
+    }
+    if (!raw) {
+      this.logger.warn(
+        'CALENDAR_ENCRYPTION_KEY not set — using ephemeral key (tokens will be lost on restart). Set CALENDAR_ENCRYPTION_KEY in .env.local for persistent tokens.',
+      );
+    }
+    this.encKey = raw ? Buffer.from(raw, 'hex') : crypto.randomBytes(32);
+
+    // The signed OAuth state binds tenant + user; a guessable secret would let anyone forge it
+    // and attach their own calendar to any tenant. No default value exists.
+    const stateSecret = this.config.get<string>('CALENDAR_OAUTH_STATE_SECRET', '');
+    if (!stateSecret && this.config.get('NODE_ENV') === 'production') {
+      throw new Error('CALENDAR_OAUTH_STATE_SECRET must be set in production');
+    }
+    this.oauthStateSecret = stateSecret || crypto.randomBytes(32).toString('hex');
   }
 
   /* ── Token encryption (AES-256-GCM) ── */
@@ -77,7 +100,8 @@ export class CalendarsService {
    */
   async getValidMsToken(conn: CalendarConnection): Promise<string> {
     const BUFFER_MS = 5 * 60 * 1000; // 5 minutes
-    const isExpired = !conn.tokenExpiresAt || conn.tokenExpiresAt.getTime() < Date.now() + BUFFER_MS;
+    const isExpired =
+      !conn.tokenExpiresAt || conn.tokenExpiresAt.getTime() < Date.now() + BUFFER_MS;
 
     if (!isExpired) {
       return this.decrypt(conn.encryptedAccessToken);
@@ -103,17 +127,33 @@ export class CalendarsService {
         tokenExpiresAt: refreshed.expiresAt,
         updatedAt: new Date(),
       })
-      .where(eq(calendarConnections.id, conn.id));
+      .where(
+        and(eq(calendarConnections.id, conn.id), eq(calendarConnections.tenantId, conn.tenantId)),
+      );
 
-    this.logger.log(`MS token refreshed for ${conn.email}, expires ${refreshed.expiresAt.toISOString()}`);
+    this.logger.log(
+      `MS token refreshed for ${conn.email}, expires ${refreshed.expiresAt.toISOString()}`,
+    );
     return refreshed.accessToken;
   }
 
   /* ── OAuth ── */
 
-  buildAuthUrl(tenantId: string, provider: Provider): string {
-    /* state encodes tenantId + provider for the callback */
-    const state = Buffer.from(JSON.stringify({ tenantId, provider, ts: Date.now() })).toString('base64url');
+  private signOAuthState(payload: string): string {
+    return crypto.createHmac('sha256', this.oauthStateSecret).update(payload).digest('hex');
+  }
+
+  buildAuthUrl(tenantId: string, provider: Provider, userId: string): string {
+    const payload = JSON.stringify({
+      tenantId,
+      userId,
+      provider,
+      ts: Date.now(),
+      nonce: crypto.randomBytes(8).toString('hex'),
+    });
+    const encoded = Buffer.from(payload).toString('base64url');
+    const sig = this.signOAuthState(encoded);
+    const state = `${encoded}.${sig}`;
     return provider === 'google'
       ? this.googleService.buildAuthUrl(state)
       : this.microsoftService.buildAuthUrl(state);
@@ -124,13 +164,31 @@ export class CalendarsService {
     state: string,
     userId: string | null,
   ): Promise<{ tenantId: string; provider: Provider }> {
-    const decoded = JSON.parse(Buffer.from(state, 'base64url').toString('utf8')) as {
+    const parts = state.split('.');
+    if (parts.length !== 2) throw new BadRequestException('Invalid OAuth state');
+    const [encoded, sig] = parts as [string, string];
+
+    const expectedSig = Buffer.from(this.signOAuthState(encoded), 'hex');
+    const givenSig = Buffer.from(sig, 'hex');
+    if (givenSig.length !== expectedSig.length || !crypto.timingSafeEqual(givenSig, expectedSig)) {
+      throw new BadRequestException('OAuth state signature invalid — possible CSRF');
+    }
+
+    const decoded = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8')) as {
       tenantId: string;
+      userId?: string;
       provider: Provider;
       ts: number;
     };
 
+    if (Date.now() - decoded.ts > 10 * 60 * 1000) {
+      throw new BadRequestException('OAuth state expired — please try again');
+    }
+
     const { tenantId, provider } = decoded;
+    // The connecting user is the one who started the flow (signed in the state), never the
+    // anonymous caller of the callback URL.
+    const connectedBy = decoded.userId ?? userId;
 
     const tokens =
       provider === 'google'
@@ -156,18 +214,25 @@ export class CalendarsService {
         .update(calendarConnections)
         .set({
           encryptedAccessToken: this.encrypt(tokens.accessToken),
-          encryptedRefreshToken: tokens.refreshToken ? this.encrypt(tokens.refreshToken) : undefined,
+          encryptedRefreshToken: tokens.refreshToken
+            ? this.encrypt(tokens.refreshToken)
+            : undefined,
           tokenExpiresAt: tokens.expiresAt,
           scopes: tokens.scopes,
           displayName: tokens.displayName ?? null,
           syncStatus: 'pending',
           updatedAt: new Date(),
         })
-        .where(eq(calendarConnections.id, existing[0]!.id));
+        .where(
+          and(
+            eq(calendarConnections.id, existing[0]!.id),
+            eq(calendarConnections.tenantId, tenantId),
+          ),
+        );
     } else {
       await this.db.insert(calendarConnections).values({
         tenantId,
-        connectedByUserId: userId,
+        connectedByUserId: connectedBy,
         provider,
         email: tokens.email,
         displayName: tokens.displayName ?? null,
@@ -181,7 +246,7 @@ export class CalendarsService {
 
     await this.auditService.log({
       tenantId,
-      userId: userId ?? undefined,
+      userId: connectedBy ?? undefined,
       action: 'calendar.connect',
       resourceType: 'calendar_connection',
       metadata: { provider, email: tokens.email },
@@ -192,20 +257,26 @@ export class CalendarsService {
 
   /* ── Connections CRUD ── */
 
-  async listConnections(tenantId: string): Promise<Omit<CalendarConnection, 'encryptedAccessToken' | 'encryptedRefreshToken'>[]> {
+  async listConnections(
+    tenantId: string,
+  ): Promise<Omit<CalendarConnection, 'encryptedAccessToken' | 'encryptedRefreshToken'>[]> {
     const rows = await this.db
       .select()
       .from(calendarConnections)
-      .where(and(eq(calendarConnections.tenantId, tenantId), isNull(calendarConnections.deletedAt)));
+      .where(
+        and(eq(calendarConnections.tenantId, tenantId), isNull(calendarConnections.deletedAt)),
+      );
 
-    return rows.map(({ encryptedAccessToken, encryptedRefreshToken, ...rest }) => rest);
+    return rows.map(({ encryptedAccessToken: _a, encryptedRefreshToken: _b, ...rest }) => rest);
   }
 
   async disconnect(tenantId: string, connectionId: string, userId: string): Promise<void> {
     const [conn] = await this.db
       .select()
       .from(calendarConnections)
-      .where(and(eq(calendarConnections.id, connectionId), eq(calendarConnections.tenantId, tenantId)))
+      .where(
+        and(eq(calendarConnections.id, connectionId), eq(calendarConnections.tenantId, tenantId)),
+      )
       .limit(1);
 
     if (!conn) throw new NotFoundException('Calendar connection not found');
@@ -213,7 +284,9 @@ export class CalendarsService {
     await this.db
       .update(calendarConnections)
       .set({ deletedAt: new Date(), syncStatus: 'disconnected', updatedAt: new Date() })
-      .where(eq(calendarConnections.id, connectionId));
+      .where(
+        and(eq(calendarConnections.id, connectionId), eq(calendarConnections.tenantId, tenantId)),
+      );
 
     await this.auditService.log({
       tenantId,
@@ -229,14 +302,18 @@ export class CalendarsService {
     const conns = await this.db
       .select()
       .from(calendarConnections)
-      .where(and(eq(calendarConnections.tenantId, tenantId), isNull(calendarConnections.deletedAt)));
+      .where(
+        and(eq(calendarConnections.tenantId, tenantId), isNull(calendarConnections.deletedAt)),
+      );
 
     /* Mark all as pending; actual sync would be done by a background worker */
     if (conns.length > 0) {
       await this.db
         .update(calendarConnections)
         .set({ syncStatus: 'pending', updatedAt: new Date() })
-        .where(and(eq(calendarConnections.tenantId, tenantId), isNull(calendarConnections.deletedAt)));
+        .where(
+          and(eq(calendarConnections.tenantId, tenantId), isNull(calendarConnections.deletedAt)),
+        );
     }
 
     return { queued: conns.length };
@@ -252,7 +329,12 @@ export class CalendarsService {
     const [settings] = await this.db
       .select()
       .from(agentCalendarSettings)
-      .where(and(eq(agentCalendarSettings.tenantId, tenantId), eq(agentCalendarSettings.agentId, agentId)))
+      .where(
+        and(
+          eq(agentCalendarSettings.tenantId, tenantId),
+          eq(agentCalendarSettings.agentId, agentId),
+        ),
+      )
       .limit(1);
 
     if (!settings?.canSchedule) return [];
@@ -284,26 +366,35 @@ export class CalendarsService {
       const [conn] = await this.db
         .select()
         .from(calendarConnections)
-        .where(and(eq(calendarConnections.id, settings.connectionId), isNull(calendarConnections.deletedAt)))
+        .where(
+          and(
+            eq(calendarConnections.id, settings.connectionId),
+            eq(calendarConnections.tenantId, tenantId),
+            isNull(calendarConnections.deletedAt),
+          ),
+        )
         .limit(1);
 
       if (conn) {
         try {
-          const token = conn.provider === 'microsoft'
-            ? await this.getValidMsToken(conn)
-            : this.decrypt(conn.encryptedAccessToken);
+          const token =
+            conn.provider === 'microsoft'
+              ? await this.getValidMsToken(conn)
+              : this.decrypt(conn.encryptedAccessToken);
           const externalEvents =
             conn.provider === 'google'
               ? await this.googleService.listEvents(token, now, rangeEnd)
               : await this.microsoftService.listEvents(token, now, rangeEnd);
 
           for (const ev of externalEvents) {
-            const start = conn.provider === 'google'
-              ? new Date((ev as { start: { dateTime: string } }).start.dateTime)
-              : new Date((ev as { start: { dateTime: string } }).start.dateTime);
-            const end = conn.provider === 'google'
-              ? new Date((ev as { end: { dateTime: string } }).end.dateTime)
-              : new Date((ev as { end: { dateTime: string } }).end.dateTime);
+            const start =
+              conn.provider === 'google'
+                ? new Date((ev as { start: { dateTime: string } }).start.dateTime)
+                : new Date((ev as { start: { dateTime: string } }).start.dateTime);
+            const end =
+              conn.provider === 'google'
+                ? new Date((ev as { end: { dateTime: string } }).end.dateTime)
+                : new Date((ev as { end: { dateTime: string } }).end.dateTime);
             busyBlocks.push({ start, end });
           }
         } catch (err) {
@@ -315,7 +406,9 @@ export class CalendarsService {
     const merged = this.availabilityService.mergeBusyBlocks(busyBlocks);
     const slots = this.availabilityService.computeFreeSlots(
       merged,
-      (settings.availableHours ?? {}) as Parameters<typeof this.availabilityService.computeFreeSlots>[1],
+      (settings.availableHours ?? {}) as Parameters<
+        typeof this.availabilityService.computeFreeSlots
+      >[1],
       settings.defaultDurationMinutes,
       settings.bufferMinutes,
       now,
@@ -327,13 +420,20 @@ export class CalendarsService {
 
   /* ── Meetings ── */
 
-  async createMeeting(tenantId: string, userId: string, dto: CreateMeetingDto): Promise<CalendarMeeting> {
+  async createMeeting(
+    tenantId: string,
+    userId: string,
+    dto: CreateMeetingDto,
+  ): Promise<CalendarMeeting> {
     const startAt = new Date(dto.startAt);
     const endAt = new Date(dto.endAt);
 
     if (endAt <= startAt) throw new BadRequestException('endAt must be after startAt');
 
-    /* Double-booking check */
+    if (dto.agentId) await this.assertAgentOwned(tenantId, dto.agentId);
+    if (dto.connectionId) await this.assertConnectionOwned(tenantId, dto.connectionId);
+
+    /* Double-booking check: any meeting that overlaps [startAt, endAt) */
     const conflicts = await this.db
       .select()
       .from(calendarMeetings)
@@ -341,8 +441,8 @@ export class CalendarsService {
         and(
           eq(calendarMeetings.tenantId, tenantId),
           isNull(calendarMeetings.deletedAt),
-          gte(calendarMeetings.startAt, startAt),
-          lte(calendarMeetings.endAt, endAt),
+          lt(calendarMeetings.startAt, endAt), // existing starts before new ends
+          gte(calendarMeetings.endAt, startAt), // existing ends after new starts
         ),
       )
       .limit(1);
@@ -359,13 +459,20 @@ export class CalendarsService {
       const [conn] = await this.db
         .select()
         .from(calendarConnections)
-        .where(and(eq(calendarConnections.id, dto.connectionId), eq(calendarConnections.tenantId, tenantId), isNull(calendarConnections.deletedAt)))
+        .where(
+          and(
+            eq(calendarConnections.id, dto.connectionId),
+            eq(calendarConnections.tenantId, tenantId),
+            isNull(calendarConnections.deletedAt),
+          ),
+        )
         .limit(1);
 
       if (conn) {
-        const token = conn.provider === 'microsoft'
-          ? await this.getValidMsToken(conn)
-          : this.decrypt(conn.encryptedAccessToken);
+        const token =
+          conn.provider === 'microsoft'
+            ? await this.getValidMsToken(conn)
+            : this.decrypt(conn.encryptedAccessToken);
         const attendeeEmails = dto.contactEmail ? [dto.contactEmail] : [];
         if (conn.provider === 'google') {
           const ev = await this.googleService.createEvent(token, {
@@ -441,23 +548,79 @@ export class CalendarsService {
     meetingId: string,
     userId: string,
     dto: RescheduleMeetingDto,
+    scope: MeetingScope = {},
   ): Promise<CalendarMeeting> {
-    const [meeting] = await this.db
-      .select()
-      .from(calendarMeetings)
-      .where(and(eq(calendarMeetings.id, meetingId), eq(calendarMeetings.tenantId, tenantId), isNull(calendarMeetings.deletedAt)))
-      .limit(1);
+    const meeting = await this.findOwnedMeeting(tenantId, meetingId, scope);
 
-    if (!meeting) throw new NotFoundException('Meeting not found');
+    if (!['confirmed', 'pending'].includes(meeting.status)) {
+      throw new ConflictException(`Meeting cannot be rescheduled (status: ${meeting.status})`);
+    }
 
     const startAt = new Date(dto.startAt);
     const endAt = new Date(dto.endAt);
+
+    if (endAt <= startAt) throw new BadRequestException('endAt must be after startAt');
+
+    /* Overlap check for new slot (exclude the meeting being rescheduled) */
+    const conflictingMeetings = await this.db
+      .select({ id: calendarMeetings.id })
+      .from(calendarMeetings)
+      .where(
+        and(
+          eq(calendarMeetings.tenantId, tenantId),
+          isNull(calendarMeetings.deletedAt),
+          lt(calendarMeetings.startAt, endAt),
+          gte(calendarMeetings.endAt, startAt),
+        ),
+      )
+      .limit(2);
+
+    const realConflicts = conflictingMeetings.filter((m) => m.id !== meetingId);
+    if (realConflicts.length > 0) {
+      throw new ConflictException('New time slot conflicts with an existing meeting');
+    }
+
+    /* Update the external calendar event if connected */
+    if (meeting.connectionId && meeting.externalEventId) {
+      const [conn] = await this.db
+        .select()
+        .from(calendarConnections)
+        .where(
+          and(
+            eq(calendarConnections.id, meeting.connectionId),
+            eq(calendarConnections.tenantId, tenantId),
+            isNull(calendarConnections.deletedAt),
+          ),
+        )
+        .limit(1);
+
+      if (conn) {
+        const token =
+          conn.provider === 'microsoft'
+            ? await this.getValidMsToken(conn)
+            : this.decrypt(conn.encryptedAccessToken);
+
+        if (conn.provider === 'google') {
+          await this.googleService.updateEvent(token, meeting.externalEventId, {
+            start: dto.startAt,
+            end: dto.endAt,
+            timeZone: dto.timeZone ?? meeting.timeZone,
+          });
+        } else {
+          await this.microsoftService.updateEvent(token, meeting.externalEventId, {
+            start: dto.startAt,
+            end: dto.endAt,
+            timeZone: dto.timeZone ?? meeting.timeZone,
+          });
+        }
+      }
+    }
 
     /* Cancel old, create new (preserves audit trail) */
     await this.db
       .update(calendarMeetings)
       .set({ status: 'rescheduled', updatedAt: new Date() })
-      .where(eq(calendarMeetings.id, meetingId));
+      .where(and(eq(calendarMeetings.id, meetingId), eq(calendarMeetings.tenantId, tenantId)));
 
     const [newMeeting] = await this.db
       .insert(calendarMeetings)
@@ -465,6 +628,11 @@ export class CalendarsService {
         tenantId,
         connectionId: meeting.connectionId,
         agentId: meeting.agentId,
+        conversationId: meeting.conversationId,
+        contactId: meeting.contactId,
+        attendees: meeting.attendees,
+        externalEventId: meeting.externalEventId ?? null,
+        externalMeetUrl: meeting.externalMeetUrl ?? null,
         title: meeting.title,
         description: meeting.description,
         contactName: meeting.contactName,
@@ -475,7 +643,7 @@ export class CalendarsService {
         startAt,
         endAt,
         durationMinutes: Math.round((endAt.getTime() - startAt.getTime()) / 60_000),
-        timeZone: meeting.timeZone,
+        timeZone: dto.timeZone ?? meeting.timeZone,
         rescheduledFromId: meetingId,
       })
       .returning();
@@ -499,28 +667,33 @@ export class CalendarsService {
     meetingId: string,
     userId: string,
     reason?: string,
+    scope: MeetingScope = {},
   ): Promise<void> {
-    const [meeting] = await this.db
-      .select()
-      .from(calendarMeetings)
-      .where(and(eq(calendarMeetings.id, meetingId), eq(calendarMeetings.tenantId, tenantId), isNull(calendarMeetings.deletedAt)))
-      .limit(1);
+    const meeting = await this.findOwnedMeeting(tenantId, meetingId, scope);
 
-    if (!meeting) throw new NotFoundException('Meeting not found');
+    if (meeting.status === 'cancelled') {
+      throw new ConflictException('Meeting is already cancelled');
+    }
 
     /* Delete from external provider if linked */
     if (meeting.externalEventId && meeting.connectionId) {
       const [conn] = await this.db
         .select()
         .from(calendarConnections)
-        .where(eq(calendarConnections.id, meeting.connectionId))
+        .where(
+          and(
+            eq(calendarConnections.id, meeting.connectionId),
+            eq(calendarConnections.tenantId, tenantId),
+          ),
+        )
         .limit(1);
 
       if (conn) {
         try {
-          const token = conn.provider === 'microsoft'
-            ? await this.getValidMsToken(conn)
-            : this.decrypt(conn.encryptedAccessToken);
+          const token =
+            conn.provider === 'microsoft'
+              ? await this.getValidMsToken(conn)
+              : this.decrypt(conn.encryptedAccessToken);
           if (conn.provider === 'google') {
             await this.googleService.deleteEvent(token, meeting.externalEventId);
           } else {
@@ -535,7 +708,7 @@ export class CalendarsService {
     await this.db
       .update(calendarMeetings)
       .set({ status: 'cancelled', cancellationReason: reason ?? null, updatedAt: new Date() })
-      .where(eq(calendarMeetings.id, meetingId));
+      .where(and(eq(calendarMeetings.id, meetingId), eq(calendarMeetings.tenantId, tenantId)));
 
     await this.auditService.log({
       tenantId,
@@ -565,10 +738,16 @@ export class CalendarsService {
   /* ── Agent scheduling settings ── */
 
   async getAgentSettings(tenantId: string, agentId: string) {
+    await this.assertAgentOwned(tenantId, agentId);
     const [settings] = await this.db
       .select()
       .from(agentCalendarSettings)
-      .where(and(eq(agentCalendarSettings.tenantId, tenantId), eq(agentCalendarSettings.agentId, agentId)))
+      .where(
+        and(
+          eq(agentCalendarSettings.tenantId, tenantId),
+          eq(agentCalendarSettings.agentId, agentId),
+        ),
+      )
       .limit(1);
     return settings ?? null;
   }
@@ -579,6 +758,9 @@ export class CalendarsService {
     userId: string,
     dto: UpdateAgentCalendarSettingsDto,
   ) {
+    await this.assertAgentOwned(tenantId, agentId);
+    if (dto.connectionId) await this.assertConnectionOwned(tenantId, dto.connectionId);
+
     const existing = await this.getAgentSettings(tenantId, agentId);
 
     const safeFields = {
@@ -587,7 +769,9 @@ export class CalendarsService {
       bufferMinutes: dto.bufferMinutes,
       maxMeetingsPerDay: dto.maxMeetingsPerDay,
       minLeadTimeMinutes: dto.minLeadTimeMinutes,
-      defaultPlatform: dto.defaultPlatform as ('google_meet' | 'teams' | 'presencial' | 'phone') | undefined,
+      defaultPlatform: dto.defaultPlatform as
+        | ('google_meet' | 'teams' | 'presencial' | 'phone')
+        | undefined,
       availableHours: dto.availableHours,
       connectionId: dto.connectionId,
       timeZone: dto.timeZone,
@@ -597,8 +781,21 @@ export class CalendarsService {
       const [updated] = await this.db
         .update(agentCalendarSettings)
         .set({ ...safeFields, updatedAt: new Date() })
-        .where(eq(agentCalendarSettings.id, existing.id))
+        .where(
+          and(
+            eq(agentCalendarSettings.id, existing.id),
+            eq(agentCalendarSettings.tenantId, tenantId),
+          ),
+        )
         .returning();
+
+      await this.auditService.log({
+        tenantId,
+        userId,
+        action: 'calendar.agent_settings.update',
+        resourceType: 'agent_calendar_settings',
+        resourceId: agentId,
+      });
       return updated;
     }
 
@@ -616,6 +813,57 @@ export class CalendarsService {
     });
 
     return created;
+  }
+
+  /* ── Ownership guards: every referenced resource must belong to the tenant ── */
+
+  private async assertAgentOwned(tenantId: string, agentId: string): Promise<void> {
+    const [agent] = await this.db
+      .select({ id: agents.id })
+      .from(agents)
+      .where(and(eq(agents.id, agentId), eq(agents.tenantId, tenantId), isNull(agents.deletedAt)))
+      .limit(1);
+    if (!agent) throw new NotFoundException('Agent not found');
+  }
+
+  async assertConnectionOwned(tenantId: string, connectionId: string): Promise<CalendarConnection> {
+    const [conn] = await this.db
+      .select()
+      .from(calendarConnections)
+      .where(
+        and(
+          eq(calendarConnections.id, connectionId),
+          eq(calendarConnections.tenantId, tenantId),
+          isNull(calendarConnections.deletedAt),
+        ),
+      )
+      .limit(1);
+    if (!conn) throw new NotFoundException('Calendar connection not found');
+    return conn;
+  }
+
+  /** Tenant-scoped meeting lookup; a contact scope narrows it to that contact's own meetings. */
+  private async findOwnedMeeting(
+    tenantId: string,
+    meetingId: string,
+    scope: MeetingScope,
+  ): Promise<CalendarMeeting> {
+    const [meeting] = await this.db
+      .select()
+      .from(calendarMeetings)
+      .where(
+        and(
+          eq(calendarMeetings.id, meetingId),
+          eq(calendarMeetings.tenantId, tenantId),
+          isNull(calendarMeetings.deletedAt),
+          ...(scope.contactId ? [eq(calendarMeetings.contactId, scope.contactId)] : []),
+        ),
+      )
+      .limit(1);
+
+    // Same answer whether the meeting does not exist or belongs to someone else.
+    if (!meeting) throw new NotFoundException('Meeting not found');
+    return meeting;
   }
 
   /* ── External event creation (used by SchedulingToolsService) ── */
@@ -648,9 +896,10 @@ export class CalendarsService {
 
     if (!conn) throw new NotFoundException('Calendar connection not found');
 
-    const token = conn.provider === 'microsoft'
-      ? await this.getValidMsToken(conn)
-      : this.decrypt(conn.encryptedAccessToken);
+    const token =
+      conn.provider === 'microsoft'
+        ? await this.getValidMsToken(conn)
+        : this.decrypt(conn.encryptedAccessToken);
 
     if (conn.provider === 'google') {
       const ev = await this.googleService.createEvent(token, {
@@ -673,7 +922,14 @@ export class CalendarsService {
         attendeeEmails: params.attendeeEmails ?? [],
         addTeams: params.addTeams ?? false,
       });
-      return { id: ev.id, meetUrl: (ev as { onlineMeeting?: { joinUrl?: string }; webLink?: string }).onlineMeeting?.joinUrl ?? (ev as { webLink?: string }).webLink ?? undefined };
+      return {
+        id: ev.id,
+        meetUrl:
+          (ev as { onlineMeeting?: { joinUrl?: string }; webLink?: string }).onlineMeeting
+            ?.joinUrl ??
+          (ev as { webLink?: string }).webLink ??
+          undefined,
+      };
     }
   }
 }

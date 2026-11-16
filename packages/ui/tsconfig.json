@@ -1,0 +1,14 @@
+{
+  "extends": "@walletz/config/typescript/nextjs",
+  "compilerOptions": {
+    "noEmit": true,
+    "incremental": false,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "exactOptionalPropertyTypes": false,
+    "plugins": []
+  },
+  "include": ["src"],
+  "exclude": ["node_modules"]
+}

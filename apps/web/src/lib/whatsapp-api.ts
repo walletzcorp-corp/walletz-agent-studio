@@ -8,6 +8,7 @@ export interface WhatsappAccount {
   phoneNumberId: string;
   wabaId: string;
   webhookUrl: string | null;
+  agentId: string | null;
   status: 'pending' | 'connected' | 'disconnected' | 'suspended' | 'error';
   qualityRating: string | null;
   lastSyncedAt: string | null;
@@ -53,10 +54,18 @@ export const whatsappApi = {
     api.post<WhatsappAccount>(`/tenants/${tenantId}/whatsapp/accounts`, payload),
 
   reconnectAccount: (tenantId: string, accountId: string, payload: EmbeddedSignupPayload) =>
-    api.post<WhatsappAccount>(`/tenants/${tenantId}/whatsapp/accounts/${accountId}/reconnect`, payload),
+    api.post<WhatsappAccount>(
+      `/tenants/${tenantId}/whatsapp/accounts/${accountId}/reconnect`,
+      payload,
+    ),
 
   disconnectAccount: (tenantId: string, accountId: string) =>
     api.delete(`/tenants/${tenantId}/whatsapp/accounts/${accountId}`),
+
+  assignAgent: (tenantId: string, accountId: string, agentId: string | null) =>
+    api.patch<WhatsappAccount>(`/tenants/${tenantId}/whatsapp/accounts/${accountId}/agent`, {
+      agentId,
+    }),
 
   sendMessage: (tenantId: string, accountId: string, to: string, text: string) =>
     api.post(`/tenants/${tenantId}/whatsapp/accounts/${accountId}/send`, { to, text }),

@@ -1,9 +1,13 @@
 'use client';
 
 import * as React from 'react';
-import type { FieldError } from 'react-hook-form';
 import { cn } from '../utils';
 import { Label } from './label';
+
+// Structurally compatible with react-hook-form's FieldError, without depending on it.
+interface FieldError {
+  message?: string;
+}
 
 interface FormFieldProps {
   label?: string;
@@ -18,23 +22,24 @@ function FormField({ label, required, error, hint, children, className }: FormFi
   const errorMessage = typeof error === 'string' ? error : error?.message;
   return (
     <div className={cn('flex flex-col gap-1.5', className)}>
-      {label && (
-        <Label required={required}>{label}</Label>
-      )}
+      {label && <Label required={required}>{label}</Label>}
       {children}
       {errorMessage && (
         <p className="text-xs text-destructive" role="alert">
           {errorMessage}
         </p>
       )}
-      {!errorMessage && hint && (
-        <p className="text-xs text-muted-foreground">{hint}</p>
-      )}
+      {!errorMessage && hint && <p className="text-xs text-muted-foreground">{hint}</p>}
     </div>
   );
 }
 
-function FormSection({ title, description, children, className }: {
+function FormSection({
+  title,
+  description,
+  children,
+  className,
+}: {
   title?: string;
   description?: string;
   children: React.ReactNode;

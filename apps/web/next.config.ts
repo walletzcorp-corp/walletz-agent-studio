@@ -2,6 +2,8 @@ import path from 'node:path';
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
+  // Permite buildar sem sobrescrever o .next de um `next dev` em execução.
+  distDir: process.env['NEXT_DIST_DIR'] ?? '.next',
   reactStrictMode: true,
   poweredByHeader: false,
   // Imagem Docker enxuta (server.js + só as deps rastreadas); a raiz do

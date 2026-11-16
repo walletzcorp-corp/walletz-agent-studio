@@ -1,6 +1,5 @@
 'use client';
 
-import type { Metadata } from 'next';
 import Link from 'next/link';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -20,6 +19,10 @@ const loginSchema = z.object({
 
 type LoginForm = z.infer<typeof loginSchema>;
 
+const DEV_EMAIL = 'demo@walletz.local';
+const DEV_PASSWORD = 'Walletz@2026!';
+const IS_DEV = process.env.NODE_ENV === 'development';
+
 export default function LoginPage() {
   const { login } = useAuth();
   const [requiresMfa, setRequiresMfa] = useState(false);
@@ -28,8 +31,23 @@ export default function LoginPage() {
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<LoginForm>({ resolver: zodResolver(loginSchema) });
+
+  const devLogin = async () => {
+    setValue('email', DEV_EMAIL);
+    setValue('password', DEV_PASSWORD);
+    setError(null);
+    try {
+      await login(DEV_EMAIL, DEV_PASSWORD);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setError(
+        typeof msg === 'string' ? msg : 'Crie o usuário dev primeiro: POST /api/v1/auth/register',
+      );
+    }
+  };
 
   const onSubmit = async (data: LoginForm) => {
     setError(null);
@@ -86,7 +104,10 @@ export default function LoginPage() {
           )}
 
           {error && (
-            <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">
+            <p
+              className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive"
+              role="alert"
+            >
               {error}
             </p>
           )}
@@ -96,6 +117,16 @@ export default function LoginPage() {
         <Button form="login-form" type="submit" className="w-full" loading={isSubmitting}>
           Entrar
         </Button>
+        {IS_DEV && (
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full border-dashed border-yellow-500 text-yellow-500 hover:bg-yellow-500/10"
+            onClick={devLogin}
+          >
+            ⚡ Dev Login
+          </Button>
+        )}
         <div className="flex w-full items-center justify-between text-sm">
           <Link href="/auth/forgot-password" className="text-muted-foreground hover:text-primary">
             Esqueceu a senha?

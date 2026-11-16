@@ -40,6 +40,9 @@ postgres_data/
 redis_data/
 minio_data/
 
+# Local file storage (user-uploaded content — never commit)
+apps/api/storage/
+
 # Security - NEVER commit these
 *.pem
 *.key
@@ -56,3 +59,6 @@ dump.rdb
 # Seed script generated reports
 apps/api/.radar-editais-report.html
 apps/api/.seed-report.json
+
+# Local-only credentials and scratch
+.local/

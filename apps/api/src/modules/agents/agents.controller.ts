@@ -6,7 +6,6 @@ import {
   Delete,
   Body,
   Param,
-  UseGuards,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
@@ -15,15 +14,13 @@ import { AgentsService } from './agents.service';
 import { CreateAgentDto } from './dto/create-agent.dto';
 import { UpdateAgentDto } from './dto/update-agent.dto';
 import { SetToolPermissionDto } from './dto/tool-permission.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RbacGuard } from '../../shared/rbac/rbac.guard';
 import { Roles } from '../../shared/rbac/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/auth.service';
+import { CurrentTenant } from '../../shared/rbac/tenant-context';
 
 @ApiTags('agents')
 @Controller('tenants/:tenantId/agents')
-@UseGuards(JwtAuthGuard, RbacGuard)
 @ApiBearerAuth()
 @ApiHeader({ name: 'x-tenant-slug', required: true })
 export class AgentsController {
@@ -46,7 +43,7 @@ export class AgentsController {
   @Get()
   @Roles('viewer')
   @ApiOperation({ summary: 'Listar agentes do tenant' })
-  findAll(@Param('tenantId') tenantId: string) {
+  findAll(@CurrentTenant('tenantId') tenantId: string) {
     return this.agentsService.findAllByTenant(tenantId);
   }
 
@@ -54,7 +51,7 @@ export class AgentsController {
   @Roles('manager')
   @ApiOperation({ summary: 'Criar agente' })
   create(
-    @Param('tenantId') tenantId: string,
+    @CurrentTenant('tenantId') tenantId: string,
     @Body() dto: CreateAgentDto,
     @CurrentUser() user: JwtPayload,
   ) {
@@ -64,7 +61,7 @@ export class AgentsController {
   @Get(':agentId')
   @Roles('viewer')
   @ApiOperation({ summary: 'Detalhes do agente' })
-  findOne(@Param('tenantId') tenantId: string, @Param('agentId') agentId: string) {
+  findOne(@CurrentTenant('tenantId') tenantId: string, @Param('agentId') agentId: string) {
     return this.agentsService.findById(agentId, tenantId);
   }
 
@@ -72,7 +69,7 @@ export class AgentsController {
   @Roles('manager')
   @ApiOperation({ summary: 'Atualizar agente' })
   update(
-    @Param('tenantId') tenantId: string,
+    @CurrentTenant('tenantId') tenantId: string,
     @Param('agentId') agentId: string,
     @Body() dto: UpdateAgentDto,
     @CurrentUser() user: JwtPayload,
@@ -84,7 +81,7 @@ export class AgentsController {
   @Roles('manager')
   @ApiOperation({ summary: 'Publicar agente (cria nova release)' })
   publish(
-    @Param('tenantId') tenantId: string,
+    @CurrentTenant('tenantId') tenantId: string,
     @Param('agentId') agentId: string,
     @CurrentUser() user: JwtPayload,
   ) {
@@ -96,7 +93,7 @@ export class AgentsController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Pausar agente' })
   async pause(
-    @Param('tenantId') tenantId: string,
+    @CurrentTenant('tenantId') tenantId: string,
     @Param('agentId') agentId: string,
     @CurrentUser() user: JwtPayload,
   ) {
@@ -108,7 +105,7 @@ export class AgentsController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Reativar agente pausado' })
   async resume(
-    @Param('tenantId') tenantId: string,
+    @CurrentTenant('tenantId') tenantId: string,
     @Param('agentId') agentId: string,
     @CurrentUser() user: JwtPayload,
   ) {
@@ -120,7 +117,7 @@ export class AgentsController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Arquivar agente' })
   async remove(
-    @Param('tenantId') tenantId: string,
+    @CurrentTenant('tenantId') tenantId: string,
     @Param('agentId') agentId: string,
     @CurrentUser() user: JwtPayload,
   ) {
@@ -130,7 +127,7 @@ export class AgentsController {
   @Get(':agentId/releases')
   @Roles('viewer')
   @ApiOperation({ summary: 'Histórico de releases do agente' })
-  getReleases(@Param('tenantId') tenantId: string, @Param('agentId') agentId: string) {
+  getReleases(@CurrentTenant('tenantId') tenantId: string, @Param('agentId') agentId: string) {
     return this.agentsService.getReleases(agentId, tenantId);
   }
 
@@ -139,7 +136,7 @@ export class AgentsController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Fazer rollback para uma release anterior' })
   async rollback(
-    @Param('tenantId') tenantId: string,
+    @CurrentTenant('tenantId') tenantId: string,
     @Param('agentId') agentId: string,
     @Param('releaseId') releaseId: string,
     @CurrentUser() user: JwtPayload,
@@ -150,7 +147,10 @@ export class AgentsController {
   @Get(':agentId/tool-permissions')
   @Roles('viewer')
   @ApiOperation({ summary: 'Listar permissões de ferramentas do agente' })
-  getToolPermissions(@Param('tenantId') tenantId: string, @Param('agentId') agentId: string) {
+  getToolPermissions(
+    @CurrentTenant('tenantId') tenantId: string,
+    @Param('agentId') agentId: string,
+  ) {
     return this.agentsService.getToolPermissions(agentId, tenantId);
   }
 
@@ -158,7 +158,7 @@ export class AgentsController {
   @Roles('manager')
   @ApiOperation({ summary: 'Definir permissão de ferramenta' })
   setToolPermission(
-    @Param('tenantId') tenantId: string,
+    @CurrentTenant('tenantId') tenantId: string,
     @Param('agentId') agentId: string,
     @Body() dto: SetToolPermissionDto,
     @CurrentUser() user: JwtPayload,

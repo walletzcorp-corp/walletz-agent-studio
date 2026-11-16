@@ -1,5 +1,6 @@
-import { IsString, IsBoolean, IsOptional, IsObject } from 'class-validator';
+import { IsString, IsOptional, IsObject } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { StrictBoolean } from '../../../shared/validation/strict-boolean.decorator';
 
 export class SetToolPermissionDto {
   @ApiProperty({ example: 'schedule_appointment' })
@@ -7,7 +8,7 @@ export class SetToolPermissionDto {
   toolName!: string;
 
   @ApiProperty({ example: true })
-  @IsBoolean()
+  @StrictBoolean()
   allowed!: boolean;
 
   @ApiProperty({ required: false })

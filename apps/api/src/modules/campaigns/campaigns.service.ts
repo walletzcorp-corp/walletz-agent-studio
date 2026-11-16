@@ -1,12 +1,23 @@
-import {
-  Injectable, Inject, NotFoundException, BadRequestException,
-} from '@nestjs/common';
-import { eq, and, isNull, desc, gte, or, lt, isNotNull } from 'drizzle-orm';
+import { Injectable, Inject, NotFoundException, BadRequestException } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import type { Queue } from 'bullmq';
+import { eq, and, isNull, desc, gte, or } from 'drizzle-orm';
 import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';
 import { segments, campaigns, campaignRecipients } from '../../database/schema/campaigns';
-import { contacts, contactIdentities, consents, suppressions } from '../../database/schema/contacts';
-import { whatsappAccounts, whatsappTemplates, whatsappMessageLogs } from '../../database/schema/whatsapp';
+import {
+  contacts,
+  contactIdentities,
+  consents,
+  suppressions,
+} from '../../database/schema/contacts';
+import { whatsappTemplates, whatsappMessageLogs } from '../../database/schema/whatsapp';
 import { AuditService } from '../../shared/audit/audit.service';
+import { pickOutboundAccount } from '../whatsapp/outbound-account';
+import { TenantOwnershipService } from '../../shared/tenancy/tenant-ownership.service';
+import {
+  CAMPAIGN_DISPATCH_QUEUE,
+  type CampaignDispatchJobData,
+} from './campaign-dispatch.processor';
 
 // Frequency-cap window: a contact may receive at most 1 outbound campaign message per window
 const FREQUENCY_CAP_HOURS = 24;
@@ -19,6 +30,7 @@ export interface SendPolicyResult {
   blocked: number;
   reasons: Record<string, number>;
   sampleBlocked: Array<{ phone: string; reason: string }>;
+  recipients?: Array<{ contactId: string; phone: string }>;
 }
 
 @Injectable()
@@ -26,6 +38,9 @@ export class CampaignsService {
   constructor(
     @Inject(DRIZZLE_TOKEN) private readonly db: DrizzleDB,
     private readonly auditService: AuditService,
+    private readonly ownership: TenantOwnershipService,
+    @InjectQueue(CAMPAIGN_DISPATCH_QUEUE)
+    private readonly campaignQueue: Queue<CampaignDispatchJobData>,
   ) {}
 
   // ─── Segments ────────────────────────────────────────────────────────────────
@@ -38,7 +53,11 @@ export class CampaignsService {
       .orderBy(desc(segments.createdAt));
   }
 
-  async createSegment(tenantId: string, userId: string, data: { name: string; description?: string; filters?: Record<string, unknown> }) {
+  async createSegment(
+    tenantId: string,
+    userId: string,
+    data: { name: string; description?: string; filters?: Record<string, unknown> },
+  ) {
     const [seg] = await this.db
       .insert(segments)
       .values({
@@ -61,7 +80,7 @@ export class CampaignsService {
     await this.db
       .update(segments)
       .set({ deletedAt: new Date() })
-      .where(eq(segments.id, segmentId));
+      .where(and(eq(segments.id, segmentId), eq(segments.tenantId, tenantId)));
   }
 
   // ─── Campaigns ───────────────────────────────────────────────────────────────
@@ -98,6 +117,9 @@ export class CampaignsService {
       scheduledAt?: string;
     },
   ) {
+    if (data.agentId) await this.ownership.assertAgent(tenantId, data.agentId);
+    if (data.segmentId) await this.ownership.assertSegment(tenantId, data.segmentId);
+
     const [campaign] = await this.db
       .insert(campaigns)
       .values({
@@ -138,7 +160,11 @@ export class CampaignsService {
   //   6. Contato já recebeu mensagem recentemente? (frequency cap)
   //   7. Dentro das políticas da empresa?
 
-  async checkEligibility(tenantId: string, campaignId: string): Promise<SendPolicyResult> {
+  async checkEligibility(
+    tenantId: string,
+    campaignId: string,
+    includeRecipients = false,
+  ): Promise<SendPolicyResult> {
     const campaign = await this.getCampaign(tenantId, campaignId);
 
     if (!campaign.segmentId) {
@@ -146,11 +172,7 @@ export class CampaignsService {
     }
 
     // ── Check 4 (campaign-level): WhatsApp connected ──
-    const [wa] = await this.db
-      .select()
-      .from(whatsappAccounts)
-      .where(and(eq(whatsappAccounts.tenantId, tenantId), isNull(whatsappAccounts.deletedAt)))
-      .limit(1);
+    const wa = await pickOutboundAccount(this.db, tenantId);
 
     if (!wa || wa.status !== 'connected') {
       throw new BadRequestException('Nenhuma conta WhatsApp conectada');
@@ -163,7 +185,11 @@ export class CampaignsService {
 
     // ── Check 4 (campaign-level): template exists and is APPROVED ──
     const [approvedTemplate] = await this.db
-      .select({ id: whatsappTemplates.id, category: whatsappTemplates.category, status: whatsappTemplates.status })
+      .select({
+        id: whatsappTemplates.id,
+        category: whatsappTemplates.category,
+        status: whatsappTemplates.status,
+      })
       .from(whatsappTemplates)
       .where(
         and(
@@ -201,10 +227,7 @@ export class CampaignsService {
       })
       .from(contactIdentities)
       .where(
-        and(
-          eq(contactIdentities.tenantId, tenantId),
-          eq(contactIdentities.channel, 'whatsapp'),
-        ),
+        and(eq(contactIdentities.tenantId, tenantId), eq(contactIdentities.channel, 'whatsapp')),
       );
 
     const results: SendPolicyResult = {
@@ -212,6 +235,7 @@ export class CampaignsService {
       blocked: 0,
       reasons: {},
       sampleBlocked: [],
+      recipients: includeRecipients ? [] : undefined,
     };
 
     for (const identity of identities) {
@@ -230,6 +254,9 @@ export class CampaignsService {
         }
       } else {
         results.eligible++;
+        if (includeRecipients) {
+          results.recipients!.push({ contactId: identity.contactId, phone: identity.phone });
+        }
       }
     }
 
@@ -241,7 +268,7 @@ export class CampaignsService {
         totalBlocked: results.blocked,
         updatedAt: new Date(),
       })
-      .where(eq(campaigns.id, campaignId));
+      .where(and(eq(campaigns.id, campaignId), eq(campaigns.tenantId, tenantId)));
 
     return results;
   }
@@ -326,16 +353,55 @@ export class CampaignsService {
       throw new BadRequestException(`Campanha não pode ser iniciada (status: ${campaign.status})`);
     }
 
-    const eligibility = await this.checkEligibility(tenantId, campaignId);
+    const eligibility = await this.checkEligibility(tenantId, campaignId, true);
 
     if (eligibility.eligible === 0) {
-      throw new BadRequestException('Nenhum destinatário elegível. Verifique consentimentos e opt-outs.');
+      throw new BadRequestException(
+        'Nenhum destinatário elegível. Verifique consentimentos e opt-outs.',
+      );
+    }
+
+    // Get the connected WhatsApp account for this tenant
+    const wa = await pickOutboundAccount(this.db, tenantId);
+
+    if (!wa) {
+      throw new BadRequestException('Nenhuma conta WhatsApp encontrada');
     }
 
     await this.db
       .update(campaigns)
       .set({ status: 'running', startedAt: new Date(), updatedAt: new Date() })
-      .where(eq(campaigns.id, campaignId));
+      .where(and(eq(campaigns.id, campaignId), eq(campaigns.tenantId, tenantId)));
+
+    // Create recipient records and enqueue a dispatch job for each
+    const recipients = eligibility.recipients ?? [];
+    for (const r of recipients) {
+      const [recipient] = await this.db
+        .insert(campaignRecipients)
+        .values({
+          campaignId,
+          tenantId,
+          contactId: r.contactId,
+          phone: r.phone,
+          status: 'pending',
+        })
+        .returning({ id: campaignRecipients.id });
+
+      await this.campaignQueue.add(
+        'dispatch',
+        {
+          campaignId,
+          tenantId,
+          recipientId: recipient!.id,
+          phone: r.phone,
+          accountId: wa.id,
+          templateName: campaign.templateName!,
+          templateLanguage: campaign.templateLanguage ?? 'pt_BR',
+          templateComponents: (campaign.templateComponents as unknown[]) ?? [],
+        },
+        { attempts: 3, backoff: { type: 'exponential', delay: 10000 } },
+      );
+    }
 
     await this.auditService.log({
       action: 'campaign.launch',

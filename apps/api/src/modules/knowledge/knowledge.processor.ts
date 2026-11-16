@@ -3,6 +3,7 @@ import { Logger } from '@nestjs/common';
 import type { Job } from 'bullmq';
 import { KnowledgeRepository } from './knowledge.repository';
 import { StorageService } from '../../shared/storage/storage.service';
+import { EmbeddingService } from './embedding.service';
 import { parseByMimeType } from './parsers/file-parser';
 import { AuditService } from '../../shared/audit/audit.service';
 
@@ -23,6 +24,7 @@ export class KnowledgeProcessor extends WorkerHost {
   constructor(
     private readonly repo: KnowledgeRepository,
     private readonly storage: StorageService,
+    private readonly embeddingService: EmbeddingService,
     private readonly auditService: AuditService,
   ) {
     super();
@@ -46,7 +48,7 @@ export class KnowledgeProcessor extends WorkerHost {
       // Remove old chunks before inserting new ones (idempotent reprocessing)
       await this.repo.deleteChunksBySource(sourceId, tenantId);
 
-      await this.repo.createChunks(
+      const savedChunks = await this.repo.createChunks(
         chunks.map((c) => ({
           tenantId,
           sourceId,
@@ -57,6 +59,28 @@ export class KnowledgeProcessor extends WorkerHost {
         })),
       );
 
+      // Generate and persist embeddings when service is configured
+      if (this.embeddingService.isEnabled && savedChunks.length > 0) {
+        this.logger.log(`Generating embeddings for ${savedChunks.length} chunks (source ${sourceId})`);
+        const embeddings = await this.embeddingService.embedBatch(chunks.map((c) => c.content));
+
+        for (let i = 0; i < savedChunks.length; i++) {
+          const vec = embeddings[i];
+          const chunk = savedChunks[i];
+          if (vec && chunk) {
+            try {
+              await this.repo.updateChunkEmbedding(chunk.id, tenantId, vec);
+            } catch (embErr) {
+              // pgvector may not be installed — log and continue
+              this.logger.warn(
+                `Could not store embedding for chunk ${chunk.id}: ${embErr instanceof Error ? embErr.message : String(embErr)}`,
+              );
+              break; // skip remaining chunks if column doesn't exist
+            }
+          }
+        }
+      }
+
       await this.repo.updateSourceStatus(sourceId, tenantId, 'processed', {
         processedAt: new Date(),
       });
@@ -66,7 +90,7 @@ export class KnowledgeProcessor extends WorkerHost {
         resourceType: 'knowledge_source',
         resourceId: sourceId,
         tenantId,
-        metadata: { chunks: chunks.length, mimeType },
+        metadata: { chunks: chunks.length, mimeType, embeddingsGenerated: this.embeddingService.isEnabled },
       });
 
       this.logger.log(`Done: ${sourceId} — ${chunks.length} chunks`);

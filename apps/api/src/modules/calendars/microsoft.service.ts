@@ -53,7 +53,7 @@ export class MicrosoftCalendarService {
     this.tenantIdMs = this.config.get<string>('MICROSOFT_OAUTH_TENANT_ID', 'common');
     this.redirectUri = this.config.get<string>(
       'MICROSOFT_OAUTH_REDIRECT_URI',
-      'http://localhost:3001/v1/tenants/callback/microsoft',
+      'http://localhost:3001/api/v1/tenants/callback/microsoft',
     );
   }
 
@@ -96,9 +96,9 @@ export class MicrosoftCalendarService {
       },
     );
     if (!res.ok) {
-      const body = await res.text();
-      this.logger.error(`Microsoft token exchange failed: ${body}`);
-      throw new Error(`Microsoft OAuth error: ${body}`);
+      await res.text();
+      this.logger.error(`Microsoft token exchange failed (HTTP ${res.status})`);
+      throw new Error(`Microsoft OAuth token exchange failed (HTTP ${res.status})`);
     }
     const data = (await res.json()) as {
       access_token: string;
@@ -117,7 +117,9 @@ export class MicrosoftCalendarService {
     };
   }
 
-  async refreshAccessToken(refreshToken: string): Promise<Omit<MicrosoftTokens, 'email' | 'displayName' | 'scopes'>> {
+  async refreshAccessToken(
+    refreshToken: string,
+  ): Promise<Omit<MicrosoftTokens, 'email' | 'displayName' | 'scopes'>> {
     this.assertCredentials();
     const res = await fetch(
       `https://login.microsoftonline.com/${this.tenantIdMs}/oauth2/v2.0/token`,
@@ -134,7 +136,11 @@ export class MicrosoftCalendarService {
       },
     );
     if (!res.ok) throw new Error('Failed to refresh Microsoft token');
-    const data = (await res.json()) as { access_token: string; refresh_token?: string; expires_in: number };
+    const data = (await res.json()) as {
+      access_token: string;
+      refresh_token?: string;
+      expires_in: number;
+    };
     return {
       accessToken: data.access_token,
       expiresAt: new Date(Date.now() + data.expires_in * 1000),
@@ -148,12 +154,20 @@ export class MicrosoftCalendarService {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (!res.ok) throw new Error('Failed to fetch Microsoft user info');
-    return res.json() as Promise<{ mail?: string; userPrincipalName?: string; displayName?: string }>;
+    return res.json() as Promise<{
+      mail?: string;
+      userPrincipalName?: string;
+      displayName?: string;
+    }>;
   }
 
   /* ── Delegated: /me/... endpoints ── */
 
-  async listEvents(accessToken: string, startDateTime: Date, endDateTime: Date): Promise<GraphEvent[]> {
+  async listEvents(
+    accessToken: string,
+    startDateTime: Date,
+    endDateTime: Date,
+  ): Promise<GraphEvent[]> {
     return this.listEventsForUser('me', accessToken, startDateTime, endDateTime);
   }
 
@@ -170,6 +184,28 @@ export class MicrosoftCalendarService {
     },
   ): Promise<GraphEvent> {
     return this.createEventForUser('me', accessToken, event);
+  }
+
+  async updateEvent(
+    accessToken: string,
+    eventId: string,
+    patch: { start: string; end: string; timeZone?: string },
+  ): Promise<GraphEvent> {
+    const tz = patch.timeZone ?? 'E. South America Standard Time';
+    const body = {
+      start: { dateTime: patch.start, timeZone: tz },
+      end: { dateTime: patch.end, timeZone: tz },
+    };
+    const res = await fetch(`https://graph.microsoft.com/v1.0/me/events/${eventId}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Failed to update Microsoft Graph event: ${err}`);
+    }
+    return res.json() as Promise<GraphEvent>;
   }
 
   async deleteEvent(accessToken: string, eventId: string): Promise<void> {
@@ -191,10 +227,9 @@ export class MicrosoftCalendarService {
       $top: '250',
     });
     const base = userId === 'me' ? 'me' : `users/${encodeURIComponent(userId)}`;
-    const res = await fetch(
-      `https://graph.microsoft.com/v1.0/${base}/calendarView?${params}`,
-      { headers: { Authorization: `Bearer ${accessToken}`, Prefer: 'outlook.timezone="UTC"' } },
-    );
+    const res = await fetch(`https://graph.microsoft.com/v1.0/${base}/calendarView?${params}`, {
+      headers: { Authorization: `Bearer ${accessToken}`, Prefer: 'outlook.timezone="UTC"' },
+    });
     if (!res.ok) {
       const err = await res.text();
       throw new Error(`Failed to fetch Microsoft Graph events: ${err}`);
@@ -336,7 +371,10 @@ export class MicrosoftCalendarService {
     };
     return (data.value ?? []).map((v) => ({
       scheduleId: v.scheduleId,
-      busySlots: (v.scheduleItems ?? []).map((s) => ({ start: s.start.dateTime, end: s.end.dateTime })),
+      busySlots: (v.scheduleItems ?? []).map((s) => ({
+        start: s.start.dateTime,
+        end: s.end.dateTime,
+      })),
     }));
   }
 }

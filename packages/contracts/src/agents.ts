@@ -11,13 +11,7 @@ export const AgentTemplateEnum = z.enum([
   'custom',
 ]);
 
-export const AgentStatusEnum = z.enum([
-  'draft',
-  'testing',
-  'published',
-  'paused',
-  'archived',
-]);
+export const AgentStatusEnum = z.enum(['draft', 'testing', 'published', 'paused', 'archived']);
 
 export const CreateAgentSchema = z.object({
   name: z.string().min(1).max(100),

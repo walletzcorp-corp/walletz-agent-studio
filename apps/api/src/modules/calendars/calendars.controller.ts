@@ -1,22 +1,31 @@
 import {
-  Controller, Get, Post, Patch, Delete,
-  Param, Body, Query, Req, Res, UseGuards,
-  HttpCode, HttpStatus,
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Param,
+  Body,
+  Query,
+  Req,
+  Res,
+  HttpCode,
+  HttpStatus,
+  BadRequestException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiHeader, ApiQuery } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { CalendarsService } from './calendars.service';
 import { CreateMeetingDto, RescheduleMeetingDto, CancelMeetingDto } from './dto/create-meeting.dto';
 import { UpdateAgentCalendarSettingsDto } from './dto/update-agent-settings.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RbacGuard } from '../../shared/rbac/rbac.guard';
 import { Roles } from '../../shared/rbac/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/auth.service';
+import { CurrentTenant } from '../../shared/rbac/tenant-context';
+import { Public } from '../../shared/rbac/access-policy.decorators';
 
 @ApiTags('calendars')
 @Controller('tenants/:tenantId/calendars')
-@UseGuards(JwtAuthGuard, RbacGuard)
 @ApiBearerAuth()
 @ApiHeader({ name: 'x-tenant-slug', required: false })
 export class CalendarsController {
@@ -27,7 +36,7 @@ export class CalendarsController {
   @Get('connections')
   @Roles('viewer')
   @ApiOperation({ summary: 'Listar conexões de calendário do tenant' })
-  listConnections(@Param('tenantId') tenantId: string) {
+  listConnections(@CurrentTenant('tenantId') tenantId: string) {
     return this.svc.listConnections(tenantId);
   }
 
@@ -36,7 +45,7 @@ export class CalendarsController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Desconectar calendário' })
   async disconnect(
-    @Param('tenantId') tenantId: string,
+    @CurrentTenant('tenantId') tenantId: string,
     @Param('connectionId') connectionId: string,
     @CurrentUser() user: JwtPayload,
   ) {
@@ -46,22 +55,27 @@ export class CalendarsController {
   @Post('sync')
   @Roles('agent_operator')
   @ApiOperation({ summary: 'Disparar sincronização manual' })
-  triggerSync(@Param('tenantId') tenantId: string) {
+  triggerSync(@CurrentTenant('tenantId') tenantId: string) {
     return this.svc.triggerSync(tenantId);
   }
 
   /* ── OAuth flow ── */
 
-  @Get(':provider/authorize')
+  @Post(':provider/authorize')
   @Roles('admin')
-  @ApiOperation({ summary: 'Iniciar OAuth com Google ou Microsoft' })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Iniciar OAuth com Google ou Microsoft (retorna a URL de consentimento do provedor)',
+  })
   authorize(
-    @Param('tenantId') tenantId: string,
-    @Param('provider') provider: 'google' | 'microsoft',
-    @Res() res: Response,
-  ) {
-    const url = this.svc.buildAuthUrl(tenantId, provider);
-    res.redirect(url);
+    @CurrentTenant('tenantId') tenantId: string,
+    @Param('provider') provider: string,
+    @CurrentUser() user: JwtPayload,
+  ): { url: string } {
+    if (provider !== 'google' && provider !== 'microsoft') {
+      throw new BadRequestException('Unsupported calendar provider');
+    }
+    return { url: this.svc.buildAuthUrl(tenantId, provider, user.sub) };
   }
 }
 
@@ -72,6 +86,7 @@ export class CalendarsCallbackController {
   constructor(private readonly svc: CalendarsService) {}
 
   @Get(':provider')
+  @Public('State OAuth assinado (HMAC), expira em 10 min e carrega tenant e usuário')
   @HttpCode(HttpStatus.FOUND)
   @ApiOperation({ summary: 'Callback OAuth (Google/Microsoft)' })
   async callback(
@@ -82,20 +97,15 @@ export class CalendarsCallbackController {
     @Req() req: { user?: JwtPayload },
     @Res() res: Response,
   ) {
+    const appUrl = process.env['APP_URL'] ?? 'http://localhost:3000';
     if (error) {
-      return res.redirect(`/agendas?error=${encodeURIComponent(error)}`);
+      return res.redirect(`${appUrl}/agendas?error=${encodeURIComponent(error)}`);
     }
     try {
-      await this.svc.handleCallback(
-        code,
-        state,
-        req.user?.sub ?? null,
-      );
-      const appUrl = process.env['APP_URL'] ?? 'http://localhost:3000';
+      await this.svc.handleCallback(code, state, req.user?.sub ?? null);
       return res.redirect(`${appUrl}/agendas?connected=${provider}`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'unknown';
-      const appUrl = process.env['APP_URL'] ?? 'http://localhost:3000';
       return res.redirect(`${appUrl}/agendas?error=${encodeURIComponent(msg)}`);
     }
   }
@@ -104,7 +114,6 @@ export class CalendarsCallbackController {
 /* ── Availability ── */
 @ApiTags('calendars')
 @Controller('tenants/:tenantId/calendars')
-@UseGuards(JwtAuthGuard, RbacGuard)
 @ApiBearerAuth()
 export class CalendarsAvailabilityController {
   constructor(private readonly svc: CalendarsService) {}
@@ -115,11 +124,15 @@ export class CalendarsAvailabilityController {
   @ApiQuery({ name: 'days', required: false, type: Number })
   @ApiOperation({ summary: 'Obter slots disponíveis para agendamento' })
   getAvailability(
-    @Param('tenantId') tenantId: string,
+    @CurrentTenant('tenantId') tenantId: string,
     @Query('agentId') agentId: string,
     @Query('days') days?: string,
   ) {
-    return this.svc.getAvailableSlots(tenantId, agentId, days ? parseInt(days, 10) : 7);
+    const daysAhead = days === undefined ? 7 : Number.parseInt(days, 10);
+    if (!Number.isInteger(daysAhead) || daysAhead < 1 || daysAhead > 60) {
+      throw new BadRequestException('days must be an integer between 1 and 60');
+    }
+    return this.svc.getAvailableSlots(tenantId, agentId, daysAhead);
   }
 
   /* ── Meetings ── */
@@ -130,22 +143,18 @@ export class CalendarsAvailabilityController {
   @ApiQuery({ name: 'to', required: false })
   @ApiOperation({ summary: 'Listar reuniões' })
   listMeetings(
-    @Param('tenantId') tenantId: string,
+    @CurrentTenant('tenantId') tenantId: string,
     @Query('from') from?: string,
     @Query('to') to?: string,
   ) {
-    return this.svc.listMeetings(
-      tenantId,
-      from ? new Date(from) : undefined,
-      to ? new Date(to) : undefined,
-    );
+    return this.svc.listMeetings(tenantId, parseDateParam('from', from), parseDateParam('to', to));
   }
 
   @Post('meetings')
   @Roles('agent_operator')
   @ApiOperation({ summary: 'Criar reunião' })
   createMeeting(
-    @Param('tenantId') tenantId: string,
+    @CurrentTenant('tenantId') tenantId: string,
     @Body() dto: CreateMeetingDto,
     @CurrentUser() user: JwtPayload,
   ) {
@@ -156,7 +165,7 @@ export class CalendarsAvailabilityController {
   @Roles('agent_operator')
   @ApiOperation({ summary: 'Reagendar reunião' })
   rescheduleMeeting(
-    @Param('tenantId') tenantId: string,
+    @CurrentTenant('tenantId') tenantId: string,
     @Param('meetingId') meetingId: string,
     @Body() dto: RescheduleMeetingDto,
     @CurrentUser() user: JwtPayload,
@@ -169,7 +178,7 @@ export class CalendarsAvailabilityController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Cancelar reunião' })
   async cancelMeeting(
-    @Param('tenantId') tenantId: string,
+    @CurrentTenant('tenantId') tenantId: string,
     @Param('meetingId') meetingId: string,
     @Body() dto: CancelMeetingDto,
     @CurrentUser() user: JwtPayload,
@@ -182,10 +191,7 @@ export class CalendarsAvailabilityController {
   @Get('agents/:agentId/settings')
   @Roles('viewer')
   @ApiOperation({ summary: 'Obter configurações de agendamento do agente' })
-  getAgentSettings(
-    @Param('tenantId') tenantId: string,
-    @Param('agentId') agentId: string,
-  ) {
+  getAgentSettings(@CurrentTenant('tenantId') tenantId: string, @Param('agentId') agentId: string) {
     return this.svc.getAgentSettings(tenantId, agentId);
   }
 
@@ -193,11 +199,19 @@ export class CalendarsAvailabilityController {
   @Roles('admin')
   @ApiOperation({ summary: 'Atualizar configurações de agendamento do agente' })
   upsertAgentSettings(
-    @Param('tenantId') tenantId: string,
+    @CurrentTenant('tenantId') tenantId: string,
     @Param('agentId') agentId: string,
     @Body() dto: UpdateAgentCalendarSettingsDto,
     @CurrentUser() user: JwtPayload,
   ) {
     return this.svc.upsertAgentSettings(tenantId, agentId, user.sub, dto);
   }
+}
+
+function parseDateParam(name: string, value: string | undefined): Date | undefined {
+  if (value === undefined) return undefined;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime()))
+    throw new BadRequestException(`${name} must be an ISO 8601 date`);
+  return date;
 }

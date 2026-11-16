@@ -1,6 +1,18 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "ui": "tui",
+  "globalPassThroughEnv": [
+    "DATABASE_URL",
+    "DATABASE_TEST_URL",
+    "REDIS_URL",
+    "ENCRYPTION_KEY",
+    "CALENDAR_ENCRYPTION_KEY",
+    "JWT_ACCESS_SECRET",
+    "JWT_REFRESH_SECRET",
+    "ANTHROPIC_API_KEY",
+    "NODE_ENV",
+    "CI"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

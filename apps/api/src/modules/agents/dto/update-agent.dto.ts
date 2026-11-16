@@ -23,10 +23,9 @@ export class UpdateAgentDto {
   @MaxLength(100)
   title?: string;
 
-  @ApiProperty({ required: false, maxLength: 500 })
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
-  @MaxLength(500)
   objective?: string;
 
   @ApiProperty({ required: false })

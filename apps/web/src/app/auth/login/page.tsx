@@ -5,7 +5,17 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Button, Input, FormField, Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@walletz/ui';
+import {
+  Button,
+  Input,
+  FormField,
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+  CardFooter,
+} from '@walletz/ui';
 import { useAuth } from '../../../hooks/use-auth';
 
 const loginSchema = z.object({
@@ -49,26 +59,56 @@ export default function LoginPage() {
       <CardContent>
         <form id="login-form" onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <FormField label="Email" required error={errors.email}>
-            <Input type="email" placeholder="seu@email.com" autoComplete="email" error={!!errors.email} {...register('email')} />
+            <Input
+              type="email"
+              placeholder="seu@email.com"
+              autoComplete="email"
+              error={!!errors.email}
+              {...register('email')}
+            />
           </FormField>
           <FormField label="Senha" required error={errors.password}>
-            <Input type="password" placeholder="••••••••" autoComplete="current-password" error={!!errors.password} {...register('password')} />
+            <Input
+              type="password"
+              placeholder="••••••••"
+              autoComplete="current-password"
+              error={!!errors.password}
+              {...register('password')}
+            />
           </FormField>
           {requiresMfa && (
             <FormField label="Código MFA" required error={errors.mfaCode}>
-              <Input type="text" placeholder="000000" maxLength={6} inputMode="numeric" autoComplete="one-time-code" {...register('mfaCode')} />
+              <Input
+                type="text"
+                placeholder="000000"
+                maxLength={6}
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                {...register('mfaCode')}
+              />
             </FormField>
           )}
           {error && (
-            <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">{error}</p>
+            <p
+              className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive"
+              role="alert"
+            >
+              {error}
+            </p>
           )}
         </form>
       </CardContent>
       <CardFooter className="flex-col gap-4">
-        <Button form="login-form" type="submit" className="w-full" loading={isSubmitting}>Entrar</Button>
+        <Button form="login-form" type="submit" className="w-full" loading={isSubmitting}>
+          Entrar
+        </Button>
         <div className="flex w-full items-center justify-between text-sm">
-          <Link href="/auth/forgot-password" className="text-muted-foreground hover:text-primary">Esqueceu a senha?</Link>
-          <Link href="/auth/register" className="text-primary hover:underline">Criar conta</Link>
+          <Link href="/auth/forgot-password" className="text-muted-foreground hover:text-primary">
+            Esqueceu a senha?
+          </Link>
+          <Link href="/auth/register" className="text-primary hover:underline">
+            Criar conta
+          </Link>
         </div>
       </CardFooter>
     </Card>

@@ -8,7 +8,8 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
-import { randomBytes } from 'crypto';
+import { randomUUID } from 'crypto';
+import { generateOneTimeToken } from '../../shared/crypto/one-time-token';
 import type { RegisterDto } from './dto/register.dto';
 import type { LoginDto } from './dto/login.dto';
 import type { ForgotPasswordDto } from './dto/forgot-password.dto';
@@ -59,7 +60,7 @@ export class AuthService {
     const rounds = Number(this.configService.get('BCRYPT_ROUNDS', BCRYPT_ROUNDS_DEFAULT));
     const passwordHash = await bcrypt.hash(dto.password, rounds);
 
-    const verificationToken = randomBytes(32).toString('hex');
+    const verificationToken = generateOneTimeToken();
     const user = await this.usersService.create({
       email: dto.email,
       passwordHash,
@@ -103,7 +104,7 @@ export class AuthService {
     dto: LoginDto,
     ipAddress?: string,
     userAgent?: string,
-  ): Promise<AuthTokens & { requiresMfa?: boolean; mfaToken?: string }> {
+  ): Promise<AuthTokens & { sessionId?: string; requiresMfa?: boolean; mfaToken?: string }> {
     const user = await this.usersService.findByEmail(dto.email);
 
     if (!user || !user.passwordHash) {
@@ -134,6 +135,10 @@ export class AuthService {
       if (!valid) {
         throw new UnauthorizedException('Invalid MFA code');
       }
+      if (this.mfaService.isLegacyPlaintext(user.mfaSecret!)) {
+        // Secrets created before encryption at rest are sealed on first successful use.
+        await this.usersService.setMfaSecret(user.id, this.mfaService.sealSecret(user.mfaSecret!));
+      }
     }
 
     const session = await this.sessionService.create({
@@ -156,7 +161,7 @@ export class AuthService {
       userAgent,
     });
 
-    return tokens;
+    return { ...tokens, sessionId: session.id };
   }
 
   async forgotPassword(dto: ForgotPasswordDto, ipAddress?: string): Promise<void> {
@@ -164,8 +169,12 @@ export class AuthService {
     // Always respond 204 to prevent user enumeration
     if (!user) return;
 
-    const token = randomBytes(32).toString('hex');
-    await this.usersService.setPasswordResetToken(user.id, token, new Date(Date.now() + PASSWORD_RESET_TTL_MS));
+    const token = generateOneTimeToken();
+    await this.usersService.setPasswordResetToken(
+      user.id,
+      token,
+      new Date(Date.now() + PASSWORD_RESET_TTL_MS),
+    );
 
     const baseUrl = this.configService.get<string>('APP_URL', 'http://localhost:3000');
     await this.mailService.sendPasswordReset(user.email, token, baseUrl);
@@ -232,7 +241,7 @@ export class AuthService {
     if (user.mfaEnabledAt) throw new ConflictException('MFA already enabled');
 
     const secret = this.mfaService.generateSecret();
-    await this.usersService.setMfaSecret(userId, secret);
+    await this.usersService.setMfaSecret(userId, this.mfaService.sealSecret(secret));
 
     return {
       secret,
@@ -317,10 +326,12 @@ export class AuthService {
       this.jwtService.signAsync(payload, {
         expiresIn: this.configService.get('JWT_ACCESS_EXPIRES_IN', '15m'),
         secret: this.configService.getOrThrow('JWT_ACCESS_SECRET'),
+        jwtid: randomUUID(),
       }),
       this.jwtService.signAsync(payload, {
         expiresIn: this.configService.get('JWT_REFRESH_EXPIRES_IN', '7d'),
         secret: this.configService.getOrThrow('JWT_REFRESH_SECRET'),
+        jwtid: randomUUID(),
       }),
     ]);
 

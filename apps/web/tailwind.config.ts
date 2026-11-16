@@ -2,10 +2,7 @@ import type { Config } from 'tailwindcss';
 
 const config: Config = {
   darkMode: ['selector', '[data-theme="dark"]'],
-  content: [
-    './src/**/*.{ts,tsx}',
-    '../../packages/ui/src/**/*.{ts,tsx}',
-  ],
+  content: ['./src/**/*.{ts,tsx}', '../../packages/ui/src/**/*.{ts,tsx}'],
   theme: {
     extend: {
       fontFamily: {
@@ -14,14 +11,14 @@ const config: Config = {
       },
       colors: {
         'neural-violet': 'hsl(var(--neural-violet))',
-        'neural-blue':   'hsl(var(--neural-blue))',
-        'neural-cyan':   'hsl(var(--neural-cyan))',
-        'neural-success':'hsl(var(--neural-success))',
-        'neural-warning':'hsl(var(--neural-warning))',
+        'neural-blue': 'hsl(var(--neural-blue))',
+        'neural-cyan': 'hsl(var(--neural-cyan))',
+        'neural-success': 'hsl(var(--neural-success))',
+        'neural-warning': 'hsl(var(--neural-warning))',
         'neural-danger': 'hsl(var(--neural-danger))',
-        'surface-1':     'hsl(var(--surface-1))',
-        'surface-2':     'hsl(var(--surface-2))',
-        'surface-3':     'hsl(var(--surface-3))',
+        'surface-1': 'hsl(var(--surface-1))',
+        'surface-2': 'hsl(var(--surface-2))',
+        'surface-3': 'hsl(var(--surface-3))',
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',

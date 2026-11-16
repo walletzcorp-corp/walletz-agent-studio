@@ -1,6 +1,6 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { eq, and, gt } from 'drizzle-orm';
-import * as bcrypt from 'bcryptjs';
+import { createHash } from 'crypto';
 import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';
 import { sessions, type Session } from '../../database/schema/users';
 import { createId } from '../../database/utils/id';
@@ -44,7 +44,7 @@ export class SessionService {
   }
 
   async updateRefreshTokenHash(sessionId: string, refreshToken: string): Promise<void> {
-    const hash = await bcrypt.hash(refreshToken, 10);
+    const hash = createHash('sha256').update(refreshToken).digest('hex');
     await this.db
       .update(sessions)
       .set({ refreshTokenHash: hash, lastSeenAt: new Date() })
@@ -54,14 +54,12 @@ export class SessionService {
   async verifyRefreshToken(sessionId: string, refreshToken: string): Promise<boolean> {
     const session = await this.findById(sessionId);
     if (!session) return false;
-    return bcrypt.compare(refreshToken, session.refreshTokenHash);
+    const hash = createHash('sha256').update(refreshToken).digest('hex');
+    return hash === session.refreshTokenHash;
   }
 
   async revoke(sessionId: string): Promise<void> {
-    await this.db
-      .update(sessions)
-      .set({ revokedAt: new Date() })
-      .where(eq(sessions.id, sessionId));
+    await this.db.update(sessions).set({ revokedAt: new Date() }).where(eq(sessions.id, sessionId));
   }
 
   async revokeAllForUser(userId: string): Promise<void> {

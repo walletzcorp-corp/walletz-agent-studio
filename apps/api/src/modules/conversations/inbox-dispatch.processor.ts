@@ -1,0 +1,104 @@
+import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { Inject, Logger } from '@nestjs/common';
+import { and, eq } from 'drizzle-orm';
+import type { Job } from 'bullmq';
+import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';
+import { messages } from '../../database/schema/conversations';
+import { contactIdentities } from '../../database/schema/contacts';
+import { WhatsappService } from '../whatsapp/whatsapp.service';
+import { pickOutboundAccount } from '../whatsapp/outbound-account';
+
+export const INBOX_DISPATCH_QUEUE = 'inbox-dispatch';
+
+export interface InboxDispatchJobData {
+  messageId: string;
+  conversationId: string;
+  tenantId: string;
+  text: string;
+  contactId: string;
+}
+
+@Processor(INBOX_DISPATCH_QUEUE)
+export class InboxDispatchProcessor extends WorkerHost {
+  private readonly logger = new Logger(InboxDispatchProcessor.name);
+
+  constructor(
+    @Inject(DRIZZLE_TOKEN) private readonly db: DrizzleDB,
+    private readonly whatsappService: WhatsappService,
+  ) {
+    super();
+  }
+
+  async process(job: Job<InboxDispatchJobData>): Promise<void> {
+    const { messageId, tenantId, text, contactId } = job.data;
+
+    this.logger.log(`Dispatching inbox message ${messageId}`);
+
+    const wa = await pickOutboundAccount(this.db, tenantId);
+
+    if (!wa || wa.status !== 'connected') {
+      this.logger.warn(`No connected WhatsApp account for tenant ${tenantId}`);
+      await this.db
+        .update(messages)
+        .set({
+          status: 'failed',
+          failedAt: new Date(),
+          failureReason: 'No connected WhatsApp account',
+        })
+        .where(and(eq(messages.id, messageId), eq(messages.tenantId, tenantId)));
+      return;
+    }
+
+    const [identity] = await this.db
+      .select({ phone: contactIdentities.normalizedValue })
+      .from(contactIdentities)
+      .where(
+        and(
+          eq(contactIdentities.tenantId, tenantId),
+          eq(contactIdentities.contactId, contactId),
+          eq(contactIdentities.channel, 'whatsapp'),
+        ),
+      )
+      .limit(1);
+
+    if (!identity) {
+      this.logger.warn(`Contact ${contactId} has no WhatsApp phone`);
+      await this.db
+        .update(messages)
+        .set({
+          status: 'failed',
+          failedAt: new Date(),
+          failureReason: 'Contact has no WhatsApp phone',
+        })
+        .where(and(eq(messages.id, messageId), eq(messages.tenantId, tenantId)));
+      return;
+    }
+
+    try {
+      const sent = await this.whatsappService.sendTextMessage(tenantId, wa.id, {
+        to: identity.phone,
+        text,
+        idempotencyKey: `inbox-${messageId}`,
+      });
+
+      await this.db
+        .update(messages)
+        .set({
+          status: 'sent',
+          sentAt: new Date(),
+          ...(sent.providerMessageId ? { providerMessageId: sent.providerMessageId } : {}),
+        })
+        .where(and(eq(messages.id, messageId), eq(messages.tenantId, tenantId)));
+
+      this.logger.log(`Sent inbox message ${messageId} to ${identity.phone}`);
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Failed to send inbox message ${messageId}: ${reason}`);
+      await this.db
+        .update(messages)
+        .set({ status: 'failed', failedAt: new Date(), failureReason: reason })
+        .where(and(eq(messages.id, messageId), eq(messages.tenantId, tenantId)));
+      throw err;
+    }
+  }
+}

@@ -2,31 +2,49 @@
 
 import { useState } from 'react';
 import {
-  Building2, Palette, Users, Bot, Smartphone, Calendar,
-  Megaphone, Shield, CreditCard, FileText, Save,
-  ChevronRight, Plus, Trash2, Eye, EyeOff, Check,
-  AlertTriangle, ExternalLink, RefreshCw, Zap, Globe,
-  Mail, Clock, Key, UserCheck, Activity,
+  Building2,
+  Palette,
+  Users,
+  Bot,
+  Smartphone,
+  Calendar,
+  Megaphone,
+  Shield,
+  CreditCard,
+  FileText,
+  Save,
+  ChevronRight,
+  Plus,
+  Trash2,
+  Eye,
+  EyeOff,
+  Check,
+  AlertTriangle,
+  RefreshCw,
+  Globe,
+  Activity,
 } from 'lucide-react';
 import { useAuth } from '../../../hooks/use-auth';
 
 /* ── Tab definitions ── */
 const TABS = [
-  { id: 'geral',         label: 'Geral',               icon: Building2 },
-  { id: 'identidade',    label: 'Identidade',          icon: Palette },
-  { id: 'usuarios',      label: 'Usuários',            icon: Users },
-  { id: 'agentes',       label: 'Agentes',             icon: Bot },
-  { id: 'canais',        label: 'Canais',              icon: Smartphone },
-  { id: 'agenda',        label: 'Agenda',              icon: Calendar },
-  { id: 'campanhas',     label: 'Leads & Campanhas',   icon: Megaphone },
-  { id: 'seguranca',     label: 'Segurança',           icon: Shield },
-  { id: 'billing',       label: 'Assinatura',          icon: CreditCard },
-  { id: 'logs',          label: 'Logs',                icon: FileText },
+  { id: 'geral', label: 'Geral', icon: Building2 },
+  { id: 'identidade', label: 'Identidade', icon: Palette },
+  { id: 'usuarios', label: 'Usuários', icon: Users },
+  { id: 'agentes', label: 'Agentes', icon: Bot },
+  { id: 'canais', label: 'Canais', icon: Smartphone },
+  { id: 'agenda', label: 'Agenda', icon: Calendar },
+  { id: 'campanhas', label: 'Leads & Campanhas', icon: Megaphone },
+  { id: 'seguranca', label: 'Segurança', icon: Shield },
+  { id: 'billing', label: 'Assinatura', icon: CreditCard },
+  { id: 'logs', label: 'Logs', icon: FileText },
 ];
 
 /* ── Reusable field ── */
 function Field({
-  label, description, children,
+  label,
+  description,
+  children,
 }: {
   label: string;
   description?: string;
@@ -43,7 +61,15 @@ function Field({
   );
 }
 
-function Input({ value, placeholder, type = 'text' }: { value?: string; placeholder?: string; type?: string }) {
+function Input({
+  value,
+  placeholder,
+  type = 'text',
+}: {
+  value?: string;
+  placeholder?: string;
+  type?: string;
+}) {
   return (
     <input
       type={type}
@@ -54,14 +80,22 @@ function Input({ value, placeholder, type = 'text' }: { value?: string; placehol
   );
 }
 
-function Select({ options, value }: { options: { value: string; label: string }[]; value?: string }) {
+function Select({
+  options,
+  value,
+}: {
+  options: { value: string; label: string }[];
+  value?: string;
+}) {
   return (
     <select
       defaultValue={value}
       className="w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-sm text-foreground outline-none focus:border-primary transition-colors"
     >
-      {options.map(o => (
-        <option key={o.value} value={o.value}>{o.label}</option>
+      {options.map((o) => (
+        <option key={o.value} value={o.value}>
+          {o.label}
+        </option>
       ))}
     </select>
   );
@@ -74,7 +108,9 @@ function Toggle({ defaultChecked }: { defaultChecked?: boolean }) {
       onClick={() => setOn(!on)}
       className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${on ? 'bg-primary' : 'bg-surface-3'}`}
     >
-      <span className={`h-4 w-4 rounded-full bg-white shadow transition-transform inline-block ${on ? 'translate-x-6' : 'translate-x-1'}`} />
+      <span
+        className={`h-4 w-4 rounded-full bg-white shadow transition-transform inline-block ${on ? 'translate-x-6' : 'translate-x-1'}`}
+      />
     </button>
   );
 }
@@ -149,7 +185,10 @@ function TabGeral({ tenantName }: { tenantName?: string }) {
             value="BRL"
           />
         </Field>
-        <Field label="CNPJ / Identificação fiscal" description="Opcional — usado em notas e relatórios">
+        <Field
+          label="CNPJ / Identificação fiscal"
+          description="Opcional — usado em notas e relatórios"
+        >
           <Input placeholder="00.000.000/0000-00" />
         </Field>
       </div>
@@ -163,7 +202,10 @@ function TabGeral({ tenantName }: { tenantName?: string }) {
 function TabIdentidade() {
   return (
     <div className="space-y-6">
-      <SectionTitle title="Identidade visual" description="Personalize a aparência do seu workspace" />
+      <SectionTitle
+        title="Identidade visual"
+        description="Personalize a aparência do seu workspace"
+      />
       <div className="space-y-4">
         <Field label="Logotipo" description="PNG ou SVG, min. 200×200px">
           <div className="flex items-center gap-4">
@@ -181,13 +223,20 @@ function TabIdentidade() {
         <Field label="Tema" description="Neural (recomendado) — dark premium">
           <div className="flex gap-3">
             {[
-              { id: 'neural', label: 'Neural Dark', active: true, preview: 'bg-[#070B14] border-neural-violet/50' },
+              {
+                id: 'neural',
+                label: 'Neural Dark',
+                active: true,
+                preview: 'bg-[#070B14] border-neural-violet/50',
+              },
               { id: 'light', label: 'Claro', active: false, preview: 'bg-white border-gray-300' },
             ].map((theme) => (
               <div
                 key={theme.id}
                 className={`flex items-center gap-2.5 rounded-lg p-3 border cursor-pointer transition-colors ${
-                  theme.active ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40'
+                  theme.active
+                    ? 'border-primary bg-primary/5'
+                    : 'border-border hover:border-primary/40'
                 }`}
               >
                 <div className={`h-8 w-14 rounded border ${theme.preview}`} />
@@ -215,9 +264,7 @@ function TabIdentidade() {
 }
 
 function TabUsuarios() {
-  const users = [
-    { name: 'demo@walletz.dev', role: 'owner', status: 'active', since: 'Out 2026' },
-  ];
+  const users = [{ name: 'demo@walletz.dev', role: 'owner', status: 'active', since: 'Out 2026' }];
 
   return (
     <div className="space-y-6">
@@ -282,9 +329,15 @@ function TabUsuarios() {
 function TabAgentes() {
   return (
     <div className="space-y-6">
-      <SectionTitle title="Configurações globais de agentes" description="Comportamento padrão para todos os agentes" />
+      <SectionTitle
+        title="Configurações globais de agentes"
+        description="Comportamento padrão para todos os agentes"
+      />
       <div className="space-y-4">
-        <Field label="Comportamento padrão" description="Como o agente se comporta por padrão ao não entender uma mensagem">
+        <Field
+          label="Comportamento padrão"
+          description="Como o agente se comporta por padrão ao não entender uma mensagem"
+        >
           <Select
             options={[
               { value: 'fallback', label: 'Usar resposta de fallback' },
@@ -295,7 +348,10 @@ function TabAgentes() {
           />
         </Field>
 
-        <Field label="Fallback padrão" description="Mensagem enviada quando o agente não sabe responder">
+        <Field
+          label="Fallback padrão"
+          description="Mensagem enviada quando o agente não sabe responder"
+        >
           <textarea
             defaultValue="Entendo que você precisa de ajuda com isso. Deixe-me te conectar com um especialista. Um momento."
             rows={3}
@@ -303,22 +359,36 @@ function TabAgentes() {
           />
         </Field>
 
-        <Field label="Handoff automático" description="Transferir para humano quando confiança da IA for baixa">
+        <Field
+          label="Handoff automático"
+          description="Transferir para humano quando confiança da IA for baixa"
+        >
           <Toggle defaultChecked />
         </Field>
 
-        <Field label="Limite de tokens por conversa" description="Máximo de tokens por sessão de conversa">
+        <Field
+          label="Limite de tokens por conversa"
+          description="Máximo de tokens por sessão de conversa"
+        >
           <Input value="4000" type="number" />
         </Field>
 
-        <Field label="Pode agendar reuniões" description="Permitir que agentes agendem reuniões automaticamente">
+        <Field
+          label="Pode agendar reuniões"
+          description="Permitir que agentes agendem reuniões automaticamente"
+        >
           <Toggle defaultChecked />
         </Field>
 
-        <Field label="Aprendizado contínuo" description="Marcar novas respostas como candidatas ao Ensinar IA">
+        <Field
+          label="Aprendizado contínuo"
+          description="Marcar novas respostas como candidatas ao Ensinar IA"
+        >
           <div className="flex items-center gap-3">
             <Toggle />
-            <span className="text-xs text-muted-foreground">Requer aprovação humana antes de aplicar</span>
+            <span className="text-xs text-muted-foreground">
+              Requer aprovação humana antes de aplicar
+            </span>
           </div>
         </Field>
       </div>
@@ -332,7 +402,10 @@ function TabAgentes() {
 function TabCanais() {
   return (
     <div className="space-y-6">
-      <SectionTitle title="Canais conectados" description="Gerencie integrações com plataformas de comunicação" />
+      <SectionTitle
+        title="Canais conectados"
+        description="Gerencie integrações com plataformas de comunicação"
+      />
 
       {/* WhatsApp card */}
       <div className="neural-card p-5 space-y-4">
@@ -340,7 +413,7 @@ function TabCanais() {
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#25D366]/10 border border-[#25D366]/30">
               <svg viewBox="0 0 24 24" className="h-5 w-5 fill-[#25D366]">
-                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
               </svg>
             </div>
             <div>
@@ -348,7 +421,10 @@ function TabCanais() {
               <p className="text-xs text-muted-foreground">Não configurado</p>
             </div>
           </div>
-          <a href="/canais/whatsapp" className="btn-ghost rounded-lg px-3 py-1.5 text-xs flex items-center gap-1.5">
+          <a
+            href="/canais/whatsapp"
+            className="btn-ghost rounded-lg px-3 py-1.5 text-xs flex items-center gap-1.5"
+          >
             Configurar
             <ChevronRight className="h-3 w-3" />
           </a>
@@ -367,7 +443,10 @@ function TabCanais() {
               <p className="text-xs text-muted-foreground">Não conectado</p>
             </div>
           </div>
-          <a href="/agendas" className="btn-ghost rounded-lg px-3 py-1.5 text-xs flex items-center gap-1.5">
+          <a
+            href="/agendas"
+            className="btn-ghost rounded-lg px-3 py-1.5 text-xs flex items-center gap-1.5"
+          >
             Conectar
             <ChevronRight className="h-3 w-3" />
           </a>
@@ -380,7 +459,7 @@ function TabCanais() {
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#5059C9]/10 border border-[#5059C9]/30">
               <svg viewBox="0 0 24 24" className="h-5 w-5 fill-[#5059C9]">
-                <path d="M13.5 2a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zm5.25 6.5h-7.5A.75.75 0 0 0 10.5 9.25v6.5a4.25 4.25 0 0 0 8.5 0v-6.5a.75.75 0 0 0-.25-.75zM8 7a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm2 5.5H5.5a.5.5 0 0 0-.5.5v4a3 3 0 0 0 6 0v-4a.5.5 0 0 0-.5-.5z"/>
+                <path d="M13.5 2a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zm5.25 6.5h-7.5A.75.75 0 0 0 10.5 9.25v6.5a4.25 4.25 0 0 0 8.5 0v-6.5a.75.75 0 0 0-.25-.75zM8 7a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm2 5.5H5.5a.5.5 0 0 0-.5.5v4a3 3 0 0 0 6 0v-4a.5.5 0 0 0-.5-.5z" />
               </svg>
             </div>
             <div>
@@ -388,7 +467,10 @@ function TabCanais() {
               <p className="text-xs text-muted-foreground">Não conectado</p>
             </div>
           </div>
-          <a href="/agendas" className="btn-ghost rounded-lg px-3 py-1.5 text-xs flex items-center gap-1.5">
+          <a
+            href="/agendas"
+            className="btn-ghost rounded-lg px-3 py-1.5 text-xs flex items-center gap-1.5"
+          >
             Conectar
             <ChevronRight className="h-3 w-3" />
           </a>
@@ -402,17 +484,25 @@ function TabCanais() {
           <Field label="Webhook URL" description="Receber eventos do Walletz no seu servidor">
             <div className="flex gap-2">
               <Input placeholder="https://seu-servidor.com/webhook" />
-              <button className="btn-ghost rounded-lg px-3 py-2 text-sm whitespace-nowrap">Testar</button>
+              <button className="btn-ghost rounded-lg px-3 py-2 text-sm whitespace-nowrap">
+                Testar
+              </button>
             </div>
           </Field>
           <Field label="Eventos ativos">
             <div className="space-y-2">
-              {['Novo contato', 'Nova conversa', 'Reunião agendada', 'Campanha concluída'].map((ev) => (
-                <label key={ev} className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" defaultChecked className="rounded border-border accent-primary" />
-                  <span className="text-sm text-muted-foreground">{ev}</span>
-                </label>
-              ))}
+              {['Novo contato', 'Nova conversa', 'Reunião agendada', 'Campanha concluída'].map(
+                (ev) => (
+                  <label key={ev} className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      defaultChecked
+                      className="rounded border-border accent-primary"
+                    />
+                    <span className="text-sm text-muted-foreground">{ev}</span>
+                  </label>
+                ),
+              )}
             </div>
           </Field>
           <div className="flex justify-end">
@@ -429,7 +519,10 @@ function TabAgenda() {
     <div className="space-y-6">
       <SectionTitle title="Agenda e reuniões" description="Configurações padrão para agendamento" />
       <div className="space-y-4">
-        <Field label="Provedor padrão" description="Plataforma de reunião padrão ao criar um evento">
+        <Field
+          label="Provedor padrão"
+          description="Plataforma de reunião padrão ao criar um evento"
+        >
           <Select
             options={[
               { value: 'google_meet', label: 'Google Meet' },
@@ -465,7 +558,10 @@ function TabAgenda() {
           />
         </Field>
 
-        <Field label="Antecedência mínima" description="Com quanto tempo de antecedência pode agendar">
+        <Field
+          label="Antecedência mínima"
+          description="Com quanto tempo de antecedência pode agendar"
+        >
           <Select
             options={[
               { value: '1', label: '1 hora' },
@@ -487,7 +583,10 @@ function TabAgenda() {
           />
         </Field>
 
-        <Field label="Confirmar reunião automaticamente" description="Confirmar sem aprovação manual do responsável">
+        <Field
+          label="Confirmar reunião automaticamente"
+          description="Confirmar sem aprovação manual do responsável"
+        >
           <Toggle />
         </Field>
 
@@ -505,7 +604,10 @@ function TabAgenda() {
 function TabCampanhas() {
   return (
     <div className="space-y-6">
-      <SectionTitle title="Leads e campanhas" description="Políticas de importação, contato e consentimento" />
+      <SectionTitle
+        title="Leads e campanhas"
+        description="Políticas de importação, contato e consentimento"
+      />
       <div className="space-y-4">
         <Field label="Deduplicação" description="Como tratar leads duplicados na importação">
           <Select
@@ -518,7 +620,10 @@ function TabCampanhas() {
           />
         </Field>
 
-        <Field label="Janela de contato" description="Intervalo mínimo entre contatos ao mesmo número">
+        <Field
+          label="Janela de contato"
+          description="Intervalo mínimo entre contatos ao mesmo número"
+        >
           <Select
             options={[
               { value: '6', label: '6 horas' },
@@ -530,11 +635,17 @@ function TabCampanhas() {
           />
         </Field>
 
-        <Field label="Requer consentimento" description="Só enviar se o contato tiver consentimento de marketing">
+        <Field
+          label="Requer consentimento"
+          description="Só enviar se o contato tiver consentimento de marketing"
+        >
           <Toggle defaultChecked />
         </Field>
 
-        <Field label="Processamento de opt-out" description="Ação ao receber pedido de cancelamento">
+        <Field
+          label="Processamento de opt-out"
+          description="Ação ao receber pedido de cancelamento"
+        >
           <Select
             options={[
               { value: 'immediate', label: 'Imediato — pausar agora' },
@@ -544,14 +655,25 @@ function TabCampanhas() {
           />
         </Field>
 
-        <Field label="Normalização E.164" description="Normalizar automaticamente números de telefone para E.164">
+        <Field
+          label="Normalização E.164"
+          description="Normalizar automaticamente números de telefone para E.164"
+        >
           <Toggle defaultChecked />
         </Field>
 
-        <Field label="Campos obrigatórios na importação" description="Colunas obrigatórias nos arquivos CSV/XLSX">
+        <Field
+          label="Campos obrigatórios na importação"
+          description="Colunas obrigatórias nos arquivos CSV/XLSX"
+        >
           <div className="flex flex-wrap gap-2">
             {['Telefone', 'Nome', 'Email'].map((f) => (
-              <span key={f} className="badge-primary rounded-full px-2.5 py-0.5 text-xs font-medium">{f}</span>
+              <span
+                key={f}
+                className="badge-primary rounded-full px-2.5 py-0.5 text-xs font-medium"
+              >
+                {f}
+              </span>
             ))}
             <button className="badge-blue rounded-full px-2.5 py-0.5 text-xs font-medium flex items-center gap-1">
               <Plus className="h-3 w-3" />
@@ -584,7 +706,10 @@ function TabSeguranca() {
           </div>
         </Field>
 
-        <Field label="MFA (Autenticação de 2 fatores)" description="Camada extra de segurança no login">
+        <Field
+          label="MFA (Autenticação de 2 fatores)"
+          description="Camada extra de segurança no login"
+        >
           <div className="flex items-center gap-3">
             <Toggle />
             <span className="text-xs text-muted-foreground">Recomendado para contas owner</span>
@@ -617,7 +742,13 @@ function TabSeguranca() {
         <SectionTitle title="Sessões ativas" />
         <div className="neural-card p-4 space-y-3">
           {[
-            { device: 'Chrome · Windows 11', ip: '189.xxx.xxx.xxx', location: 'São Paulo, BR', since: 'Hoje, 16:00', current: true },
+            {
+              device: 'Chrome · Windows 11',
+              ip: '189.xxx.xxx.xxx',
+              location: 'São Paulo, BR',
+              since: 'Hoje, 16:00',
+              current: true,
+            },
           ].map((s, i) => (
             <div key={i} className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -626,12 +757,20 @@ function TabSeguranca() {
                 </div>
                 <div>
                   <p className="text-sm font-medium text-foreground">{s.device}</p>
-                  <p className="text-xs text-muted-foreground">{s.ip} · {s.location} · {s.since}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {s.ip} · {s.location} · {s.since}
+                  </p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                {s.current && <span className="badge-success rounded-full px-2 py-0.5 text-xs font-medium">Atual</span>}
-                {!s.current && <button className="text-xs text-neural-danger hover:underline">Revogar</button>}
+                {s.current && (
+                  <span className="badge-success rounded-full px-2 py-0.5 text-xs font-medium">
+                    Atual
+                  </span>
+                )}
+                {!s.current && (
+                  <button className="text-xs text-neural-danger hover:underline">Revogar</button>
+                )}
               </div>
             </div>
           ))}
@@ -650,7 +789,9 @@ function TabBilling() {
         <div className="flex items-center justify-between">
           <div>
             <p className="text-lg font-display font-semibold text-foreground">Plano Starter</p>
-            <p className="text-sm text-muted-foreground">Período de demonstração — 30 dias restantes</p>
+            <p className="text-sm text-muted-foreground">
+              Período de demonstração — 30 dias restantes
+            </p>
           </div>
           <button className="btn-primary rounded-lg px-4 py-2 text-sm font-medium">
             Fazer upgrade
@@ -665,7 +806,9 @@ function TabBilling() {
             <div key={item.label} className="p-3 rounded-lg bg-surface-2 space-y-2">
               <div className="flex justify-between text-xs">
                 <span className="text-muted-foreground">{item.label}</span>
-                <span className="text-foreground">{item.used}/{item.limit}</span>
+                <span className="text-foreground">
+                  {item.used}/{item.limit}
+                </span>
               </div>
               <div className="h-1.5 rounded-full bg-surface-3 overflow-hidden">
                 <div
@@ -681,14 +824,49 @@ function TabBilling() {
       {/* Plans comparison */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
-          { name: 'Starter', price: 'Grátis', current: true, features: ['1 agente', '5k mensagens/mês', '1.000 contatos', 'WhatsApp Sandbox'] },
-          { name: 'Pro', price: 'R$ 297/mês', current: false, features: ['5 agentes', '50k mensagens/mês', '25.000 contatos', 'WhatsApp Oficial', 'Campanhas', 'Análises'] },
-          { name: 'Enterprise', price: 'Custom', current: false, features: ['Agentes ilimitados', 'Mensagens ilimitadas', 'Contatos ilimitados', 'SLA dedicado', 'Onboarding premium'] },
+          {
+            name: 'Starter',
+            price: 'Grátis',
+            current: true,
+            features: ['1 agente', '5k mensagens/mês', '1.000 contatos', 'WhatsApp Sandbox'],
+          },
+          {
+            name: 'Pro',
+            price: 'R$ 297/mês',
+            current: false,
+            features: [
+              '5 agentes',
+              '50k mensagens/mês',
+              '25.000 contatos',
+              'WhatsApp Oficial',
+              'Campanhas',
+              'Análises',
+            ],
+          },
+          {
+            name: 'Enterprise',
+            price: 'Custom',
+            current: false,
+            features: [
+              'Agentes ilimitados',
+              'Mensagens ilimitadas',
+              'Contatos ilimitados',
+              'SLA dedicado',
+              'Onboarding premium',
+            ],
+          },
         ].map((plan) => (
-          <div key={plan.name} className={`neural-card p-5 space-y-4 ${plan.current ? 'border-primary/40' : ''}`}>
+          <div
+            key={plan.name}
+            className={`neural-card p-5 space-y-4 ${plan.current ? 'border-primary/40' : ''}`}
+          >
             <div>
               <p className="text-sm font-display font-semibold text-foreground">{plan.name}</p>
-              <p className={`text-xl font-bold ${plan.current ? 'text-primary' : 'text-foreground'}`}>{plan.price}</p>
+              <p
+                className={`text-xl font-bold ${plan.current ? 'text-primary' : 'text-foreground'}`}
+              >
+                {plan.price}
+              </p>
             </div>
             <ul className="space-y-1.5">
               {plan.features.map((f) => (
@@ -718,22 +896,40 @@ function TabBilling() {
 function TabLogs() {
   const logs = [
     { time: '20:00:14', level: 'info', service: 'API', message: 'Server started on port 3001' },
-    { time: '20:00:07', level: 'info', service: 'Auth', message: 'User demo@walletz.dev authenticated' },
+    {
+      time: '20:00:07',
+      level: 'info',
+      service: 'Auth',
+      message: 'User demo@walletz.dev authenticated',
+    },
     { time: '19:58:00', level: 'warn', service: 'BullMQ', message: 'Queue outbox: 0 jobs pending' },
-    { time: '19:55:10', level: 'info', service: 'WhatsApp', message: 'Webhook verified for account tenant' },
-    { time: '19:50:00', level: 'error', service: 'Lab', message: 'ANTHROPIC_API_KEY not set — lab unavailable' },
+    {
+      time: '19:55:10',
+      level: 'info',
+      service: 'WhatsApp',
+      message: 'Webhook verified for account tenant',
+    },
+    {
+      time: '19:50:00',
+      level: 'error',
+      service: 'Lab',
+      message: 'ANTHROPIC_API_KEY not set — lab unavailable',
+    },
   ];
 
   const levelConfig: Record<string, string> = {
-    info:  'badge-blue',
-    warn:  'badge-warning',
+    info: 'badge-blue',
+    warn: 'badge-warning',
     error: 'badge-danger',
   };
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <SectionTitle title="Logs e diagnóstico" description="Últimos eventos e erros da plataforma" />
+        <SectionTitle
+          title="Logs e diagnóstico"
+          description="Últimos eventos e erros da plataforma"
+        />
         <button className="btn-ghost rounded-lg px-3 py-2 text-sm flex items-center gap-2">
           <RefreshCw className="h-4 w-4" />
           Atualizar
@@ -751,12 +947,18 @@ function TabLogs() {
           const Icon = s.icon;
           return (
             <div key={s.label} className="stat-card flex items-center gap-3">
-              <span className={`flex h-8 w-8 items-center justify-center rounded-lg ${s.status === 'ok' ? 'bg-neural-success/10' : 'bg-neural-warning/10'}`}>
-                <Icon className={`h-4 w-4 ${s.status === 'ok' ? 'text-neural-success' : 'text-neural-warning'}`} />
+              <span
+                className={`flex h-8 w-8 items-center justify-center rounded-lg ${s.status === 'ok' ? 'bg-neural-success/10' : 'bg-neural-warning/10'}`}
+              >
+                <Icon
+                  className={`h-4 w-4 ${s.status === 'ok' ? 'text-neural-success' : 'text-neural-warning'}`}
+                />
               </span>
               <div>
                 <p className="text-sm font-medium text-foreground">{s.label}</p>
-                <p className={`text-xs ${s.status === 'ok' ? 'text-neural-success' : 'text-neural-warning'}`}>
+                <p
+                  className={`text-xs ${s.status === 'ok' ? 'text-neural-success' : 'text-neural-warning'}`}
+                >
                   {s.status === 'ok' ? 'Operacional' : 'Configurar'}
                 </p>
               </div>
@@ -780,7 +982,9 @@ function TabLogs() {
               <tr key={i}>
                 <td className="font-mono text-xs">{log.time}</td>
                 <td>
-                  <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium ${levelConfig[log.level]}`}>
+                  <span
+                    className={`inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium ${levelConfig[log.level]}`}
+                  >
                     {log.level}
                   </span>
                 </td>
@@ -801,16 +1005,16 @@ export default function ConfiguracoesPage() {
   const { tenantName } = useAuth();
 
   const tabContent: Record<string, React.ReactNode> = {
-    geral:      tenantName ? <TabGeral tenantName={tenantName} /> : <TabGeral />,
+    geral: tenantName ? <TabGeral tenantName={tenantName} /> : <TabGeral />,
     identidade: <TabIdentidade />,
-    usuarios:   <TabUsuarios />,
-    agentes:    <TabAgentes />,
-    canais:     <TabCanais />,
-    agenda:     <TabAgenda />,
-    campanhas:  <TabCampanhas />,
-    seguranca:  <TabSeguranca />,
-    billing:    <TabBilling />,
-    logs:       <TabLogs />,
+    usuarios: <TabUsuarios />,
+    agentes: <TabAgentes />,
+    canais: <TabCanais />,
+    agenda: <TabAgenda />,
+    campanhas: <TabCampanhas />,
+    seguranca: <TabSeguranca />,
+    billing: <TabBilling />,
+    logs: <TabLogs />,
   };
 
   return (
@@ -849,9 +1053,7 @@ export default function ConfiguracoesPage() {
 
         {/* Content */}
         <main className="flex-1 min-w-0">
-          <div className="neural-card p-6">
-            {tabContent[activeTab]}
-          </div>
+          <div className="neural-card p-6">{tabContent[activeTab]}</div>
         </main>
       </div>
     </div>

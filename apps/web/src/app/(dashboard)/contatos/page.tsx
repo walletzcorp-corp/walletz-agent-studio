@@ -3,11 +3,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../../hooks/use-auth';
 import { api } from '../../../lib/api';
-import { Button, Card, CardContent, Badge } from '@walletz/ui';
-import {
-  Users, Upload, Search, Trash2, Phone, Mail, Building2, Tag,
-  CheckCircle2, AlertCircle, X, Plus,
-} from 'lucide-react';
+import { Button, Card, CardContent } from '@walletz/ui';
+import { Users, Upload, Search, Trash2, CheckCircle2, AlertCircle, X } from 'lucide-react';
 
 interface Contact {
   id: string;
@@ -42,15 +39,24 @@ export default function ContatosPage() {
     try {
       const { data } = await api.get<Contact[]>(`/tenants/${tenantId}/contacts`);
       setContacts(data);
-    } catch { /* silent */ }
-    finally { setLoading(false); }
+    } catch {
+      /* silent */
+    } finally {
+      setLoading(false);
+    }
   };
 
-  useEffect(() => { void load(); }, [tenantId]);
+  useEffect(() => {
+    void load();
+  }, [tenantId]);
 
   const filtered = contacts.filter((c) => {
     const name = [c.firstName, c.lastName].filter(Boolean).join(' ').toLowerCase();
-    return !search || name.includes(search.toLowerCase()) || (c.company ?? '').toLowerCase().includes(search.toLowerCase());
+    return (
+      !search ||
+      name.includes(search.toLowerCase()) ||
+      (c.company ?? '').toLowerCase().includes(search.toLowerCase())
+    );
   });
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -91,7 +97,9 @@ export default function ContatosPage() {
       if (fileRef.current) fileRef.current.value = '';
       await load();
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Erro na importação';
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        'Erro na importação';
       setImportResult({ imported: 0, skipped: 0, errors: [msg] });
     } finally {
       setImporting(false);
@@ -103,7 +111,9 @@ export default function ContatosPage() {
     try {
       await api.delete(`/tenants/${tenantId}/contacts/${contactId}`);
       setContacts((prev) => prev.filter((c) => c.id !== contactId));
-    } catch { /* silent */ }
+    } catch {
+      /* silent */
+    }
   };
 
   return (
@@ -135,8 +145,14 @@ export default function ContatosPage() {
 
       {/* Import result */}
       {importResult && (
-        <div className={`rounded-lg border p-4 text-sm flex items-start gap-3 ${importResult.errors.length > 0 ? 'border-destructive/20 bg-destructive/10 text-destructive' : 'border-green-200 bg-green-50 text-green-800'}`}>
-          {importResult.errors.length > 0 ? <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" /> : <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />}
+        <div
+          className={`rounded-lg border p-4 text-sm flex items-start gap-3 ${importResult.errors.length > 0 ? 'border-destructive/20 bg-destructive/10 text-destructive' : 'border-green-200 bg-green-50 text-green-800'}`}
+        >
+          {importResult.errors.length > 0 ? (
+            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+          ) : (
+            <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
+          )}
           <div className="flex-1">
             <p className="font-medium">
               {importResult.errors.length > 0 ? 'Erro na importação' : 'Importação concluída'}
@@ -144,7 +160,11 @@ export default function ContatosPage() {
             <p>
               {importResult.imported} importados · {importResult.skipped} ignorados (duplicatas)
             </p>
-            {importResult.errors.map((e, i) => <p key={i} className="text-xs mt-1">{e}</p>)}
+            {importResult.errors.map((e, i) => (
+              <p key={i} className="text-xs mt-1">
+                {e}
+              </p>
+            ))}
           </div>
           <button onClick={() => setImportResult(null)}>
             <X className="h-4 w-4" />
@@ -158,7 +178,13 @@ export default function ContatosPage() {
           <CardContent className="p-4 space-y-4">
             <div className="flex items-center justify-between">
               <p className="font-medium text-sm">Preview — {csvRows.length} linhas detectadas</p>
-              <button onClick={() => { setShowPreview(false); setCsvRows([]); if (fileRef.current) fileRef.current.value = ''; }}>
+              <button
+                onClick={() => {
+                  setShowPreview(false);
+                  setCsvRows([]);
+                  if (fileRef.current) fileRef.current.value = '';
+                }}
+              >
                 <X className="h-4 w-4 text-muted-foreground" />
               </button>
             </div>
@@ -167,7 +193,9 @@ export default function ContatosPage() {
                 <thead className="bg-muted">
                   <tr>
                     {Object.keys(csvRows[0] ?? {}).map((h) => (
-                      <th key={h} className="px-3 py-2 text-left font-medium text-muted-foreground">{h}</th>
+                      <th key={h} className="px-3 py-2 text-left font-medium text-muted-foreground">
+                        {h}
+                      </th>
                     ))}
                   </tr>
                 </thead>
@@ -175,7 +203,9 @@ export default function ContatosPage() {
                   {csvRows.slice(0, 5).map((row, i) => (
                     <tr key={i} className="border-t border-border">
                       {Object.values(row).map((v, j) => (
-                        <td key={j} className="px-3 py-2">{v}</td>
+                        <td key={j} className="px-3 py-2">
+                          {v}
+                        </td>
                       ))}
                     </tr>
                   ))}
@@ -183,12 +213,16 @@ export default function ContatosPage() {
               </table>
             </div>
             {csvRows.length > 5 && (
-              <p className="text-xs text-muted-foreground">
-                … e mais {csvRows.length - 5} linhas
-              </p>
+              <p className="text-xs text-muted-foreground">… e mais {csvRows.length - 5} linhas</p>
             )}
             <div className="flex gap-2 justify-end">
-              <Button variant="outline" onClick={() => { setShowPreview(false); setCsvRows([]); }}>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowPreview(false);
+                  setCsvRows([]);
+                }}
+              >
                 Cancelar
               </Button>
               <Button onClick={() => void handleImport()} disabled={importing}>
@@ -237,8 +271,12 @@ export default function ContatosPage() {
             <thead className="bg-muted/50">
               <tr>
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">Nome</th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">Empresa</th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden lg:table-cell">Origem</th>
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">
+                  Empresa
+                </th>
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden lg:table-cell">
+                  Origem
+                </th>
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">Tags</th>
                 <th className="px-4 py-3" />
               </tr>
@@ -267,7 +305,10 @@ export default function ContatosPage() {
                   <td className="px-4 py-3">
                     <div className="flex gap-1 flex-wrap">
                       {(c.tags as string[]).slice(0, 3).map((tag) => (
-                        <span key={tag} className="rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">
+                        <span
+                          key={tag}
+                          className="rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary"
+                        >
                           {tag}
                         </span>
                       ))}

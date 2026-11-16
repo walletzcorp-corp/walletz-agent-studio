@@ -7,22 +7,19 @@ import {
   Body,
   Param,
   Query,
-  UseGuards,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiHeader, ApiQuery } from '@nestjs/swagger';
 import { TeachService } from './teach.service';
 import { CreateKnowledgeItemDto, UpdateKnowledgeItemDto } from './dto/knowledge-item.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RbacGuard } from '../../shared/rbac/rbac.guard';
 import { Roles } from '../../shared/rbac/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/auth.service';
+import { CurrentTenant } from '../../shared/rbac/tenant-context';
 
 @ApiTags('teach')
 @Controller('tenants/:tenantId/teach')
-@UseGuards(JwtAuthGuard, RbacGuard)
 @ApiBearerAuth()
 @ApiHeader({ name: 'x-tenant-slug', required: true })
 export class TeachController {
@@ -31,11 +28,15 @@ export class TeachController {
   @Get()
   @Roles('viewer')
   @ApiOperation({ summary: 'Listar itens de conhecimento ensinados' })
-  @ApiQuery({ name: 'type', required: false, enum: ['fact', 'guidance', 'procedure', 'permission', 'example'] })
+  @ApiQuery({
+    name: 'type',
+    required: false,
+    enum: ['fact', 'guidance', 'procedure', 'permission', 'example'],
+  })
   @ApiQuery({ name: 'agentId', required: false })
   @ApiQuery({ name: 'approved', required: false, type: Boolean })
   findAll(
-    @Param('tenantId') tenantId: string,
+    @CurrentTenant('tenantId') tenantId: string,
     @Query('type') type?: string,
     @Query('agentId') agentId?: string,
     @Query('approved') approved?: string,
@@ -47,7 +48,7 @@ export class TeachController {
   @Get(':itemId')
   @Roles('viewer')
   @ApiOperation({ summary: 'Detalhes de um item de conhecimento' })
-  findOne(@Param('tenantId') tenantId: string, @Param('itemId') itemId: string) {
+  findOne(@CurrentTenant('tenantId') tenantId: string, @Param('itemId') itemId: string) {
     return this.teachService.getItem(itemId, tenantId);
   }
 
@@ -55,7 +56,7 @@ export class TeachController {
   @Roles('manager')
   @ApiOperation({ summary: 'Criar novo item de conhecimento' })
   create(
-    @Param('tenantId') tenantId: string,
+    @CurrentTenant('tenantId') tenantId: string,
     @Body() dto: CreateKnowledgeItemDto,
     @CurrentUser() user: JwtPayload,
   ) {
@@ -66,7 +67,7 @@ export class TeachController {
   @Roles('manager')
   @ApiOperation({ summary: 'Atualizar item de conhecimento (requer reaprovação)' })
   update(
-    @Param('tenantId') tenantId: string,
+    @CurrentTenant('tenantId') tenantId: string,
     @Param('itemId') itemId: string,
     @Body() dto: UpdateKnowledgeItemDto,
     @CurrentUser() user: JwtPayload,
@@ -79,7 +80,7 @@ export class TeachController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Aprovar item de conhecimento para uso em produção' })
   approve(
-    @Param('tenantId') tenantId: string,
+    @CurrentTenant('tenantId') tenantId: string,
     @Param('itemId') itemId: string,
     @CurrentUser() user: JwtPayload,
   ) {
@@ -91,7 +92,7 @@ export class TeachController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Revogar aprovação de item' })
   revokeApproval(
-    @Param('tenantId') tenantId: string,
+    @CurrentTenant('tenantId') tenantId: string,
     @Param('itemId') itemId: string,
     @CurrentUser() user: JwtPayload,
   ) {
@@ -103,7 +104,7 @@ export class TeachController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Remover item de conhecimento' })
   async remove(
-    @Param('tenantId') tenantId: string,
+    @CurrentTenant('tenantId') tenantId: string,
     @Param('itemId') itemId: string,
     @CurrentUser() user: JwtPayload,
   ) {

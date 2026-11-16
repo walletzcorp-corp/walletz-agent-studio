@@ -1,12 +1,4 @@
-import {
-  pgTable,
-  text,
-  timestamp,
-  boolean,
-  jsonb,
-  pgEnum,
-  uniqueIndex,
-} from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, jsonb, pgEnum, uniqueIndex } from 'drizzle-orm/pg-core';
 import { createId } from '../utils/id';
 
 export const tenantStatusEnum = pgEnum('tenant_status', [

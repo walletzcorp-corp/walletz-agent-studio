@@ -17,12 +17,35 @@ export class KnowledgeRepository {
     const [row] = await this.db
       .select()
       .from(knowledgeSources)
-      .where(and(eq(knowledgeSources.id, id), eq(knowledgeSources.tenantId, tenantId), isNull(knowledgeSources.deletedAt)));
+      .where(
+        and(
+          eq(knowledgeSources.id, id),
+          eq(knowledgeSources.tenantId, tenantId),
+          isNull(knowledgeSources.deletedAt),
+        ),
+      );
+    return row ?? null;
+  }
+
+  async findSourceByChecksum(tenantId: string, checksum: string) {
+    const [row] = await this.db
+      .select()
+      .from(knowledgeSources)
+      .where(
+        and(
+          eq(knowledgeSources.tenantId, tenantId),
+          eq(knowledgeSources.checksum, checksum),
+          isNull(knowledgeSources.deletedAt),
+        ),
+      );
     return row ?? null;
   }
 
   async findSourcesByTenant(tenantId: string, agentId?: string) {
-    const conditions = [eq(knowledgeSources.tenantId, tenantId), isNull(knowledgeSources.deletedAt)];
+    const conditions = [
+      eq(knowledgeSources.tenantId, tenantId),
+      isNull(knowledgeSources.deletedAt),
+    ];
     if (agentId) {
       conditions.push(eq(knowledgeSources.agentId, agentId));
     }
@@ -64,6 +87,13 @@ export class KnowledgeRepository {
   ) {
     if (chunks.length === 0) return [];
     return this.db.insert(knowledgeChunks).values(chunks).returning();
+  }
+
+  async updateChunkEmbedding(id: string, tenantId: string, embedding: number[]) {
+    await this.db
+      .update(knowledgeChunks)
+      .set({ embedding })
+      .where(and(eq(knowledgeChunks.id, id), eq(knowledgeChunks.tenantId, tenantId)));
   }
 
   async deleteChunksBySource(sourceId: string, tenantId: string) {

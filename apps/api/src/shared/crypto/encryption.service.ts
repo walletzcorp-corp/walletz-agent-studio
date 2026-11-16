@@ -18,11 +18,17 @@ export class EncryptionService {
   constructor() {
     const raw = process.env.ENCRYPTION_KEY ?? '';
     if (!raw || raw.length !== 64) {
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error('ENCRYPTION_KEY must be 64 hex chars in production');
+      }
       this.logger.warn(
         'ENCRYPTION_KEY is missing or not 64 hex chars — token encryption is DISABLED. Set ENCRYPTION_KEY in production.',
       );
       // Use a deterministic dev-only key (tokens still work but are not protected)
-      this.key = Buffer.from('walletz_dev_key_not_for_production_use_only__replace_me_now!', 'utf8').subarray(0, 32);
+      this.key = Buffer.from(
+        'walletz_dev_key_not_for_production_use_only__replace_me_now!',
+        'utf8',
+      ).subarray(0, 32);
     } else {
       this.key = Buffer.from(raw, 'hex');
     }

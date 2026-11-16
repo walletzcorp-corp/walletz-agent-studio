@@ -1,6 +1,15 @@
 import { api } from './api';
 
-export type KnowledgeSourceType = 'pdf' | 'docx' | 'xlsx' | 'csv' | 'txt' | 'html' | 'url' | 'faq' | 'typed';
+export type KnowledgeSourceType =
+  | 'pdf'
+  | 'docx'
+  | 'xlsx'
+  | 'csv'
+  | 'txt'
+  | 'html'
+  | 'url'
+  | 'faq'
+  | 'typed';
 export type KnowledgeSourceStatus = 'pending' | 'processing' | 'processed' | 'failed' | 'outdated';
 
 export interface KnowledgeSource {
@@ -32,7 +41,11 @@ export const knowledgeApi = {
   get: (tenantId: string, sourceId: string) =>
     api.get<KnowledgeSource>(`/tenants/${tenantId}/knowledge/${sourceId}`),
 
-  upload: (tenantId: string, file: File, opts?: { name?: string; agentId?: string; tags?: string[] }) => {
+  upload: (
+    tenantId: string,
+    file: File,
+    opts?: { name?: string; agentId?: string; tags?: string[]; onProgress?: (pct: number) => void },
+  ) => {
     const form = new FormData();
     form.append('file', file);
     if (opts?.name) form.append('name', opts.name);
@@ -40,8 +53,16 @@ export const knowledgeApi = {
     if (opts?.tags?.length) opts.tags.forEach((t) => form.append('tags[]', t));
     return api.post<KnowledgeSource>(`/tenants/${tenantId}/knowledge/upload`, form, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress: opts?.onProgress
+        ? (e: { loaded: number; total?: number }) => {
+            if (e.total) opts.onProgress!(Math.round((e.loaded / e.total) * 100));
+          }
+        : undefined,
     });
   },
+
+  downloadUrl: (tenantId: string, sourceId: string) =>
+    `/api/v1/tenants/${tenantId}/knowledge/${sourceId}/download`,
 
   createTyped: (tenantId: string, data: { name: string; content: string; agentId?: string }) =>
     api.post<KnowledgeSource>(`/tenants/${tenantId}/knowledge/typed`, data),

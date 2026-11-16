@@ -1,4 +1,5 @@
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe, VersioningType } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
@@ -11,10 +12,11 @@ import { createLogger } from './shared/telemetry/logger';
 async function bootstrap() {
   const logger = createLogger('Bootstrap');
 
-  const app = await NestFactory.create(AppModule, {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bufferLogs: true,
     rawBody: true,
   });
+  app.useBodyParser('json', { limit: '2mb' });
 
   const configService = app.get(ConfigService);
 
@@ -39,7 +41,13 @@ async function bootstrap() {
     origin: allowedOrigins,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Idempotency-Key', 'X-Request-Id', 'x-tenant-slug'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Idempotency-Key',
+      'X-Request-Id',
+      'x-tenant-slug',
+    ],
     exposedHeaders: ['X-Request-Id'],
   });
 
@@ -95,6 +103,7 @@ async function bootstrap() {
 }
 
 bootstrap().catch((err) => {
+  // eslint-disable-next-line no-console
   console.error('Failed to start API:', err);
   process.exit(1);
 });
