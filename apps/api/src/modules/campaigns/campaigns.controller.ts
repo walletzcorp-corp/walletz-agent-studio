@@ -36,11 +36,13 @@ export class CampaignsController {
   // ─── Segments ────────────────────────────────────────────────────────────────
 
   @Get('tenants/:tenantId/segments')
+  @ApiOperation({ summary: 'Listar segmentos de contatos' })
   listSegments(@Param('tenantId') tenantId: string) {
     return this.campaignsService.listSegments(tenantId);
   }
 
   @Post('tenants/:tenantId/segments')
+  @ApiOperation({ summary: 'Criar segmento de contatos' })
   createSegment(
     @Param('tenantId') tenantId: string,
     @Body() body: CreateSegmentBody,
@@ -50,6 +52,7 @@ export class CampaignsController {
   }
 
   @Delete('tenants/:tenantId/segments/:segmentId')
+  @ApiOperation({ summary: 'Excluir segmento' })
   @HttpCode(204)
   deleteSegment(
     @Param('tenantId') tenantId: string,
@@ -61,11 +64,13 @@ export class CampaignsController {
   // ─── Campaigns ───────────────────────────────────────────────────────────────
 
   @Get('tenants/:tenantId/campaigns')
+  @ApiOperation({ summary: 'Listar campanhas' })
   listCampaigns(@Param('tenantId') tenantId: string) {
     return this.campaignsService.listCampaigns(tenantId);
   }
 
   @Get('tenants/:tenantId/campaigns/:campaignId')
+  @ApiOperation({ summary: 'Detalhar campanha' })
   getCampaign(
     @Param('tenantId') tenantId: string,
     @Param('campaignId') campaignId: string,
@@ -74,6 +79,7 @@ export class CampaignsController {
   }
 
   @Post('tenants/:tenantId/campaigns')
+  @ApiOperation({ summary: 'Criar campanha (rascunho)' })
   createCampaign(
     @Param('tenantId') tenantId: string,
     @Body() body: CreateCampaignBody,

@@ -1,12 +1,12 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, VersioningType } from '@nestjs/common';
-import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './shared/filters/http-exception.filter';
 import { LoggingInterceptor } from './shared/interceptors/logging.interceptor';
 import { createLogger } from './shared/telemetry/logger';
+import { isSwaggerEnabled, setupSwagger, SWAGGER_PATH } from './shared/docs/swagger';
 
 async function bootstrap() {
   const logger = createLogger('Bootstrap');
@@ -59,39 +59,15 @@ async function bootstrap() {
   app.useGlobalFilters(new HttpExceptionFilter());
   app.useGlobalInterceptors(new LoggingInterceptor());
 
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle('Walletz Agent Studio API')
-    .setDescription('API do Walletz Agent Studio — SaaS B2B para agentes de IA')
-    .setVersion('1.0')
-    .addBearerAuth()
-    .addTag('auth', 'Autenticação e sessões')
-    .addTag('tenants', 'Organizações e configurações')
-    .addTag('users', 'Usuários e convites')
-    .addTag('agents', 'Agentes de IA')
-    .addTag('knowledge', 'Base de conhecimento')
-    .addTag('lab', 'Laboratório de testes')
-    .addTag('conversations', 'Conversas e inbox')
-    .addTag('contacts', 'Contatos e leads')
-    .addTag('campaigns', 'Campanhas e cadências')
-    .addTag('calendars', 'Agendas Google e Microsoft')
-    .addTag('whatsapp', 'WhatsApp Business')
-    .addTag('analytics', 'Métricas e relatórios')
-    .addTag('billing', 'Planos e assinaturas')
-    .addTag('admin', 'Administração da plataforma')
-    .addTag('health', 'Health checks')
-    .build();
-
-  if (configService.get('NODE_ENV') !== 'production') {
-    const document = SwaggerModule.createDocument(app, swaggerConfig);
-    SwaggerModule.setup('api/docs', app, document, {
-      swaggerOptions: { persistAuthorization: true },
-    });
-  }
+  const nodeEnv = configService.get<string>('NODE_ENV');
+  const swaggerEnabled = isSwaggerEnabled(nodeEnv);
+  if (swaggerEnabled) setupSwagger(app);
 
   const port = configService.get<number>('PORT', 3001);
   await app.listen(port);
 
-  logger.info(`API running on port ${port} [${configService.get('NODE_ENV')}]`);
+  logger.info(`API running on port ${port} [${nodeEnv}]`);
+  if (swaggerEnabled) logger.info(`Swagger (somente localhost): http://localhost:${port}/${SWAGGER_PATH}`);
 }
 
 bootstrap().catch((err) => {

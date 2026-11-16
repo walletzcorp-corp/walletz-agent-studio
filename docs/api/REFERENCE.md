@@ -1,0 +1,261 @@
+# Referência da API — Walletz Agent Studio API
+
+> Arquivo gerado por `pnpm --filter @walletz/api docs:openapi`. Não edite à mão.
+
+Versão 1.0 · 122 rotas · prefixo `/api/v1` · autenticação Bearer (JWT), exceto onde indicado "sem JWT" (login, webhooks, callback OAuth, conector local — protegidos por outros meios).
+
+## Módulos
+
+| Módulo | Descrição | Rotas |
+|---|---|---|
+| [auth](#auth) | Autenticação e sessões | 12 |
+| [tenants](#tenants) | Organizações e configurações | 9 |
+| [users](#users) | Usuários e convites | 1 |
+| [agents](#agents) | Agentes de IA | 14 |
+| [knowledge](#knowledge) | Base de conhecimento | 7 |
+| [teach](#teach) | Ensinar a IA (fatos, diretrizes, exemplos) | 7 |
+| [lab](#lab) | Laboratório de testes | 1 |
+| [conversations](#conversations) | Conversas e inbox | 7 |
+| [contacts](#contacts) | Contatos e leads | 5 |
+| [campaigns](#campaigns) | Campanhas e cadências | 8 |
+| [calendars](#calendars) | Agendas Google e Microsoft | 12 |
+| [whatsapp](#whatsapp) | WhatsApp Business | 12 |
+| [privacy](#privacy) | LGPD: exportação e exclusão de dados | 4 |
+| [pc-connector](#pc-connector) | Conector local (agente no computador do cliente) | 8 |
+| [admin](#admin) | Administração da plataforma | 13 |
+| [health](#health) | Health checks | 2 |
+
+## auth
+
+Autenticação e sessões
+
+| Método | Rota | Descrição | Auth |
+|---|---|---|---|
+| `POST` | `/api/v1/auth/register` | Cadastrar novo usuário | sem JWT |
+| `GET` | `/api/v1/auth/verify-email` | Confirmar email | sem JWT |
+| `POST` | `/api/v1/auth/login` | Login | sem JWT |
+| `POST` | `/api/v1/auth/refresh` | Renovar tokens | sem JWT |
+| `POST` | `/api/v1/auth/logout` | Logout | Bearer |
+| `POST` | `/api/v1/auth/forgot-password` | Solicitar redefinição de senha | sem JWT |
+| `POST` | `/api/v1/auth/reset-password` | Redefinir senha | sem JWT |
+| `POST` | `/api/v1/auth/change-password` | Alterar senha | Bearer |
+| `GET` | `/api/v1/auth/mfa/setup` | Iniciar configuração de MFA | Bearer |
+| `POST` | `/api/v1/auth/mfa/confirm` | Confirmar configuração de MFA | Bearer |
+| `POST` | `/api/v1/auth/mfa/disable` | Desativar MFA | Bearer |
+| `GET` | `/api/v1/auth/me` | Dados do usuário autenticado | Bearer |
+
+## tenants
+
+Organizações e configurações
+
+| Método | Rota | Descrição | Auth |
+|---|---|---|---|
+| `POST` | `/api/v1/tenants` | Criar tenant (onboarding) | Bearer |
+| `GET` | `/api/v1/tenants/my` | Listar tenants do usuário autenticado | Bearer |
+| `GET` | `/api/v1/tenants/{tenantId}` | Detalhes do tenant | Bearer |
+| `PATCH` | `/api/v1/tenants/{tenantId}/settings` | Atualizar configurações do tenant | Bearer |
+| `GET` | `/api/v1/tenants/{tenantId}/feature-flags` | Feature flags do tenant | Bearer |
+| `GET` | `/api/v1/tenants/{tenantId}/members` | Listar membros do tenant | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/members/invite` | Convidar membro | Bearer |
+| `PATCH` | `/api/v1/tenants/{tenantId}/members/{membershipId}/role` | Alterar papel do membro | Bearer |
+| `DELETE` | `/api/v1/tenants/{tenantId}/members/{membershipId}` | Remover membro | Bearer |
+
+## users
+
+Usuários e convites
+
+| Método | Rota | Descrição | Auth |
+|---|---|---|---|
+| `GET` | `/api/v1/users/profile` | Perfil do usuário autenticado | Bearer |
+
+## agents
+
+Agentes de IA
+
+| Método | Rota | Descrição | Auth |
+|---|---|---|---|
+| `GET` | `/api/v1/tenants/{tenantId}/agents/templates` | Listar templates de agente disponíveis | Bearer |
+| `GET` | `/api/v1/tenants/{tenantId}/agents/tools` | Listar ferramentas disponíveis para agentes | Bearer |
+| `GET` | `/api/v1/tenants/{tenantId}/agents` | Listar agentes do tenant | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/agents` | Criar agente | Bearer |
+| `GET` | `/api/v1/tenants/{tenantId}/agents/{agentId}` | Detalhes do agente | Bearer |
+| `PATCH` | `/api/v1/tenants/{tenantId}/agents/{agentId}` | Atualizar agente | Bearer |
+| `DELETE` | `/api/v1/tenants/{tenantId}/agents/{agentId}` | Arquivar agente | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/agents/{agentId}/publish` | Publicar agente (cria nova release) | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/agents/{agentId}/pause` | Pausar agente | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/agents/{agentId}/resume` | Reativar agente pausado | Bearer |
+| `GET` | `/api/v1/tenants/{tenantId}/agents/{agentId}/releases` | Histórico de releases do agente | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/agents/{agentId}/releases/{releaseId}/rollback` | Fazer rollback para uma release anterior | Bearer |
+| `GET` | `/api/v1/tenants/{tenantId}/agents/{agentId}/tool-permissions` | Listar permissões de ferramentas do agente | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/agents/{agentId}/tool-permissions` | Definir permissão de ferramenta | Bearer |
+
+## knowledge
+
+Base de conhecimento
+
+| Método | Rota | Descrição | Auth |
+|---|---|---|---|
+| `GET` | `/api/v1/tenants/{tenantId}/knowledge` | Listar fontes de conhecimento do tenant | Bearer |
+| `GET` | `/api/v1/tenants/{tenantId}/knowledge/{sourceId}` | Detalhes da fonte de conhecimento | Bearer |
+| `DELETE` | `/api/v1/tenants/{tenantId}/knowledge/{sourceId}` | Remover fonte de conhecimento | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/knowledge/upload` | Upload de arquivo (PDF, DOCX, TXT, CSV) | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/knowledge/url` | Indexar URL | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/knowledge/typed` | Criar fonte de texto digitado | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/knowledge/{sourceId}/retry` | Reprocessar fonte com falha | Bearer |
+
+## teach
+
+Ensinar a IA (fatos, diretrizes, exemplos)
+
+| Método | Rota | Descrição | Auth |
+|---|---|---|---|
+| `GET` | `/api/v1/tenants/{tenantId}/teach` | Listar itens de conhecimento ensinados | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/teach` | Criar novo item de conhecimento | Bearer |
+| `GET` | `/api/v1/tenants/{tenantId}/teach/{itemId}` | Detalhes de um item de conhecimento | Bearer |
+| `PATCH` | `/api/v1/tenants/{tenantId}/teach/{itemId}` | Atualizar item de conhecimento (requer reaprovação) | Bearer |
+| `DELETE` | `/api/v1/tenants/{tenantId}/teach/{itemId}` | Remover item de conhecimento | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/teach/{itemId}/approve` | Aprovar item de conhecimento para uso em produção | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/teach/{itemId}/revoke-approval` | Revogar aprovação de item | Bearer |
+
+## lab
+
+Laboratório de testes
+
+| Método | Rota | Descrição | Auth |
+|---|---|---|---|
+| `POST` | `/api/v1/tenants/{tenantId}/lab/chat` | Test agent in the lab with RAG | Bearer |
+
+## conversations
+
+Conversas e inbox
+
+| Método | Rota | Descrição | Auth |
+|---|---|---|---|
+| `GET` | `/api/v1/tenants/{tenantId}/conversations` | Listar conversas (inbox) | Bearer |
+| `GET` | `/api/v1/tenants/{tenantId}/conversations/{conversationId}` | Detalhar conversa | Bearer |
+| `GET` | `/api/v1/tenants/{tenantId}/conversations/{conversationId}/messages` | Listar mensagens da conversa | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/conversations/{conversationId}/messages` | Enviar mensagem como atendente humano | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/conversations/{conversationId}/assume` | Assumir a conversa (pausa a IA) | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/conversations/{conversationId}/return-to-ai` | Devolver a conversa para a IA | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/conversations/{conversationId}/resolve` | Marcar conversa como resolvida | Bearer |
+
+## contacts
+
+Contatos e leads
+
+| Método | Rota | Descrição | Auth |
+|---|---|---|---|
+| `GET` | `/api/v1/tenants/{tenantId}/contacts` | List contacts | Bearer |
+| `GET` | `/api/v1/tenants/{tenantId}/contacts/{contactId}` | Get contact | Bearer |
+| `DELETE` | `/api/v1/tenants/{tenantId}/contacts/{contactId}` | Delete contact | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/contacts/import/json` | Import contacts from JSON array | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/contacts/import/csv` | Import contacts from CSV/XLSX | Bearer |
+
+## campaigns
+
+Campanhas e cadências
+
+| Método | Rota | Descrição | Auth |
+|---|---|---|---|
+| `GET` | `/api/v1/tenants/{tenantId}/segments` | Listar segmentos de contatos | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/segments` | Criar segmento de contatos | Bearer |
+| `DELETE` | `/api/v1/tenants/{tenantId}/segments/{segmentId}` | Excluir segmento | Bearer |
+| `GET` | `/api/v1/tenants/{tenantId}/campaigns` | Listar campanhas | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/campaigns` | Criar campanha (rascunho) | Bearer |
+| `GET` | `/api/v1/tenants/{tenantId}/campaigns/{campaignId}` | Detalhar campanha | Bearer |
+| `GET` | `/api/v1/tenants/{tenantId}/campaigns/{campaignId}/eligibility` | Send Policy Gateway — check eligible recipients | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/campaigns/{campaignId}/launch` | Launch campaign after policy check | Bearer |
+
+## calendars
+
+Agendas Google e Microsoft
+
+| Método | Rota | Descrição | Auth |
+|---|---|---|---|
+| `GET` | `/api/v1/tenants/{tenantId}/calendars/connections` | Listar conexões de calendário do tenant | Bearer |
+| `DELETE` | `/api/v1/tenants/{tenantId}/calendars/connections/{connectionId}` | Desconectar calendário | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/calendars/sync` | Disparar sincronização manual | Bearer |
+| `GET` | `/api/v1/tenants/{tenantId}/calendars/{provider}/authorize` | Gerar URL de autorização OAuth (Google ou Microsoft) | Bearer |
+| `GET` | `/api/v1/tenants/callback/{provider}` | Callback OAuth (Google/Microsoft) | sem JWT |
+| `GET` | `/api/v1/tenants/{tenantId}/calendars/availability` | Obter slots disponíveis para agendamento | Bearer |
+| `GET` | `/api/v1/tenants/{tenantId}/calendars/meetings` | Listar reuniões | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/calendars/meetings` | Criar reunião | Bearer |
+| `PATCH` | `/api/v1/tenants/{tenantId}/calendars/meetings/{meetingId}/reschedule` | Reagendar reunião | Bearer |
+| `DELETE` | `/api/v1/tenants/{tenantId}/calendars/meetings/{meetingId}` | Cancelar reunião | Bearer |
+| `GET` | `/api/v1/tenants/{tenantId}/calendars/agents/{agentId}/settings` | Obter configurações de agendamento do agente | Bearer |
+| `PATCH` | `/api/v1/tenants/{tenantId}/calendars/agents/{agentId}/settings` | Atualizar configurações de agendamento do agente | Bearer |
+
+## whatsapp
+
+WhatsApp Business
+
+| Método | Rota | Descrição | Auth |
+|---|---|---|---|
+| `GET` | `/api/v1/webhook/whatsapp` | Meta webhook verification (GET challenge) | sem JWT |
+| `POST` | `/api/v1/webhook/whatsapp` | Receive WhatsApp Cloud API webhook events | sem JWT |
+| `GET` | `/api/v1/tenants/{tenantId}/whatsapp/accounts` | List WhatsApp accounts for tenant | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/whatsapp/accounts` | Connect a WhatsApp account (manual — for advanced/technical use) | Bearer |
+| `GET` | `/api/v1/tenants/{tenantId}/whatsapp/accounts/{accountId}` | Get WhatsApp account details | Bearer |
+| `DELETE` | `/api/v1/tenants/{tenantId}/whatsapp/accounts/{accountId}` | Disconnect a WhatsApp account | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/whatsapp/embedded-signup` | Complete WhatsApp connection via Meta Embedded Signup (code exchange on backend) | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/whatsapp/accounts/{accountId}/reconnect` | Reconnect WhatsApp account (renew token via Embedded Signup) | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/whatsapp/accounts/{accountId}/send` | Send a text message via WhatsApp | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/whatsapp/accounts/{accountId}/sync-templates` | Sync templates from Meta | Bearer |
+| `GET` | `/api/v1/tenants/{tenantId}/whatsapp/accounts/{accountId}/templates` | List approved templates | Bearer |
+| `GET` | `/api/v1/tenants/{tenantId}/whatsapp/accounts/{accountId}/stats` | Get message statistics for account | Bearer |
+
+## privacy
+
+LGPD: exportação e exclusão de dados
+
+| Método | Rota | Descrição | Auth |
+|---|---|---|---|
+| `GET` | `/api/v1/tenants/{tenantId}/privacy/contacts/{contactId}/export` | LGPD Art. 18 I — Export all data for a data subject | Bearer |
+| `DELETE` | `/api/v1/tenants/{tenantId}/privacy/contacts/{contactId}` | LGPD Art. 18 VI — Anonymize contact (right to erasure) | Bearer |
+| `GET` | `/api/v1/tenants/{tenantId}/privacy/consents` | List all consent records for tenant | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/privacy/contacts/{contactId}/revoke-consent` | LGPD Art. 15 I — Revoke consent for a data subject | Bearer |
+
+## pc-connector
+
+Conector local (agente no computador do cliente)
+
+| Método | Rota | Descrição | Auth |
+|---|---|---|---|
+| `POST` | `/api/v1/tenants/{tenantId}/pc-connector/pair-token` | Gerar token de pareamento para novo dispositivo | Bearer |
+| `GET` | `/api/v1/tenants/{tenantId}/pc-connector/devices` | Listar dispositivos conectados | Bearer |
+| `GET` | `/api/v1/tenants/{tenantId}/pc-connector/devices/{deviceId}` | Obter dispositivo | Bearer |
+| `DELETE` | `/api/v1/tenants/{tenantId}/pc-connector/devices/{deviceId}` | Desconectar dispositivo | Bearer |
+| `PATCH` | `/api/v1/tenants/{tenantId}/pc-connector/devices/{deviceId}/capabilities` | Atualizar permissões do dispositivo | Bearer |
+| `POST` | `/api/v1/pc-connector/pair` | Parear dispositivo com token | sem JWT |
+| `GET` | `/api/v1/pc-connector/devices/{deviceId}/commands` | Buscar comandos pendentes (polling do connector) | sem JWT |
+| `POST` | `/api/v1/pc-connector/devices/{deviceId}/commands/{commandId}/result` | Postar resultado de comando executado | sem JWT |
+
+## admin
+
+Administração da plataforma
+
+| Método | Rota | Descrição | Auth |
+|---|---|---|---|
+| `GET` | `/api/v1/admin/overview` | Dashboard: totais, agentes por tipo e por organização, IA, atividade | Bearer |
+| `GET` | `/api/v1/admin/tenants` | Listar organizações (clientes) com métricas | Bearer |
+| `POST` | `/api/v1/admin/tenants` | Cadastrar cliente PF (CPF) ou PJ (CNPJ): cria a organização e o login do responsável | Bearer |
+| `GET` | `/api/v1/admin/tenants/{tenantId}` | Detalhe da organização: membros, agentes, consumo, atividade | Bearer |
+| `GET` | `/api/v1/admin/agents` | Listar agentes de todas as organizações | Bearer |
+| `GET` | `/api/v1/admin/users` | Listar usuários da plataforma | Bearer |
+| `POST` | `/api/v1/admin/users` | Criar conta de cliente (cadastro público é fechado) | Bearer |
+| `GET` | `/api/v1/admin/activity` | Atividade da plataforma (audit log) | Bearer |
+| `GET` | `/api/v1/admin/llm` | Modelo em uso e limites de taxa da conta Anthropic | Bearer |
+| `POST` | `/api/v1/admin/tenants/{tenantId}/suspend` | Suspender organização (bloqueia o uso; dados preservados) | Bearer |
+| `POST` | `/api/v1/admin/tenants/{tenantId}/reactivate` | Reativar organização suspensa | Bearer |
+| `POST` | `/api/v1/admin/tenants/{tenantId}/extend-trial` | Estender o período de trial | Bearer |
+| `PATCH` | `/api/v1/admin/tenants/{tenantId}/token-limit` | Definir limite mensal de tokens de IA (null remove) | Bearer |
+
+## health
+
+Health checks
+
+| Método | Rota | Descrição | Auth |
+|---|---|---|---|
+| `GET` | `/api/v1/health` | Health check | sem JWT |
+| `GET` | `/api/v1/ready` | Readiness check | sem JWT |
+

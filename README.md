@@ -48,7 +48,7 @@ pnpm dev
 |-----|-----|
 | Frontend (Next.js) | http://localhost:3000 |
 | API (NestJS) | http://localhost:3001 |
-| API Docs (Swagger) | http://localhost:3001/api/docs |
+| API Docs (Swagger, só local) | http://localhost:3001/api/docs — ver [docs/api](docs/api/README.md) |
 | MinIO Console | http://localhost:9001 |
 
 ### Comandos úteis

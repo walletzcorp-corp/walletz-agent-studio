@@ -22,6 +22,7 @@ export class ConversationsController {
   constructor(private readonly conversationsService: ConversationsService) {}
 
   @Get()
+  @ApiOperation({ summary: 'Listar conversas (inbox)' })
   @ApiQuery({ name: 'status', required: false })
   @ApiQuery({ name: 'agentId', required: false })
   list(
@@ -35,6 +36,7 @@ export class ConversationsController {
   }
 
   @Get(':conversationId')
+  @ApiOperation({ summary: 'Detalhar conversa' })
   get(
     @Param('tenantId') tenantId: string,
     @Param('conversationId') conversationId: string,
@@ -43,6 +45,7 @@ export class ConversationsController {
   }
 
   @Get(':conversationId/messages')
+  @ApiOperation({ summary: 'Listar mensagens da conversa' })
   getMessages(
     @Param('tenantId') tenantId: string,
     @Param('conversationId') conversationId: string,
@@ -51,6 +54,7 @@ export class ConversationsController {
   }
 
   @Post(':conversationId/messages')
+  @ApiOperation({ summary: 'Enviar mensagem como atendente humano' })
   sendMessage(
     @Param('tenantId') tenantId: string,
     @Param('conversationId') conversationId: string,
@@ -61,6 +65,7 @@ export class ConversationsController {
   }
 
   @Post(':conversationId/assume')
+  @ApiOperation({ summary: 'Assumir a conversa (pausa a IA)' })
   @HttpCode(200)
   assume(
     @Param('tenantId') tenantId: string,
@@ -71,6 +76,7 @@ export class ConversationsController {
   }
 
   @Post(':conversationId/return-to-ai')
+  @ApiOperation({ summary: 'Devolver a conversa para a IA' })
   @HttpCode(200)
   returnToAi(
     @Param('tenantId') tenantId: string,
@@ -80,6 +86,7 @@ export class ConversationsController {
   }
 
   @Post(':conversationId/resolve')
+  @ApiOperation({ summary: 'Marcar conversa como resolvida' })
   @HttpCode(200)
   resolve(
     @Param('tenantId') tenantId: string,
