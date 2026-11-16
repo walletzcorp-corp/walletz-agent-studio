@@ -31,6 +31,7 @@ import { EncryptionService } from '../../shared/crypto/encryption.service';
 import { createId } from '../../database/utils/id';
 import { LabService } from '../lab/lab.service';
 import { createExecutionContext } from '../agents/execution-context';
+import { MetaConfigService } from './meta-config.service';
 import type {
   ConnectWhatsappDto,
   EmbeddedSignupDto,
@@ -85,6 +86,7 @@ export class WhatsappService {
     private readonly auditService: AuditService,
     private readonly encryptionService: EncryptionService,
     private readonly labService: LabService,
+    private readonly metaConfigService: MetaConfigService,
   ) {}
 
   // ─── Accounts ────────────────────────────────────────────────────────────────
@@ -241,10 +243,13 @@ export class WhatsappService {
     tenantId: string,
     userId: string,
   ): Promise<PublicWhatsappAccount> {
-    const appId = process.env.META_APP_ID;
-    const appSecret = process.env.META_APP_SECRET;
+    const effectiveCfg = await this.metaConfigService.getEffectiveConfig(tenantId);
+    const appId = effectiveCfg?.appId;
+    const appSecret = effectiveCfg?.appSecret;
     if (!appId || !appSecret) {
-      throw new BadRequestException('Configuração Meta não disponível neste ambiente.');
+      throw new BadRequestException(
+        'Configuração Meta não encontrada. Configure o App ID e App Secret antes de conectar.',
+      );
     }
 
     // 1. Exchange authorization code for access token (backend-only — never in browser)

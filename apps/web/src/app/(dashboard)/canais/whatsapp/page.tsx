@@ -21,10 +21,24 @@ import {
   XCircle,
   Clock,
   ShieldAlert,
+  Eye,
+  EyeOff,
+  Copy,
+  Check,
+  HelpCircle,
+  Save,
+  TestTube,
+  Webhook,
 } from 'lucide-react';
 import { useAuth } from '../../../../hooks/use-auth';
 import { whatsappApi, type WhatsappAccount } from '../../../../lib/whatsapp-api';
 import { agentsApi, type Agent } from '../../../../lib/agents-api';
+import {
+  metaConfigApi,
+  type MetaConfigPublic,
+  type TestResult,
+  type WebhookTestResult,
+} from '../../../../lib/meta-config-api';
 
 /* ─── Meta FB SDK types ─── */
 declare global {
@@ -54,7 +68,7 @@ type ConnectState =
   | 'processing'
   | 'success'
   | 'error'
-  | 'unconfigured'; // META_APP_ID not set / still placeholder
+  | 'config_meta'; // show Meta config form
 
 type ConnectionPath = 'existing' | 'new';
 
@@ -93,6 +107,8 @@ function translateMetaError(raw: string): string {
     return 'Não encontramos um número autorizado. Conclua todos os passos no painel da Meta.';
   if (l.includes('network') || l.includes('fetch'))
     return 'Problema de conexão. Verifique sua internet e tente novamente.';
+  if (l.includes('configuração meta') || l.includes('app id') || l.includes('app secret'))
+    return 'Configure o App ID e App Secret antes de conectar.';
   return 'Ocorreu um erro ao conectar. Tente novamente ou entre em contato com o suporte.';
 }
 
@@ -125,12 +141,526 @@ function loadFBSDK(appId: string): Promise<void> {
 }
 
 /* ══════════════════════════════════════════════════════
+   META CONFIG FORM
+══════════════════════════════════════════════════════ */
+function MetaConfigForm({
+  tenantId,
+  onSaved,
+  onCancel,
+}: {
+  tenantId: string;
+  onSaved: (cfg: MetaConfigPublic) => void;
+  onCancel?: () => void;
+}) {
+  const [cfg, setCfg] = useState<MetaConfigPublic | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testingWebhook, setTestingWebhook] = useState(false);
+
+  const [appId, setAppId] = useState('');
+  const [configId, setConfigId] = useState('');
+  const [appSecret, setAppSecret] = useState('');
+  const [verifyToken, setVerifyToken] = useState('');
+  const [graphApiVersion, setGraphApiVersion] = useState('v22.0');
+  const [showSecret, setShowSecret] = useState(false);
+  const [showVerifyToken, setShowVerifyToken] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const [saveResult, setSaveResult] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [testResult, setTestResult] = useState<TestResult | null>(null);
+  const [webhookResult, setWebhookResult] = useState<WebhookTestResult | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    metaConfigApi
+      .get(tenantId)
+      .then(({ data }) => {
+        setCfg(data);
+        setAppId(data.appId ?? '');
+        setConfigId(data.configId ?? '');
+        setGraphApiVersion(data.graphApiVersion ?? 'v22.0');
+      })
+      .catch(() => {
+        // no config yet — show empty form
+      })
+      .finally(() => setLoading(false));
+  }, [tenantId]);
+
+  const webhookUrl = cfg?.webhookUrl ?? `${typeof window !== 'undefined' ? window.location.origin : ''}/v1/webhook/whatsapp`;
+
+  const copyWebhook = () => {
+    void navigator.clipboard.writeText(webhookUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    setSaveResult(null);
+    try {
+      const { data } = await metaConfigApi.save(tenantId, {
+        appId,
+        configId,
+        ...(appSecret ? { appSecret } : {}),
+        ...(verifyToken ? { verifyToken } : {}),
+        graphApiVersion,
+      });
+      setCfg(data);
+      setAppSecret('');
+      setVerifyToken('');
+      setSaveResult({ ok: true, msg: 'Configuração salva com sucesso!' });
+      onSaved(data);
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        'Erro ao salvar. Tente novamente.';
+      setSaveResult({ ok: false, msg });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveAndTest = async () => {
+    await handleSave();
+    if (saveResult?.ok !== false) {
+      await handleTest();
+    }
+  };
+
+  const handleTest = async () => {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const { data } = await metaConfigApi.test(tenantId);
+      setTestResult(data);
+    } catch {
+      setTestResult({
+        appId: { ok: false, message: 'Erro ao testar' },
+        appSecret: { ok: false, message: 'Erro ao testar' },
+        configId: { ok: false, message: 'Erro ao testar' },
+        graphApi: { ok: false, message: 'Erro de conexão com a API' },
+        overallOk: false,
+      });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const handleTestWebhook = async () => {
+    setTestingWebhook(true);
+    setWebhookResult(null);
+    try {
+      const { data } = await metaConfigApi.testWebhook(tenantId);
+      setWebhookResult(data);
+    } catch {
+      setWebhookResult({ reachable: false, challengeOk: false, message: 'Erro ao testar webhook' });
+    } finally {
+      setTestingWebhook(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="page-container space-y-6 max-w-2xl mx-auto">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-display font-bold text-foreground">
+            Configuração do App Meta
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Configure as credenciais do seu app em{' '}
+            <a
+              href="https://developers.facebook.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline"
+            >
+              developers.facebook.com
+            </a>
+          </p>
+        </div>
+        {onCancel && (
+          <button
+            onClick={onCancel}
+            className="btn-ghost border border-border rounded-lg px-4 py-2 text-sm"
+          >
+            Voltar
+          </button>
+        )}
+      </div>
+
+      {/* Status badge */}
+      {cfg && (
+        <div
+          className={`flex items-center gap-2 rounded-lg border px-4 py-2.5 text-sm ${
+            cfg.connectionStatus === 'connected'
+              ? 'border-neural-success/30 bg-neural-success/5 text-neural-success'
+              : cfg.connectionStatus === 'error'
+                ? 'border-neural-danger/30 bg-neural-danger/8 text-neural-danger'
+                : 'border-border bg-surface-1 text-muted-foreground'
+          }`}
+        >
+          {cfg.connectionStatus === 'connected' ? (
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+          ) : (
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+          )}
+          <span>
+            {cfg.connectionStatus === 'connected'
+              ? 'Credenciais testadas e válidas'
+              : cfg.connectionStatus === 'error'
+                ? 'Credenciais com erro — revise abaixo'
+                : 'Configuração pendente'}
+          </span>
+          {cfg.lastTestAt && (
+            <span className="ml-auto text-xs opacity-60">
+              Último teste: {new Date(cfg.lastTestAt).toLocaleString('pt-BR')}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Form */}
+      <div className="neural-card p-6 space-y-5">
+        {/* App ID */}
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-1.5">
+            <label className="text-sm font-medium text-foreground">App ID</label>
+            <Tooltip text="ID numérico do seu app em developers.facebook.com → Painel do App" />
+          </div>
+          <input
+            type="text"
+            value={appId}
+            onChange={(e) => setAppId(e.target.value)}
+            placeholder="Ex: 1234567890123456"
+            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
+        </div>
+
+        {/* Config ID */}
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-1.5">
+            <label className="text-sm font-medium text-foreground">Configuration ID</label>
+            <Tooltip text="ID da configuração do Embedded Signup em developers.facebook.com → WhatsApp → Configuração" />
+          </div>
+          <input
+            type="text"
+            value={configId}
+            onChange={(e) => setConfigId(e.target.value)}
+            placeholder="Ex: 987654321098765"
+            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
+        </div>
+
+        {/* App Secret */}
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-1.5">
+            <label className="text-sm font-medium text-foreground">App Secret</label>
+            <Tooltip text="Chave secreta do app — nunca exposta ao navegador. Configurações → Básico → App Secret" />
+            {cfg?.hasAppSecret && !appSecret && (
+              <span className="ml-auto text-xs text-muted-foreground font-mono bg-surface-2 px-2 py-0.5 rounded">
+                ••••{cfg.appSecretTail}
+              </span>
+            )}
+          </div>
+          <div className="relative">
+            <input
+              type={showSecret ? 'text' : 'password'}
+              value={appSecret}
+              onChange={(e) => setAppSecret(e.target.value)}
+              placeholder={cfg?.hasAppSecret ? 'Deixe vazio para manter o atual' : 'Cole o App Secret aqui'}
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 pr-10 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+            <button
+              type="button"
+              onClick={() => setShowSecret((v) => !v)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              {showSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Armazenado criptografado. Nunca retornado em texto puro.
+          </p>
+        </div>
+
+        {/* Verify Token */}
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-1.5">
+            <label className="text-sm font-medium text-foreground">Verify Token</label>
+            <Tooltip text="Token de verificação do webhook — você define este valor e cadastra no painel da Meta" />
+            {cfg?.hasVerifyToken && !verifyToken && (
+              <span className="ml-auto text-xs text-muted-foreground">Já configurado</span>
+            )}
+          </div>
+          <div className="relative">
+            <input
+              type={showVerifyToken ? 'text' : 'password'}
+              value={verifyToken}
+              onChange={(e) => setVerifyToken(e.target.value)}
+              placeholder={cfg?.hasVerifyToken ? 'Deixe vazio para manter o atual' : 'Token de verificação do webhook'}
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 pr-10 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+            <button
+              type="button"
+              onClick={() => setShowVerifyToken((v) => !v)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              {showVerifyToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
+        </div>
+
+        {/* Graph API Version */}
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-1.5">
+            <label className="text-sm font-medium text-foreground">Versão da Graph API</label>
+            <Tooltip text="Versão da Graph API da Meta. Recomendado: v22.0" />
+          </div>
+          <input
+            type="text"
+            value={graphApiVersion}
+            onChange={(e) => setGraphApiVersion(e.target.value)}
+            placeholder="v22.0"
+            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
+        </div>
+
+        {/* Webhook URL (read-only + copy) */}
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-1.5">
+            <label className="text-sm font-medium text-foreground">URL do Webhook</label>
+            <Tooltip text="Configure esta URL no painel da Meta → WhatsApp → Configuração → Webhook" />
+          </div>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              readOnly
+              value={webhookUrl}
+              className="flex-1 rounded-lg border border-border bg-surface-1 px-3 py-2 text-sm font-mono text-muted-foreground"
+            />
+            <button
+              type="button"
+              onClick={copyWebhook}
+              className="shrink-0 flex items-center gap-1.5 rounded-lg border border-border bg-surface-1 px-3 py-2 text-sm hover:bg-surface-2 transition-colors"
+            >
+              {copied ? (
+                <>
+                  <Check className="h-3.5 w-3.5 text-neural-success" /> Copiado
+                </>
+              ) : (
+                <>
+                  <Copy className="h-3.5 w-3.5" /> Copiar
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Save result */}
+        {saveResult && (
+          <div
+            className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${
+              saveResult.ok
+                ? 'border-neural-success/30 bg-neural-success/5 text-neural-success'
+                : 'border-neural-danger/30 bg-neural-danger/8 text-neural-danger'
+            }`}
+          >
+            {saveResult.ok ? (
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
+            ) : (
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+            )}
+            {saveResult.msg}
+          </div>
+        )}
+
+        {/* Action buttons */}
+        <div className="flex flex-wrap gap-3 pt-1">
+          <button
+            onClick={() => void handleSave()}
+            disabled={saving || !appId || !configId}
+            className="btn-primary rounded-lg px-5 py-2.5 text-sm font-semibold flex items-center gap-2 disabled:opacity-50"
+          >
+            {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            Salvar
+          </button>
+          <button
+            onClick={() => void handleSaveAndTest()}
+            disabled={saving || testing || !appId || !configId}
+            className="rounded-lg border border-primary px-5 py-2.5 text-sm font-semibold text-primary hover:bg-primary/5 flex items-center gap-2 disabled:opacity-50"
+          >
+            {testing ? (
+              <RefreshCw className="h-4 w-4 animate-spin" />
+            ) : (
+              <TestTube className="h-4 w-4" />
+            )}
+            Salvar e Testar
+          </button>
+          <button
+            onClick={() => void handleTest()}
+            disabled={testing || !cfg?.appId}
+            className="rounded-lg border border-border px-5 py-2.5 text-sm flex items-center gap-2 disabled:opacity-50 hover:bg-surface-1"
+          >
+            {testing ? (
+              <RefreshCw className="h-4 w-4 animate-spin" />
+            ) : (
+              <Zap className="h-4 w-4" />
+            )}
+            Testar Configuração
+          </button>
+          <button
+            onClick={() => void handleTestWebhook()}
+            disabled={testingWebhook}
+            className="rounded-lg border border-border px-5 py-2.5 text-sm flex items-center gap-2 disabled:opacity-50 hover:bg-surface-1"
+          >
+            {testingWebhook ? (
+              <RefreshCw className="h-4 w-4 animate-spin" />
+            ) : (
+              <Webhook className="h-4 w-4" />
+            )}
+            Testar Webhook
+          </button>
+        </div>
+      </div>
+
+      {/* Test results */}
+      {testResult && (
+        <div className="neural-card p-5 space-y-3">
+          <h3 className="text-sm font-semibold text-foreground">Resultado do Teste</h3>
+          <div className="space-y-2">
+            {(
+              [
+                ['App ID', testResult.appId],
+                ['App Secret', testResult.appSecret],
+                ['Config ID', testResult.configId],
+                ['Graph API', testResult.graphApi],
+              ] as const
+            ).map(([label, item]) => (
+              <div
+                key={label}
+                className="flex items-center justify-between gap-3 py-1.5 border-b border-border/30 last:border-0"
+              >
+                <span className="text-sm text-muted-foreground">{label}</span>
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className={`text-xs font-medium ${item.ok ? 'text-neural-success' : 'text-neural-danger'}`}
+                  >
+                    {item.message}
+                  </span>
+                  {item.ok ? (
+                    <CheckCircle2 className="h-3.5 w-3.5 text-neural-success" />
+                  ) : (
+                    <XCircle className="h-3.5 w-3.5 text-neural-danger" />
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div
+            className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold ${
+              testResult.overallOk
+                ? 'bg-neural-success/8 text-neural-success'
+                : 'bg-neural-danger/8 text-neural-danger'
+            }`}
+          >
+            {testResult.overallOk ? (
+              <>
+                <CheckCircle2 className="h-4 w-4" /> Tudo OK — pronto para conectar WhatsApp
+              </>
+            ) : (
+              <>
+                <AlertTriangle className="h-4 w-4" /> Corrija os erros acima antes de continuar
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Webhook test result */}
+      {webhookResult && (
+        <div className="neural-card p-5 space-y-3">
+          <h3 className="text-sm font-semibold text-foreground">Resultado do Teste de Webhook</h3>
+          <div className="space-y-2">
+            {[
+              {
+                label: 'Webhook acessível',
+                ok: webhookResult.reachable,
+                msg: webhookResult.reachable ? 'Acessível' : 'Não acessível',
+              },
+              {
+                label: 'Challenge respondido',
+                ok: webhookResult.challengeOk,
+                msg: webhookResult.challengeOk ? 'OK' : 'Falhou',
+              },
+            ].map((r) => (
+              <div
+                key={r.label}
+                className="flex items-center justify-between gap-3 py-1.5 border-b border-border/30 last:border-0"
+              >
+                <span className="text-sm text-muted-foreground">{r.label}</span>
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className={`text-xs font-medium ${r.ok ? 'text-neural-success' : 'text-neural-danger'}`}
+                  >
+                    {r.msg}
+                  </span>
+                  {r.ok ? (
+                    <CheckCircle2 className="h-3.5 w-3.5 text-neural-success" />
+                  ) : (
+                    <XCircle className="h-3.5 w-3.5 text-neural-danger" />
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground">{webhookResult.message}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Tooltip({ text }: { text: string }) {
+  const [show, setShow] = useState(false);
+  return (
+    <div className="relative inline-block">
+      <button
+        type="button"
+        onMouseEnter={() => setShow(true)}
+        onMouseLeave={() => setShow(false)}
+        onFocus={() => setShow(true)}
+        onBlur={() => setShow(false)}
+        className="text-muted-foreground hover:text-foreground"
+      >
+        <HelpCircle className="h-3.5 w-3.5" />
+      </button>
+      {show && (
+        <div className="absolute left-5 top-0 z-50 w-56 rounded-lg border border-border bg-popover p-2.5 text-xs text-muted-foreground shadow-lg">
+          {text}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════
    MAIN PAGE
 ══════════════════════════════════════════════════════ */
 export default function WhatsAppPage() {
   const { tenantId, isLoading: authLoading } = useAuth();
   const [accounts, setAccounts] = useState<WhatsappAccount[]>([]);
   const [loadingAccounts, setLoadingAccounts] = useState(true);
+  const [metaCfg, setMetaCfg] = useState<MetaConfigPublic | null>(null);
 
   const [connectState, setConnectState] = useState<ConnectState>('idle');
   const [connectPath, setConnectPath] = useState<ConnectionPath | null>(null);
@@ -183,8 +713,12 @@ export default function WhatsAppPage() {
       return;
     }
     try {
-      const { data } = await whatsappApi.listAccounts(tenantId);
-      setAccounts(data);
+      const [accountsRes, cfgRes] = await Promise.allSettled([
+        whatsappApi.listAccounts(tenantId),
+        metaConfigApi.get(tenantId),
+      ]);
+      if (accountsRes.status === 'fulfilled') setAccounts(accountsRes.value.data);
+      if (cfgRes.status === 'fulfilled') setMetaCfg(cfgRes.value.data);
     } catch {
       /* silent */
     } finally {
@@ -206,13 +740,14 @@ export default function WhatsAppPage() {
       setDiagLog([]);
       setShowDiag(false);
 
-      const appId = process.env.NEXT_PUBLIC_META_APP_ID ?? '';
-      const configId = process.env.NEXT_PUBLIC_META_CONFIG_ID ?? '';
+      // Try DB config first, then fall back to env vars
+      const appId = metaCfg?.appId || (process.env.NEXT_PUBLIC_META_APP_ID ?? '');
+      const configId = metaCfg?.configId || (process.env.NEXT_PUBLIC_META_CONFIG_ID ?? '');
 
-      // ① Check credentials
+      // ① Check credentials — if not configured, go to config form
       if (isPlaceholder(appId) || isPlaceholder(configId)) {
-        addLog('META_APP_ID not configured', 'error');
-        setConnectState('unconfigured');
+        addLog('META_APP_ID não configurado — abrindo configuração', 'warn');
+        setConnectState('config_meta');
         return;
       }
 
@@ -257,7 +792,6 @@ export default function WhatsAppPage() {
             response.status === 'connected' ? 'ok' : 'warn',
           );
 
-          // If response came back in <2s with non-connected status → likely popup blocked or app invalid
           if (response.status !== 'connected') {
             if (elapsed < 2000) {
               addLog('POPUP: blocked or app ID invalid (instant rejection)', 'error');
@@ -291,7 +825,7 @@ export default function WhatsAppPage() {
         },
       );
     },
-    [tenantId, addLog, startElapsed, clearTimers],
+    [tenantId, metaCfg, addLog, startElapsed, clearTimers],
   );
 
   /* ── Handle auth code from Meta ── */
@@ -342,8 +876,17 @@ export default function WhatsAppPage() {
         (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
         (err instanceof Error ? err.message : 'Erro desconhecido');
       addLog(`API ERROR: ${msg}`, 'error');
-      setErrorMsg(translateMetaError(msg));
-      setConnectState('error');
+      // If error is about Meta config, redirect to config form
+      if (
+        msg.toLowerCase().includes('app id') ||
+        msg.toLowerCase().includes('app secret') ||
+        msg.toLowerCase().includes('configuração meta')
+      ) {
+        setConnectState('config_meta');
+      } else {
+        setErrorMsg(translateMetaError(msg));
+        setConnectState('error');
+      }
     }
   };
 
@@ -383,13 +926,29 @@ export default function WhatsAppPage() {
     );
   }
 
+  /* ═══ META CONFIG FORM ═══ */
+  if (connectState === 'config_meta') {
+    return (
+      <MetaConfigForm
+        tenantId={tenantId ?? ''}
+        onSaved={(cfg) => {
+          setMetaCfg(cfg);
+          setConnectState('idle');
+        }}
+        onCancel={() => setConnectState('idle')}
+      />
+    );
+  }
+
   /* ═══ CONNECTED ═══ */
   if (accounts.length > 0 && connectState === 'idle') {
     return (
       <ConnectedView
         accounts={accounts}
+        metaCfg={metaCfg}
         onDisconnect={handleDisconnect}
         onReconnect={(id) => handleReconnect(id)}
+        onConfigMeta={() => setConnectState('config_meta')}
       />
     );
   }
@@ -555,14 +1114,14 @@ export default function WhatsAppPage() {
         icon={<ShieldAlert className="h-8 w-8 text-orange-500" />}
         iconBg="bg-orange-500/10"
         title="Janela bloqueada pelo navegador"
-        message="O Microsoft Edge bloqueou a janela da Meta. Permita popups para este site e tente novamente. No Edge: clique no ícone de popup na barra de endereço → Sempre permitir."
+        message="O navegador bloqueou a janela da Meta. Permita popups para este site e tente novamente."
         diagLog={diagLog}
         showDiag={showDiag}
         onToggleDiag={() => setShowDiag((v) => !v)}
         actions={
           <>
             <button
-              onClick={() => connectPath && launchEmbeddedSignup(connectPath)}
+              onClick={() => connectPath && void launchEmbeddedSignup(connectPath)}
               className="btn-primary rounded-xl px-6 py-3 text-sm font-semibold flex items-center gap-2"
             >
               <Zap className="h-4 w-4" /> Abrir Meta novamente
@@ -641,49 +1200,6 @@ export default function WhatsAppPage() {
     );
   }
 
-  /* ═══ UNCONFIGURED (dev / sem Meta App) ═══ */
-  if (connectState === 'unconfigured') {
-    return (
-      <div className="page-container flex flex-col items-center justify-center min-h-[70vh] gap-6 max-w-lg mx-auto text-center">
-        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-yellow-500/10">
-          <AlertTriangle className="h-8 w-8 text-yellow-500" />
-        </div>
-        <div>
-          <h2 className="text-xl font-display font-bold text-foreground">
-            Meta App não configurado
-          </h2>
-          <p className="text-sm text-muted-foreground mt-2 max-w-md">
-            Para conectar o WhatsApp Business, você precisa primeiro criar um App na Meta e obter as
-            credenciais.
-          </p>
-        </div>
-        <div className="w-full rounded-xl border border-border bg-surface-1 p-5 text-left space-y-3">
-          <p className="text-xs font-semibold text-foreground uppercase tracking-wider">
-            O que precisa ser configurado
-          </p>
-          {[
-            ['NEXT_PUBLIC_META_APP_ID', 'ID do seu Meta App (developers.facebook.com)'],
-            ['NEXT_PUBLIC_META_CONFIG_ID', 'Config ID do Embedded Signup'],
-            ['META_APP_SECRET', 'App Secret (apenas no servidor)'],
-          ].map(([key, desc]) => (
-            <div key={key} className="rounded-lg border border-border bg-surface-2 px-3 py-2">
-              <code className="text-xs text-primary">{key}</code>
-              <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
-            </div>
-          ))}
-        </div>
-        <div className="flex gap-3">
-          <button
-            onClick={cancelFlow}
-            className="btn-ghost border border-border rounded-xl px-6 py-3 text-sm"
-          >
-            Voltar
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   /* ═══ SELECTING PATH ═══ */
   if (connectState === 'selecting_path') {
     return (
@@ -698,7 +1214,7 @@ export default function WhatsAppPage() {
         </div>
         <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-4">
           <button
-            onClick={() => launchEmbeddedSignup('existing')}
+            onClick={() => void launchEmbeddedSignup('existing')}
             className="neural-card p-6 text-left hover:border-primary/40 transition-all group flex flex-col gap-3"
           >
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#25D366]/10">
@@ -717,7 +1233,7 @@ export default function WhatsAppPage() {
             </div>
           </button>
           <button
-            onClick={() => launchEmbeddedSignup('new')}
+            onClick={() => void launchEmbeddedSignup('new')}
             className="neural-card p-6 text-left hover:border-primary/40 transition-all group flex flex-col gap-3"
           >
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
@@ -747,7 +1263,13 @@ export default function WhatsAppPage() {
   }
 
   /* ═══ LANDING (default) ═══ */
-  return <DisconnectedLanding onConnect={() => setConnectState('selecting_path')} />;
+  return (
+    <DisconnectedLanding
+      metaCfg={metaCfg}
+      onConnect={() => setConnectState('selecting_path')}
+      onConfigMeta={() => setConnectState('config_meta')}
+    />
+  );
 }
 
 /* ══════════════════════════════════════════════════════
@@ -836,7 +1358,16 @@ function DiagPanel({
 /* ══════════════════════════════════════════════════════
    DISCONNECTED LANDING
 ══════════════════════════════════════════════════════ */
-function DisconnectedLanding({ onConnect }: { onConnect: () => void }) {
+function DisconnectedLanding({
+  metaCfg,
+  onConnect,
+  onConfigMeta,
+}: {
+  metaCfg: MetaConfigPublic | null;
+  onConnect: () => void;
+  onConfigMeta: () => void;
+}) {
+  const isConfigured = metaCfg?.appId && !isPlaceholder(metaCfg.appId);
   return (
     <div className="page-container space-y-8">
       <div
@@ -867,22 +1398,39 @@ function DisconnectedLanding({ onConnect }: { onConnect: () => void }) {
                 crie campanhas e permita que sua IA agende reuniões.
               </p>
             </div>
-            <button
-              onClick={onConnect}
-              className="inline-flex items-center gap-2.5 rounded-xl px-6 py-3.5 text-sm font-bold transition-all"
-              style={{
-                background: 'linear-gradient(135deg, #25D366, #128C7E)',
-                color: '#fff',
-                boxShadow: '0 4px 24px rgba(37,211,102,0.25)',
-              }}
-            >
-              <Smartphone className="h-4 w-4" />
-              Conectar WhatsApp
-              <ArrowRight className="h-4 w-4" />
-            </button>
-            <p className="text-xs text-muted-foreground">
-              Configuração guiada. Leva poucos minutos.
-            </p>
+            <div className="flex flex-wrap gap-3">
+              <button
+                onClick={onConnect}
+                className="inline-flex items-center gap-2.5 rounded-xl px-6 py-3.5 text-sm font-bold transition-all"
+                style={{
+                  background: 'linear-gradient(135deg, #25D366, #128C7E)',
+                  color: '#fff',
+                  boxShadow: '0 4px 24px rgba(37,211,102,0.25)',
+                }}
+              >
+                <Smartphone className="h-4 w-4" />
+                Conectar WhatsApp
+                <ArrowRight className="h-4 w-4" />
+              </button>
+              <button
+                onClick={onConfigMeta}
+                className="inline-flex items-center gap-2 rounded-xl border border-border px-5 py-3.5 text-sm font-medium hover:bg-surface-1 transition-colors"
+              >
+                <Settings className="h-4 w-4" />
+                {isConfigured ? 'Configuração Meta' : 'Configurar App Meta'}
+                {!isConfigured && (
+                  <span className="ml-1 rounded-full bg-yellow-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-yellow-600">
+                    Necessário
+                  </span>
+                )}
+              </button>
+            </div>
+            {!isConfigured && (
+              <p className="text-xs text-yellow-600 dark:text-yellow-400">
+                Configure o App Meta antes de conectar o WhatsApp.
+              </p>
+            )}
+            <p className="text-xs text-muted-foreground">Configuração guiada. Leva poucos minutos.</p>
           </div>
           <div className="space-y-3 lg:pt-2">
             {[
@@ -913,13 +1461,13 @@ function DisconnectedLanding({ onConnect }: { onConnect: () => void }) {
           {[
             {
               step: '1',
-              title: 'Conectar',
-              desc: 'Autorize o Walletz acessar o seu WhatsApp Business em segundos.',
+              title: 'Configurar App',
+              desc: 'Configure as credenciais do seu App Meta (App ID, Secret, Config ID).',
             },
             {
               step: '2',
-              title: 'Configurar',
-              desc: 'Escolha o agente que atenderá seus clientes pelo WhatsApp.',
+              title: 'Conectar',
+              desc: 'Autorize o Walletz acessar o seu WhatsApp Business em segundos.',
             },
             {
               step: '3',
@@ -955,10 +1503,6 @@ function DisconnectedLanding({ onConnect }: { onConnect: () => void }) {
 /* ══════════════════════════════════════════════════════
    CONNECTED VIEW
 ══════════════════════════════════════════════════════ */
-/**
- * The number only answers customers with the agent chosen here. Without an
- * explicit assignment inbound messages are stored but never answered by AI.
- */
 function AgentAssignment({ account }: { account: WhatsappAccount }) {
   const { tenantId } = useAuth();
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -1034,12 +1578,16 @@ function AgentAssignment({ account }: { account: WhatsappAccount }) {
 
 function ConnectedView({
   accounts,
+  metaCfg,
   onDisconnect,
   onReconnect,
+  onConfigMeta,
 }: {
   accounts: WhatsappAccount[];
+  metaCfg: MetaConfigPublic | null;
   onDisconnect: (id: string) => void;
   onReconnect: (accountId: string) => void;
+  onConfigMeta: () => void;
 }) {
   const primary = accounts[0]!;
   const statusOk = primary.status === 'connected';
@@ -1076,14 +1624,22 @@ function ConnectedView({
             Gerencie sua conexão, templates e campanhas.
           </p>
         </div>
-        {!statusOk && !isError && (
+        <div className="flex gap-2">
           <button
-            onClick={() => onReconnect(primary.id)}
-            className="btn-primary rounded-lg px-4 py-2 text-sm flex items-center gap-1.5"
+            onClick={onConfigMeta}
+            className="btn-ghost border border-border rounded-lg px-3 py-2 text-sm flex items-center gap-1.5"
           >
-            <RefreshCw className="h-3.5 w-3.5" /> Reconectar
+            <Settings className="h-3.5 w-3.5" /> App Meta
           </button>
-        )}
+          {!statusOk && !isError && (
+            <button
+              onClick={() => onReconnect(primary.id)}
+              className="btn-primary rounded-lg px-4 py-2 text-sm flex items-center gap-1.5"
+            >
+              <RefreshCw className="h-3.5 w-3.5" /> Reconectar
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="neural-card p-6 space-y-5">
@@ -1174,14 +1730,18 @@ function ConnectedView({
         })}
       </div>
 
+      {/* Connection health — real status from metaCfg when available */}
       <div className="neural-card p-5">
         <h3 className="text-sm font-semibold text-foreground mb-3">Saúde da conexão</h3>
         <div className="space-y-0">
           {[
             { label: 'Conexão API', ok: statusOk },
-            { label: 'Webhook ativo', ok: true },
+            {
+              label: 'Webhook ativo',
+              ok: metaCfg?.webhookStatus === 'ok' || metaCfg?.webhookStatus === 'unknown',
+            },
             { label: 'Número verificado', ok: !!primary.phoneNumber },
-            { label: 'Tokens válidos', ok: statusOk },
+            { label: 'App Meta configurado', ok: !!(metaCfg?.appId && !isPlaceholder(metaCfg.appId)) },
           ].map((h) => (
             <div
               key={h.label}

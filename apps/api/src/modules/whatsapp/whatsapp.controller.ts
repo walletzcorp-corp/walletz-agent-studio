@@ -18,12 +18,14 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { Roles } from '../../shared/rbac/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { WhatsappService } from './whatsapp.service';
+import { MetaConfigService } from './meta-config.service';
 import {
   AssignAgentDto,
   ConnectWhatsappDto,
   EmbeddedSignupDto,
   SendMessageDto,
 } from './dto/connect-account.dto';
+import { SaveMetaConfigDto } from './dto/meta-config.dto';
 import { CurrentTenant } from '../../shared/rbac/tenant-context';
 import { Public } from '../../shared/rbac/access-policy.decorators';
 
@@ -32,7 +34,10 @@ import { Public } from '../../shared/rbac/access-policy.decorators';
 export class WhatsappController {
   private readonly logger = new Logger(WhatsappController.name);
 
-  constructor(private readonly whatsappService: WhatsappService) {}
+  constructor(
+    private readonly whatsappService: WhatsappService,
+    private readonly metaConfigService: MetaConfigService,
+  ) {}
 
   // ─── Webhook (public — no auth) ──────────────────────────────────────────────
 
@@ -190,5 +195,52 @@ export class WhatsappController {
   @ApiOperation({ summary: 'Get message statistics for account' })
   getStats(@CurrentTenant('tenantId') tenantId: string, @Param('accountId') accountId: string) {
     return this.whatsappService.getStats(tenantId, accountId);
+  }
+
+  // ─── Meta App Configuration ────────────────────────────────────────────────
+
+  @Get('tenants/:tenantId/whatsapp/meta-config')
+  @ApiBearerAuth()
+  @Roles('viewer')
+  @ApiOperation({ summary: 'Get Meta app configuration (secrets masked)' })
+  getMetaConfig(@CurrentTenant('tenantId') tenantId: string) {
+    return this.metaConfigService.getConfig(tenantId);
+  }
+
+  @Post('tenants/:tenantId/whatsapp/meta-config')
+  @ApiBearerAuth()
+  @Roles('admin', 'owner')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Save Meta app configuration' })
+  saveMetaConfig(
+    @CurrentTenant('tenantId') tenantId: string,
+    @CurrentUser('userId') userId: string,
+    @Body() dto: SaveMetaConfigDto,
+  ) {
+    return this.metaConfigService.saveConfig(dto, tenantId, userId);
+  }
+
+  @Post('tenants/:tenantId/whatsapp/meta-config/test')
+  @ApiBearerAuth()
+  @Roles('admin', 'owner')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Test Meta app credentials against Graph API' })
+  testMetaConfig(
+    @CurrentTenant('tenantId') tenantId: string,
+    @CurrentUser('userId') userId: string,
+  ) {
+    return this.metaConfigService.testConnection(tenantId, userId);
+  }
+
+  @Post('tenants/:tenantId/whatsapp/meta-config/test-webhook')
+  @ApiBearerAuth()
+  @Roles('admin', 'owner')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Test webhook endpoint reachability and challenge' })
+  testWebhook(
+    @CurrentTenant('tenantId') tenantId: string,
+    @CurrentUser('userId') userId: string,
+  ) {
+    return this.metaConfigService.testWebhook(tenantId, userId);
   }
 }
