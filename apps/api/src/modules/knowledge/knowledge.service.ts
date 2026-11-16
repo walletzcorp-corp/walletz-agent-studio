@@ -66,8 +66,16 @@ export class KnowledgeService {
     }
 
     const checksum = crypto.createHash('sha256').update(file.buffer).digest('hex');
-    const ext = file.originalname.split('.').pop() ?? 'bin';
-    const storageKey = `${tenantId}/${createId()}.${ext}`;
+
+    // Check per-tenant deduplication before storing
+    const existing = await this.repo.findSourceByChecksum(tenantId, checksum);
+    if (existing) {
+      return existing;
+    }
+
+    const ext = (file.originalname.split('.').pop() ?? 'bin').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const fileId = createId();
+    const storageKey = `tenants/${tenantId}/knowledge/${fileId}/original.${ext}`;
 
     await this.storage.upload({
       key: storageKey,
@@ -137,7 +145,8 @@ export class KnowledgeService {
   async createTyped(dto: CreateTypedSourceDto, tenantId: string, userId: string) {
     if (dto.agentId) await this.ownership.assertAgent(tenantId, dto.agentId);
     const checksum = crypto.createHash('sha256').update(dto.content).digest('hex');
-    const storageKey = `${tenantId}/${createId()}.txt`;
+    const fileId = createId();
+    const storageKey = `tenants/${tenantId}/knowledge/${fileId}/original.txt`;
 
     await this.storage.upload({
       key: storageKey,

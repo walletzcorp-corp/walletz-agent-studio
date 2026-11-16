@@ -3,6 +3,7 @@ import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { Inject } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';
+import { StorageService } from '../../shared/storage/storage.service';
 import { sql } from 'drizzle-orm';
 import { Public } from '../../shared/rbac/access-policy.decorators';
 
@@ -12,6 +13,7 @@ export class HealthController {
   constructor(
     @Inject(DRIZZLE_TOKEN) private readonly db: DrizzleDB,
     private readonly configService: ConfigService,
+    private readonly storageService: StorageService,
   ) {}
 
   @Get('health')
@@ -39,11 +41,32 @@ export class HealthController {
       checks['database'] = false;
     }
 
+    try {
+      const disk = this.storageService.getDiskStats();
+      checks['storage'] = disk.healthy;
+    } catch {
+      checks['storage'] = false;
+    }
+
     const allReady = Object.values(checks).every(Boolean);
 
     return {
       status: allReady ? 'ready' : 'not_ready',
       checks,
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  @Get('health/storage')
+  @Public('Storage disk statistics — no tenant data')
+  @ApiOperation({ summary: 'Storage disk stats and health' })
+  storageHealth() {
+    const disk = this.storageService.getDiskStats();
+    return {
+      healthy: disk.healthy,
+      freeGb: Math.round(disk.freeGb * 100) / 100,
+      totalGb: Math.round(disk.totalBytes / (1024 ** 3) * 100) / 100,
+      usedGb: Math.round(disk.usedBytes / (1024 ** 3) * 100) / 100,
       timestamp: new Date().toISOString(),
     };
   }

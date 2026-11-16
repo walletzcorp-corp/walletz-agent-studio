@@ -37,6 +37,7 @@ import { redisConfig } from './config/redis.config';
 import { jwtConfig } from './config/jwt.config';
 import { storageConfig } from './config/storage.config';
 import { anthropicConfig } from './config/anthropic.config';
+import { embeddingConfig } from './config/embedding.config';
 
 @Module({
   providers: [
@@ -53,7 +54,7 @@ import { anthropicConfig } from './config/anthropic.config';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [appConfig, databaseConfig, redisConfig, jwtConfig, storageConfig, anthropicConfig],
+      load: [appConfig, databaseConfig, redisConfig, jwtConfig, storageConfig, anthropicConfig, embeddingConfig],
       envFilePath: ['.env.local', '.env'],
     }),
     ThrottlerModule.forRootAsync({

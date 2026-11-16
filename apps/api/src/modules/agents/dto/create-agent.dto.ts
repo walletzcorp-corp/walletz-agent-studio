@@ -59,10 +59,9 @@ export class CreateAgentDto {
   ])
   template?: AgentTemplate;
 
-  @ApiProperty({ required: false, maxLength: 500 })
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
-  @MaxLength(500)
   objective?: string;
 
   @ApiProperty({ required: false })

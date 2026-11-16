@@ -12,10 +12,14 @@ import {
   HttpStatus,
   ParseFilePipe,
   MaxFileSizeValidator,
+  Res,
+  NotFoundException,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes, ApiHeader } from '@nestjs/swagger';
 import { KnowledgeService } from './knowledge.service';
+import { StorageService } from '../../shared/storage/storage.service';
 import { UploadSourceDto, CreateUrlSourceDto, CreateTypedSourceDto } from './dto/upload-source.dto';
 import { Roles } from '../../shared/rbac/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -27,7 +31,10 @@ import { CurrentTenant } from '../../shared/rbac/tenant-context';
 @ApiBearerAuth()
 @ApiHeader({ name: 'x-tenant-slug', required: true })
 export class KnowledgeController {
-  constructor(private readonly knowledgeService: KnowledgeService) {}
+  constructor(
+    private readonly knowledgeService: KnowledgeService,
+    private readonly storageService: StorageService,
+  ) {}
 
   @Get()
   @Roles('viewer')
@@ -103,5 +110,26 @@ export class KnowledgeController {
     @CurrentUser() user: JwtPayload,
   ) {
     await this.knowledgeService.deleteSource(sourceId, tenantId, user.sub);
+  }
+
+  @Get(':sourceId/download')
+  @Roles('viewer')
+  @ApiOperation({ summary: 'Download do arquivo original da fonte de conhecimento' })
+  async download(
+    @CurrentTenant('tenantId') tenantId: string,
+    @Param('sourceId') sourceId: string,
+    @Res() res: Response,
+  ) {
+    const source = await this.knowledgeService.getSource(sourceId, tenantId);
+    if (!source.storageKey) throw new NotFoundException('No file associated with this source');
+
+    const buffer = await this.storageService.readBuffer(source.storageKey);
+    if (!buffer) throw new NotFoundException('File not found in storage');
+
+    const filename = encodeURIComponent(source.name);
+    res.setHeader('Content-Type', source.mimeType ?? 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${filename}`);
+    res.setHeader('Content-Length', String(buffer.length));
+    res.send(buffer);
   }
 }

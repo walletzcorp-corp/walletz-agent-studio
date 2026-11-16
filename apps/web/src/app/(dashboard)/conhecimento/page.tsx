@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useAuth } from '../../../hooks/use-auth';
 import { knowledgeApi, type KnowledgeSource } from '../../../lib/knowledge-api';
+import { agentsApi, type Agent } from '../../../lib/agents-api';
 import { Button, Card, CardContent, CardHeader, CardTitle, Badge, Skeleton } from '@walletz/ui';
 import {
   Upload,
@@ -16,6 +17,7 @@ import {
   AlertCircle,
   CheckCircle2,
   Clock,
+  Download,
 } from 'lucide-react';
 
 const STATUS_CONFIG: Record<
@@ -26,13 +28,21 @@ const STATUS_CONFIG: Record<
     variant: 'default' | 'secondary' | 'outline' | 'success' | 'warning' | 'destructive';
   }
 > = {
-  pending: { label: 'Pendente', icon: <Clock className="h-3 w-3" />, variant: 'secondary' },
+  pending: {
+    label: 'Aguardando indexação',
+    icon: <Clock className="h-3 w-3" />,
+    variant: 'secondary',
+  },
   processing: {
-    label: 'Processando',
+    label: 'Indexando…',
     icon: <RefreshCw className="h-3 w-3 animate-spin" />,
     variant: 'warning',
   },
-  processed: { label: 'Pronto', icon: <CheckCircle2 className="h-3 w-3" />, variant: 'success' },
+  processed: {
+    label: 'Indexado',
+    icon: <CheckCircle2 className="h-3 w-3" />,
+    variant: 'success',
+  },
   failed: { label: 'Falhou', icon: <AlertCircle className="h-3 w-3" />, variant: 'destructive' },
   outdated: { label: 'Desatualizado', icon: <Clock className="h-3 w-3" />, variant: 'outline' },
 };
@@ -61,12 +71,15 @@ type UploadMode = 'file' | 'typed' | null;
 export default function KnowledgePage() {
   const { tenantId } = useAuth();
   const [sources, setSources] = useState<KnowledgeSource[]>([]);
+  const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<UploadMode>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [typedName, setTypedName] = useState('');
   const [typedContent, setTypedContent] = useState('');
+  const [selectedAgentId, setSelectedAgentId] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
   const load = async () => {
@@ -81,8 +94,19 @@ export default function KnowledgePage() {
     }
   };
 
+  const loadAgents = async () => {
+    if (!tenantId) return;
+    try {
+      const { data } = await agentsApi.list(tenantId);
+      setAgents(data.filter((a) => a.status !== 'archived'));
+    } catch {
+      // non-critical
+    }
+  };
+
   useEffect(() => {
     void load();
+    void loadAgents();
   }, [tenantId]);
 
   // Poll for processing sources every 5s
@@ -97,16 +121,22 @@ export default function KnowledgePage() {
     const file = e.target.files?.[0];
     if (!file || !tenantId) return;
     setUploading(true);
+    setUploadProgress(0);
     setError(null);
     try {
-      await knowledgeApi.upload(tenantId, file);
+      await knowledgeApi.upload(tenantId, file, {
+        agentId: selectedAgentId || undefined,
+        onProgress: setUploadProgress,
+      });
       setMode(null);
+      setSelectedAgentId('');
       await load();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       setError(msg ?? 'Erro no upload');
     } finally {
       setUploading(false);
+      setUploadProgress(0);
       if (fileRef.current) fileRef.current.value = '';
     }
   };
@@ -116,10 +146,15 @@ export default function KnowledgePage() {
     setUploading(true);
     setError(null);
     try {
-      await knowledgeApi.createTyped(tenantId, { name: typedName, content: typedContent });
+      await knowledgeApi.createTyped(tenantId, {
+        name: typedName,
+        content: typedContent,
+        agentId: selectedAgentId || undefined,
+      });
       setMode(null);
       setTypedName('');
       setTypedContent('');
+      setSelectedAgentId('');
       await load();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
@@ -147,6 +182,33 @@ export default function KnowledgePage() {
     } catch {
       /* silent */
     }
+  };
+
+  const handleDownload = async (source: KnowledgeSource) => {
+    if (!tenantId || !source.storageKey) return;
+    try {
+      const accessToken = localStorage.getItem('accessToken') ?? '';
+      const apiBase = process.env['NEXT_PUBLIC_API_URL'] ?? '/api/v1';
+      const url = `${apiBase}/tenants/${tenantId}/knowledge/${source.id}/download`;
+      const resp = await fetch(url, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!resp.ok) return;
+      const blob = await resp.blob();
+      const objUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objUrl;
+      a.download = source.name;
+      a.click();
+      URL.revokeObjectURL(objUrl);
+    } catch {
+      /* silent */
+    }
+  };
+
+  const agentName = (agentId: string | null) => {
+    if (!agentId) return null;
+    return agents.find((a) => a.id === agentId)?.name ?? null;
   };
 
   return (
@@ -183,7 +245,7 @@ export default function KnowledgePage() {
             ref={fileRef}
             type="file"
             className="hidden"
-            accept=".pdf,.docx,.txt,.csv,.html"
+            accept=".pdf,.docx,.txt,.csv,.html,.md"
             onChange={handleFileUpload}
           />
         </div>
@@ -212,6 +274,25 @@ export default function KnowledgePage() {
               value={typedContent}
               onChange={(e) => setTypedContent(e.target.value)}
             />
+            {agents.length > 0 && (
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">
+                  Associar a um agente (opcional)
+                </label>
+                <select
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  value={selectedAgentId}
+                  onChange={(e) => setSelectedAgentId(e.target.value)}
+                >
+                  <option value="">— Todos os agentes —</option>
+                  {agents.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="flex gap-2 justify-end">
               <Button variant="outline" onClick={() => setMode(null)}>
                 Cancelar
@@ -227,14 +308,47 @@ export default function KnowledgePage() {
         </Card>
       )}
 
-      {/* Upload indicator */}
+      {/* Upload progress indicator */}
       {mode === 'file' && uploading && (
         <Card>
-          <CardContent className="flex items-center gap-3 py-4">
-            <RefreshCw className="h-5 w-5 animate-spin text-primary" />
-            <span className="text-sm text-muted-foreground">Enviando arquivo…</span>
+          <CardContent className="py-4 space-y-2">
+            <div className="flex items-center gap-3">
+              <RefreshCw className="h-5 w-5 animate-spin text-primary shrink-0" />
+              <span className="text-sm text-muted-foreground flex-1">Enviando arquivo…</span>
+              <span className="text-sm font-medium text-primary">{uploadProgress}%</span>
+            </div>
+            <div className="w-full bg-secondary rounded-full h-1.5">
+              <div
+                className="bg-primary h-1.5 rounded-full transition-all duration-200"
+                style={{ width: `${uploadProgress}%` }}
+              />
+            </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Agent filter selector (when sources exist) */}
+      {!loading && sources.length > 0 && agents.length > 0 && (
+        <div className="flex items-center gap-2">
+          <label className="text-sm text-muted-foreground shrink-0">Filtrar por agente:</label>
+          <select
+            className="rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            onChange={(e) => {
+              const val = e.target.value;
+              void knowledgeApi
+                .list(tenantId!, val || undefined)
+                .then(({ data }) => setSources(data))
+                .catch(() => null);
+            }}
+          >
+            <option value="">Todos</option>
+            {agents.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </select>
+        </div>
       )}
 
       {loading ? (
@@ -276,6 +390,7 @@ export default function KnowledgePage() {
         <div className="space-y-2">
           {sources.map((source) => {
             const statusCfg = STATUS_CONFIG[source.status];
+            const agent = agentName(source.agentId);
             return (
               <Card key={source.id} className="hover:shadow-sm transition-shadow">
                 <CardContent className="flex items-center gap-4 py-4 px-5">
@@ -283,16 +398,19 @@ export default function KnowledgePage() {
 
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-sm truncate">{source.name}</p>
-                    <div className="flex items-center gap-2 mt-0.5">
+                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                       <span className="text-xs text-muted-foreground uppercase">{source.type}</span>
                       {source.fileSizeBytes != null && (
                         <span className="text-xs text-muted-foreground">
                           · {formatBytes(source.fileSizeBytes)}
                         </span>
                       )}
+                      {agent && (
+                        <span className="text-xs text-muted-foreground">· {agent}</span>
+                      )}
                       {source.processedAt && (
                         <span className="text-xs text-muted-foreground">
-                          · Processado {new Date(source.processedAt).toLocaleDateString('pt-BR')}
+                          · {new Date(source.processedAt).toLocaleDateString('pt-BR')}
                         </span>
                       )}
                     </div>
@@ -309,6 +427,16 @@ export default function KnowledgePage() {
                   </Badge>
 
                   <div className="flex items-center gap-1 shrink-0">
+                    {source.storageKey && source.status === 'processed' && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        title="Baixar arquivo original"
+                        onClick={() => handleDownload(source)}
+                      >
+                        <Download className="h-4 w-4" />
+                      </Button>
+                    )}
                     {source.status === 'failed' && (
                       <Button
                         variant="ghost"
