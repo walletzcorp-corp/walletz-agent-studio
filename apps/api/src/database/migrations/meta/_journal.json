@@ -1,0 +1,76 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1791223569227,
+      "tag": "0000_shocking_blonde_phantom",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791226238502,
+      "tag": "0001_sprint5-whatsapp",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791226540913,
+      "tag": "0002_sprint5-campaigns",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1793892590382,
+      "tag": "0003_spooky_maelstrom",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794496378403,
+      "tag": "0004_platform-admin",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794832284584,
+      "tag": "0005_customer-type",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794858008638,
+      "tag": "0006_byok-planos",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794860762178,
+      "tag": "0007_whatsapp-cliente",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794864652987,
+      "tag": "0008_conhecimento-rag",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1795000000000,
+      "tag": "0009_lab-conversations",
+      "breakpoints": true
+    }
+  ]
+}

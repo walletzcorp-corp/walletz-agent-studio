@@ -1,0 +1,139 @@
+'use client';
+
+import { useState, useCallback, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { authApi, tenantsApi, type LoginResponse } from '../lib/api';
+
+/** Decodifica o payload de um JWT (sem verificar assinatura) para extrair sessionId. */
+function extractSessionId(accessToken: string): string | null {
+  try {
+    const part = accessToken.split('.')[1];
+    if (!part) return null;
+    const payload = JSON.parse(atob(part.replace(/-/g, '+').replace(/_/g, '/'))) as Record<string, unknown>;
+    return typeof payload['sessionId'] === 'string' ? payload['sessionId'] : null;
+  } catch {
+    return null;
+  }
+}
+
+interface AuthState {
+  userId: string | null;
+  email: string | null;
+  tenantId: string | null;
+  tenantSlug: string | null;
+  tenantName: string | null;
+  role: string | null;
+  /** Só orienta a UI; o acesso a /admin é validado no servidor. */
+  isPlatformAdmin: boolean;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+}
+
+const INITIAL_STATE: AuthState = {
+  userId: null,
+  email: null,
+  tenantId: null,
+  tenantSlug: null,
+  tenantName: null,
+  role: null,
+  isPlatformAdmin: false,
+  isAuthenticated: false,
+  isLoading: true,
+};
+
+export function useAuth() {
+  const [state, setState] = useState<AuthState>(INITIAL_STATE);
+  const router = useRouter();
+
+  const storeTokens = useCallback((res: LoginResponse) => {
+    if (typeof window === 'undefined') return;
+    localStorage.setItem('accessToken', res.accessToken);
+    localStorage.setItem('refreshToken', res.refreshToken);
+    // sessionId fica no payload JWT — extrair aqui para o interceptor de refresh
+    const sessionId = extractSessionId(res.accessToken);
+    if (sessionId) localStorage.setItem('sessionId', sessionId);
+  }, []);
+
+  const clearTokens = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
+    localStorage.removeItem('sessionId');
+    localStorage.removeItem('tenantSlug');
+  }, []);
+
+  const loadUser = useCallback(async () => {
+    if (typeof window === 'undefined') {
+      setState((s) => ({ ...s, isLoading: false }));
+      return;
+    }
+
+    const token = localStorage.getItem('accessToken');
+    if (!token) {
+      setState({ ...INITIAL_STATE, isLoading: false });
+      return;
+    }
+
+    // Migração: sessões antigas não tinham sessionId no localStorage — extrai do JWT
+    if (!localStorage.getItem('sessionId')) {
+      const sessionId = extractSessionId(token);
+      if (sessionId) localStorage.setItem('sessionId', sessionId);
+    }
+
+    try {
+      const { data: user } = await authApi.me();
+      const { data: tenants } = await tenantsApi.myTenants();
+      const activeTenant = tenants[0];
+
+      setState({
+        userId: user.userId,
+        email: user.email,
+        tenantId: activeTenant?.tenantId ?? null,
+        tenantSlug: activeTenant?.tenantSlug ?? null,
+        tenantName: activeTenant?.tenantName ?? null,
+        role: activeTenant?.role ?? null,
+        isPlatformAdmin: user.isPlatformAdmin === true,
+        isAuthenticated: true,
+        isLoading: false,
+      });
+
+      if (activeTenant) {
+        localStorage.setItem('tenantSlug', activeTenant.tenantSlug);
+      } else {
+        localStorage.removeItem('tenantSlug');
+      }
+      return { isPlatformAdmin: user.isPlatformAdmin === true, hasTenant: !!activeTenant };
+    } catch {
+      clearTokens();
+      setState({ ...INITIAL_STATE, isLoading: false });
+      return { isPlatformAdmin: false, hasTenant: false };
+    }
+  }, [clearTokens]);
+
+  useEffect(() => {
+    loadUser();
+  }, [loadUser]);
+
+  const login = useCallback(async (email: string, password: string, mfaCode?: string) => {
+    const { data } = await authApi.login({ email, password, mfaCode });
+    if (data.requiresMfa) {
+      return { requiresMfa: true, mfaToken: data.mfaToken };
+    }
+    storeTokens(data);
+    const loaded = await loadUser();
+    // Admin da plataforma sem organização própria vai direto ao painel admin;
+    // usuário comum sem organização vai criar a primeira.
+    if (loaded?.hasTenant) router.push('/');
+    else router.push(loaded?.isPlatformAdmin ? '/admin' : '/auth/organizacao');
+    return { requiresMfa: false };
+  }, [storeTokens, loadUser, router]);
+
+  const logout = useCallback(async () => {
+    try { await authApi.logout(); } catch { /* ignore */ }
+    clearTokens();
+    setState({ ...INITIAL_STATE, isLoading: false });
+    router.push('/auth/login');
+  }, [clearTokens, router]);
+
+  return { ...state, login, logout, reload: loadUser };
+}
