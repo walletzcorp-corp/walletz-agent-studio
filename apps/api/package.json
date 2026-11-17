@@ -12,12 +12,12 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:e2e": "jest --config ./test/jest-e2e.json --passWithNoTests",
-    "db:migrate": "prisma migrate deploy",
-    "db:migrate:dev": "prisma migrate dev",
-    "db:migrate:reset": "prisma migrate reset --force",
+    "db:migrate": "node scripts/migrate.js deploy",
+    "db:migrate:dev": "node scripts/migrate.js dev",
+    "db:migrate:reset": "node scripts/migrate.js reset -- --force",
     "db:seed": "ts-node --project tsconfig.seed.json prisma/seed.ts",
     "db:studio": "prisma studio",
-    "db:reset": "prisma migrate reset --force && ts-node prisma/seed.ts",
+    "db:reset": "node scripts/migrate.js reset -- --force",
     "db:generate": "prisma generate"
   },
   "dependencies": {
