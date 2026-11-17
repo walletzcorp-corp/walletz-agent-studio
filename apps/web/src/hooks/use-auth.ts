@@ -4,6 +4,18 @@ import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { authApi, tenantsApi, type LoginResponse } from '../lib/api';
 
+/** Decodifica o payload de um JWT (sem verificar assinatura) para extrair sessionId. */
+function extractSessionId(accessToken: string): string | null {
+  try {
+    const part = accessToken.split('.')[1];
+    if (!part) return null;
+    const payload = JSON.parse(atob(part.replace(/-/g, '+').replace(/_/g, '/'))) as Record<string, unknown>;
+    return typeof payload['sessionId'] === 'string' ? payload['sessionId'] : null;
+  } catch {
+    return null;
+  }
+}
+
 interface AuthState {
   userId: string | null;
   email: string | null;
@@ -33,10 +45,12 @@ export function useAuth() {
   const [state, setState] = useState<AuthState>(INITIAL_STATE);
   const router = useRouter();
 
-  const storeTokens = useCallback((res: LoginResponse, sessionId?: string) => {
+  const storeTokens = useCallback((res: LoginResponse) => {
     if (typeof window === 'undefined') return;
     localStorage.setItem('accessToken', res.accessToken);
     localStorage.setItem('refreshToken', res.refreshToken);
+    // sessionId fica no payload JWT — extrair aqui para o interceptor de refresh
+    const sessionId = extractSessionId(res.accessToken);
     if (sessionId) localStorage.setItem('sessionId', sessionId);
   }, []);
 
@@ -58,6 +72,12 @@ export function useAuth() {
     if (!token) {
       setState({ ...INITIAL_STATE, isLoading: false });
       return;
+    }
+
+    // Migração: sessões antigas não tinham sessionId no localStorage — extrai do JWT
+    if (!localStorage.getItem('sessionId')) {
+      const sessionId = extractSessionId(token);
+      if (sessionId) localStorage.setItem('sessionId', sessionId);
     }
 
     try {

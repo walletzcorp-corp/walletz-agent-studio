@@ -38,6 +38,14 @@ function createApiClient(): AxiosInstance {
             );
             localStorage.setItem('accessToken', data.accessToken);
             localStorage.setItem('refreshToken', data.refreshToken);
+            // sessionId fica no payload do novo access token; regrava para próximas renovações
+            try {
+              const part = data.accessToken.split('.')[1];
+              if (part) {
+                const p = JSON.parse(atob(part.replace(/-/g, '+').replace(/_/g, '/'))) as Record<string, unknown>;
+                if (typeof p['sessionId'] === 'string') localStorage.setItem('sessionId', p['sessionId']);
+              }
+            } catch { /* mantém o sessionId anterior */ }
             if (error.config) {
               error.config.headers.Authorization = `Bearer ${data.accessToken}`;
               return client.request(error.config);
