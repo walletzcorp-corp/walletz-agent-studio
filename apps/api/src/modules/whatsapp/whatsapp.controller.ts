@@ -76,6 +76,7 @@ export class WhatsappController {
   @Get('tenants/:tenantId/whatsapp/accounts')
   @UseGuards(JwtAuthGuard, RbacGuard)
   @ApiBearerAuth()
+  @Roles('viewer')
   @ApiOperation({ summary: 'List WhatsApp accounts for tenant' })
   @Roles('viewer')
   @PlanExempt()
@@ -86,6 +87,7 @@ export class WhatsappController {
   @Get('tenants/:tenantId/whatsapp/accounts/:accountId')
   @UseGuards(JwtAuthGuard, RbacGuard)
   @ApiBearerAuth()
+  @Roles('viewer')
   @ApiOperation({ summary: 'Get WhatsApp account details' })
   @Roles('viewer')
   @PlanExempt()
@@ -191,6 +193,7 @@ export class WhatsappController {
   @Post('tenants/:tenantId/whatsapp/accounts/:accountId/send')
   @UseGuards(JwtAuthGuard, RbacGuard)
   @ApiBearerAuth()
+  @Roles('agent_operator')
   @ApiOperation({ summary: 'Send a text message via WhatsApp' })
   @Roles('admin')
   sendMessage(
@@ -241,6 +244,7 @@ export class WhatsappController {
   @Get('tenants/:tenantId/whatsapp/accounts/:accountId/templates')
   @UseGuards(JwtAuthGuard, RbacGuard)
   @ApiBearerAuth()
+  @Roles('viewer')
   @ApiOperation({ summary: 'List approved templates' })
   @Roles('viewer')
   listTemplates(
@@ -253,6 +257,7 @@ export class WhatsappController {
   @Get('tenants/:tenantId/whatsapp/accounts/:accountId/stats')
   @UseGuards(JwtAuthGuard, RbacGuard)
   @ApiBearerAuth()
+  @Roles('viewer')
   @ApiOperation({ summary: 'Get message statistics for account' })
   @Roles('viewer')
   getStats(
