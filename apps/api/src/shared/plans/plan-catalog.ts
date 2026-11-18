@@ -50,6 +50,8 @@ export interface PlanFeatures {
   crmConnectors: FeatureAvailability;
   whiteLabel: FeatureAvailability;
   campaigns: FeatureAvailability;
+  /** Conector de computador local (PC Connector). Fora da proposta v4.2: bloqueado até homologar. */
+  pcConnector: FeatureAvailability;
 }
 
 export type SupportTier = 'basico' | 'prioritario' | 'empresarial' | 'parceiro';
@@ -100,6 +102,7 @@ export const PLAN_CATALOG: Record<PlanSlug, PlanDefinition> = {
       crmConnectors: 'not_included',
       whiteLabel: 'not_included',
       campaigns: 'not_included',
+      pcConnector: 'in_development',
     },
     support: 'basico',
     supportTargetsHours: { p1: 8, p2: 24, p3: 48 },
@@ -132,6 +135,7 @@ export const PLAN_CATALOG: Record<PlanSlug, PlanDefinition> = {
       crmConnectors: 'not_included',
       whiteLabel: 'not_included',
       campaigns: 'not_included',
+      pcConnector: 'in_development',
     },
     support: 'prioritario',
     supportTargetsHours: { p1: 4, p2: 16, p3: 16 },
@@ -164,6 +168,7 @@ export const PLAN_CATALOG: Record<PlanSlug, PlanDefinition> = {
       crmConnectors: 'in_development',
       whiteLabel: 'not_included',
       campaigns: 'not_included',
+      pcConnector: 'in_development',
     },
     support: 'empresarial',
     supportTargetsHours: { p1: 2, p2: 8, p3: 8 },
@@ -198,6 +203,7 @@ export const PLAN_CATALOG: Record<PlanSlug, PlanDefinition> = {
       // Oferta condicionada (seção 06): só após validar isolamento, permissões e faturamento por subconta.
       whiteLabel: 'in_development',
       campaigns: 'not_included',
+      pcConnector: 'in_development',
     },
     support: 'parceiro',
     supportTargetsHours: { p1: 1, p2: 4, p3: 4 },
@@ -211,6 +217,20 @@ export function isPlanSlug(value: unknown): value is PlanSlug {
 /** Plano efetivo de um tenant: valores ausentes ou legados caem no Starter. */
 export function resolvePlan(planId: string | null | undefined): PlanDefinition {
   return PLAN_CATALOG[isPlanSlug(planId) ? planId : DEFAULT_PLAN];
+}
+
+/**
+ * Recurso liberado? Exceção do admin em `tenants.feature_flags` vence o plano
+ * (true libera sob medida, false bloqueia); sem exceção, só "available" libera.
+ */
+export function isFeatureEnabled(
+  plan: PlanDefinition,
+  overrides: Record<string, unknown>,
+  feature: keyof PlanFeatures,
+): boolean {
+  if (overrides[feature] === true) return true;
+  if (overrides[feature] === false) return false;
+  return plan.features[feature] === 'available';
 }
 
 export type PlanResource = keyof PlanLimits;

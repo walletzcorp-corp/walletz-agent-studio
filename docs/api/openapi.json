@@ -566,12 +566,10 @@
             "bearer": []
           }
         ]
-      }
-    },
-    "/api/v1/tenants/{tenantId}/members/invite": {
+      },
       "post": {
-        "operationId": "TenantsController_inviteMember",
-        "summary": "Convidar membro",
+        "operationId": "TenantsController_addMember",
+        "summary": "Adicionar usuário à organização (login novo, exclusivo desta organização)",
         "parameters": [
           {
             "name": "tenantId",
@@ -587,7 +585,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/InviteMemberDto"
+                "$ref": "#/components/schemas/AddMemberDto"
               }
             }
           }
@@ -610,7 +608,7 @@
     "/api/v1/tenants/{tenantId}/members/{membershipId}/role": {
       "patch": {
         "operationId": "TenantsController_updateMemberRole",
-        "summary": "Alterar papel do membro",
+        "summary": "Alterar papel do membro (o dono não muda)",
         "parameters": [
           {
             "name": "tenantId",
@@ -629,6 +627,16 @@
             }
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMemberRoleDto"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": ""
@@ -1293,10 +1301,39 @@
         ]
       }
     },
+    "/api/v1/tenants/{tenantId}/knowledge/formats": {
+      "get": {
+        "operationId": "KnowledgeController_formats",
+        "summary": "Formatos aceitos e limite técnico por arquivo",
+        "parameters": [
+          {
+            "name": "x-tenant-slug",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "knowledge"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/tenants/{tenantId}/knowledge": {
       "get": {
         "operationId": "KnowledgeController_findAll",
-        "summary": "Listar fontes de conhecimento do tenant",
+        "summary": "Listar documentos da base de conhecimento",
         "parameters": [
           {
             "name": "x-tenant-slug",
@@ -1341,7 +1378,7 @@
     "/api/v1/tenants/{tenantId}/knowledge/{sourceId}": {
       "get": {
         "operationId": "KnowledgeController_findOne",
-        "summary": "Detalhes da fonte de conhecimento",
+        "summary": "Detalhes do documento: metadados, trechos, indexação e prévia do texto",
         "parameters": [
           {
             "name": "x-tenant-slug",
@@ -1384,7 +1421,7 @@
       },
       "delete": {
         "operationId": "KnowledgeController_remove",
-        "summary": "Remover fonte de conhecimento",
+        "summary": "Excluir documento (arquivo, texto, trechos e embeddings)",
         "parameters": [
           {
             "name": "x-tenant-slug",
@@ -1426,10 +1463,55 @@
         ]
       }
     },
+    "/api/v1/tenants/{tenantId}/knowledge/{sourceId}/download": {
+      "get": {
+        "operationId": "KnowledgeController_download",
+        "summary": "Baixar o arquivo original",
+        "parameters": [
+          {
+            "name": "x-tenant-slug",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tenantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sourceId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "knowledge"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/tenants/{tenantId}/knowledge/upload": {
       "post": {
         "operationId": "KnowledgeController_uploadFile",
-        "summary": "Upload de arquivo (PDF, DOCX, TXT, CSV)",
+        "summary": "Enviar arquivo (PDF, DOCX, TXT, MD, CSV, HTML)",
         "parameters": [
           {
             "name": "x-tenant-slug",
@@ -1476,7 +1558,7 @@
     "/api/v1/tenants/{tenantId}/knowledge/url": {
       "post": {
         "operationId": "KnowledgeController_createFromUrl",
-        "summary": "Indexar URL",
+        "summary": "Indexar URL (ainda não disponível)",
         "parameters": [
           {
             "name": "x-tenant-slug",
@@ -1523,7 +1605,7 @@
     "/api/v1/tenants/{tenantId}/knowledge/typed": {
       "post": {
         "operationId": "KnowledgeController_createTyped",
-        "summary": "Criar fonte de texto digitado",
+        "summary": "Criar conteúdo digitado (título, conteúdo, agente, contexto)",
         "parameters": [
           {
             "name": "x-tenant-slug",
@@ -1567,10 +1649,65 @@
         ]
       }
     },
+    "/api/v1/tenants/{tenantId}/knowledge/{sourceId}/agent": {
+      "patch": {
+        "operationId": "KnowledgeController_setAgent",
+        "summary": "Alterar a associação: agente específico ou compartilhado (null)",
+        "parameters": [
+          {
+            "name": "x-tenant-slug",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tenantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sourceId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetSourceAgentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "knowledge"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/tenants/{tenantId}/knowledge/{sourceId}/retry": {
       "post": {
         "operationId": "KnowledgeController_retry",
-        "summary": "Reprocessar fonte com falha",
+        "summary": "Reprocessar (também indexa documentos que aguardavam IA)",
         "parameters": [
           {
             "name": "x-tenant-slug",
@@ -1604,6 +1741,332 @@
         },
         "tags": [
           "knowledge"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/tenants/{tenantId}/ai-connections/providers": {
+      "get": {
+        "operationId": "AiProvidersController_providers",
+        "summary": "Provedores homologados e links oficiais de compra/chave",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "ai-connections"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/tenants/{tenantId}/ai-connections": {
+      "get": {
+        "operationId": "AiProvidersController_list",
+        "summary": "Listar conexões de IA (chave sempre mascarada)",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "ai-connections"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "operationId": "AiProvidersController_create",
+        "summary": "Conectar chave de IA: valida autenticação, modelo e faturamento com uma chamada de teste",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAiConnectionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "ai-connections"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/tenants/{tenantId}/ai-connections/{connectionId}": {
+      "patch": {
+        "operationId": "AiProvidersController_update",
+        "summary": "Trocar a chave (rotação), o modelo ou o nome; a nova chave é validada antes de substituir",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "connectionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAiConnectionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "ai-connections"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "AiProvidersController_remove",
+        "summary": "Revogar a conexão (a chave cifrada é apagada)",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "connectionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "ai-connections"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/tenants/{tenantId}/ai-connections/{connectionId}/test": {
+      "post": {
+        "operationId": "AiProvidersController_test",
+        "summary": "Testar a chave salva (reativa após regularizar o faturamento no provedor)",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "connectionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "ai-connections"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/tenants/{tenantId}/ai-connections/{connectionId}/models": {
+      "get": {
+        "operationId": "AiProvidersController_models",
+        "summary": "Modelos disponíveis na conta do provedor",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "connectionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "ai-connections"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/tenants/{tenantId}/ai-connections/{connectionId}/default": {
+      "post": {
+        "operationId": "AiProvidersController_setDefault",
+        "summary": "Tornar a conexão padrão da organização",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "connectionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "ai-connections"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/tenants/{tenantId}/ai-connections/agents/{agentId}": {
+      "put": {
+        "operationId": "AiProvidersController_setAgentConnection",
+        "summary": "Definir qual conexão de IA o agente usa (null = padrão da organização)",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "agentId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetAgentAiConnectionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "ai-connections"
         ],
         "security": [
           {
@@ -2724,332 +3187,6 @@
         ]
       }
     },
-    "/api/v1/tenants/{tenantId}/ai-connections/providers": {
-      "get": {
-        "operationId": "AiProvidersController_providers",
-        "summary": "Provedores homologados e links oficiais de compra/chave",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "ai-connections"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/api/v1/tenants/{tenantId}/ai-connections": {
-      "get": {
-        "operationId": "AiProvidersController_list",
-        "summary": "Listar conexões de IA (chave sempre mascarada)",
-        "parameters": [
-          {
-            "name": "tenantId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "ai-connections"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      },
-      "post": {
-        "operationId": "AiProvidersController_create",
-        "summary": "Conectar chave de IA: valida autenticação, modelo e faturamento com uma chamada de teste",
-        "parameters": [
-          {
-            "name": "tenantId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateAiConnectionDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "ai-connections"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/api/v1/tenants/{tenantId}/ai-connections/{connectionId}": {
-      "patch": {
-        "operationId": "AiProvidersController_update",
-        "summary": "Trocar a chave (rotação), o modelo ou o nome; a nova chave é validada antes de substituir",
-        "parameters": [
-          {
-            "name": "tenantId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "connectionId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateAiConnectionDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "ai-connections"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      },
-      "delete": {
-        "operationId": "AiProvidersController_remove",
-        "summary": "Revogar a conexão (a chave cifrada é apagada)",
-        "parameters": [
-          {
-            "name": "tenantId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "connectionId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "ai-connections"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/api/v1/tenants/{tenantId}/ai-connections/{connectionId}/test": {
-      "post": {
-        "operationId": "AiProvidersController_test",
-        "summary": "Testar a chave salva (reativa após regularizar o faturamento no provedor)",
-        "parameters": [
-          {
-            "name": "tenantId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "connectionId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "ai-connections"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/api/v1/tenants/{tenantId}/ai-connections/{connectionId}/models": {
-      "get": {
-        "operationId": "AiProvidersController_models",
-        "summary": "Modelos disponíveis na conta do provedor",
-        "parameters": [
-          {
-            "name": "tenantId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "connectionId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "ai-connections"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/api/v1/tenants/{tenantId}/ai-connections/{connectionId}/default": {
-      "post": {
-        "operationId": "AiProvidersController_setDefault",
-        "summary": "Tornar a conexão padrão da organização",
-        "parameters": [
-          {
-            "name": "tenantId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "connectionId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "ai-connections"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/api/v1/tenants/{tenantId}/ai-connections/agents/{agentId}": {
-      "put": {
-        "operationId": "AiProvidersController_setAgentConnection",
-        "summary": "Definir qual conexão de IA o agente usa (null = padrão da organização)",
-        "parameters": [
-          {
-            "name": "tenantId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "agentId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SetAgentAiConnectionDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "ai-connections"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
     "/api/v1/tenants/{tenantId}/conversations": {
       "get": {
         "operationId": "ConversationsController_list",
@@ -3570,6 +3707,84 @@
         ]
       }
     },
+    "/api/v1/webhook/whatsapp/{accountId}": {
+      "get": {
+        "operationId": "WhatsappController_verifyAccountWebhook",
+        "summary": "Verificação do webhook exclusivo de um número (app Meta do cliente)",
+        "parameters": [
+          {
+            "name": "accountId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "hub.mode",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "hub.verify_token",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "hub.challenge",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "whatsapp"
+        ]
+      },
+      "post": {
+        "operationId": "WhatsappController_receiveAccountWebhook",
+        "summary": "Eventos do webhook exclusivo de um número (assinados com o App Secret do cliente)",
+        "parameters": [
+          {
+            "name": "accountId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-hub-signature-256",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "whatsapp"
+        ]
+      }
+    },
     "/api/v1/tenants/{tenantId}/whatsapp/accounts": {
       "get": {
         "operationId": "WhatsappController_listAccounts",
@@ -3600,7 +3815,7 @@
       },
       "post": {
         "operationId": "WhatsappController_connectAccount",
-        "summary": "Connect a WhatsApp account (manual — for advanced/technical use)",
+        "summary": "Conectar número com o app Meta do próprio cliente (token permanente + App Secret, validados na Meta)",
         "parameters": [
           {
             "name": "tenantId",
@@ -3734,6 +3949,137 @@
         },
         "responses": {
           "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "whatsapp"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/tenants/{tenantId}/whatsapp/accounts/{accountId}/webhook-setup": {
+      "get": {
+        "operationId": "WhatsappController_webhookSetup",
+        "summary": "Callback URL e token de verificação para colar no app Meta do cliente",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "accountId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "whatsapp"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/tenants/{tenantId}/whatsapp/accounts/{accountId}/credentials": {
+      "put": {
+        "operationId": "WhatsappController_updateCredentials",
+        "summary": "Trocar token e/ou App Secret (validados na Meta antes de substituir)",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "accountId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateWhatsappCredentialsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "whatsapp"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/tenants/{tenantId}/whatsapp/accounts/{accountId}/agent": {
+      "patch": {
+        "operationId": "WhatsappController_setAgent",
+        "summary": "Definir o agente que responde neste número",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "accountId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetWhatsappAgentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
             "description": ""
           }
         },
@@ -4851,6 +5197,35 @@
         ]
       }
     },
+    "/api/v1/admin/tenants/{tenantId}/activate": {
+      "post": {
+        "operationId": "AdminController_activate",
+        "summary": "Ativar organização (encerra o trial; cliente contratado)",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/admin/tenants/{tenantId}/extend-trial": {
       "post": {
         "operationId": "AdminController_extendTrial",
@@ -5821,13 +6196,47 @@
           }
         }
       },
-      "InviteMemberDto": {
+      "AddMemberDto": {
         "type": "object",
         "properties": {
           "email": {
             "type": "string",
-            "example": "user@exemplo.com"
+            "example": "colaborador@empresa.com.br"
           },
+          "firstName": {
+            "type": "string",
+            "example": "Maria"
+          },
+          "lastName": {
+            "type": "string",
+            "example": "Silva"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "admin",
+              "manager",
+              "agent_operator",
+              "analyst",
+              "viewer"
+            ]
+          },
+          "password": {
+            "type": "string",
+            "minLength": 8,
+            "description": "Senha inicial; o usuário pode trocar depois"
+          }
+        },
+        "required": [
+          "email",
+          "firstName",
+          "role",
+          "password"
+        ]
+      },
+      "UpdateMemberRoleDto": {
+        "type": "object",
+        "properties": {
           "role": {
             "type": "string",
             "enum": [
@@ -5840,7 +6249,6 @@
           }
         },
         "required": [
-          "email",
           "role"
         ]
       },
@@ -5871,7 +6279,7 @@
           },
           "objective": {
             "type": "string",
-            "maxLength": 500
+            "description": "Objetivo principal: texto longo, vários parágrafos, sem limite funcional de caracteres"
           },
           "persona": {
             "type": "object"
@@ -5919,7 +6327,7 @@
           },
           "objective": {
             "type": "string",
-            "maxLength": 500
+            "description": "Objetivo principal: texto longo, vários parágrafos, sem limite funcional de caracteres"
           },
           "persona": {
             "type": "object"
@@ -6027,11 +6435,15 @@
         "properties": {
           "name": {
             "type": "string",
-            "description": "Source name / title"
+            "description": "Título"
           },
           "content": {
             "type": "string",
-            "description": "Text content"
+            "description": "Conteúdo (sem limite funcional; o limite técnico é KNOWLEDGE_MAX_FILE_SIZE_MB)"
+          },
+          "context": {
+            "type": "string",
+            "description": "Contexto opcional (quando/como usar este conteúdo)"
           },
           "agentId": {
             "type": "string"
@@ -6046,6 +6458,80 @@
         "required": [
           "name",
           "content"
+        ]
+      },
+      "SetSourceAgentDto": {
+        "type": "object",
+        "properties": {
+          "agentId": {
+            "type": "object",
+            "nullable": true,
+            "description": "Agente específico; null = compartilhado com todos os agentes"
+          }
+        },
+        "required": [
+          "agentId"
+        ]
+      },
+      "CreateAiConnectionDto": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": [
+              "anthropic",
+              "openai",
+              "gemini",
+              "openrouter"
+            ]
+          },
+          "apiKey": {
+            "type": "string",
+            "description": "Chave de API da conta do próprio cliente no provedor. Nunca é devolvida."
+          },
+          "model": {
+            "type": "string",
+            "description": "Modelo. Sem valor, a API escolhe um modelo disponível na conta."
+          },
+          "label": {
+            "type": "string"
+          },
+          "makeDefault": {
+            "type": "boolean",
+            "description": "Tornar a conexão padrão da organização."
+          }
+        },
+        "required": [
+          "provider",
+          "apiKey"
+        ]
+      },
+      "UpdateAiConnectionDto": {
+        "type": "object",
+        "properties": {
+          "apiKey": {
+            "type": "string",
+            "description": "Nova chave (rotação). Validada antes de substituir a atual."
+          },
+          "model": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        }
+      },
+      "SetAgentAiConnectionDto": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "object",
+            "nullable": true,
+            "description": "Conexão usada pelo agente. null = conexão padrão da organização."
+          }
+        },
+        "required": [
+          "connectionId"
         ]
       },
       "CreateKnowledgeItemDto": {
@@ -6269,67 +6755,6 @@
           }
         }
       },
-      "CreateAiConnectionDto": {
-        "type": "object",
-        "properties": {
-          "provider": {
-            "type": "string",
-            "enum": [
-              "anthropic",
-              "openai",
-              "gemini",
-              "openrouter"
-            ]
-          },
-          "apiKey": {
-            "type": "string",
-            "description": "Chave de API da conta do próprio cliente no provedor. Nunca é devolvida."
-          },
-          "model": {
-            "type": "string",
-            "description": "Modelo. Sem valor, a API escolhe um modelo disponível na conta."
-          },
-          "label": {
-            "type": "string"
-          },
-          "makeDefault": {
-            "type": "boolean",
-            "description": "Tornar a conexão padrão da organização."
-          }
-        },
-        "required": [
-          "provider",
-          "apiKey"
-        ]
-      },
-      "UpdateAiConnectionDto": {
-        "type": "object",
-        "properties": {
-          "apiKey": {
-            "type": "string",
-            "description": "Nova chave (rotação). Validada antes de substituir a atual."
-          },
-          "model": {
-            "type": "string"
-          },
-          "label": {
-            "type": "string"
-          }
-        }
-      },
-      "SetAgentAiConnectionDto": {
-        "type": "object",
-        "properties": {
-          "connectionId": {
-            "type": "object",
-            "nullable": true,
-            "description": "Conexão usada pelo agente. null = conexão padrão da organização."
-          }
-        },
-        "required": [
-          "connectionId"
-        ]
-      },
       "SendMessageBody": {
         "type": "object",
         "properties": {}
@@ -6363,35 +6788,68 @@
         "properties": {
           "phoneNumberId": {
             "type": "string",
-            "description": "Phone Number ID from Meta Developer Console"
+            "description": "Phone Number ID (WhatsApp → Configuração da API, no app Meta do cliente)"
           },
           "wabaId": {
             "type": "string",
-            "description": "WhatsApp Business Account ID"
+            "description": "ID da conta do WhatsApp Business (WABA ID)"
           },
           "accessToken": {
             "type": "string",
-            "description": "Permanent or System User access token"
+            "description": "Token permanente de Usuário do Sistema com whatsapp_business_messaging e whatsapp_business_management"
+          },
+          "appId": {
+            "type": "string",
+            "description": "App ID do app Meta do cliente"
           },
           "appSecret": {
             "type": "string",
-            "description": "App Secret for webhook signature verification"
+            "description": "App Secret do app Meta do cliente (valida a assinatura dos webhooks)"
           },
-          "verifyToken": {
+          "agentId": {
             "type": "string",
-            "description": "Custom webhook verify token"
-          },
-          "webhookUrl": {
-            "type": "string",
-            "description": "Public webhook URL where Meta will send events"
+            "description": "Agente que responde neste número"
           }
         },
         "required": [
           "phoneNumberId",
           "wabaId",
           "accessToken",
-          "verifyToken",
-          "webhookUrl"
+          "appId",
+          "appSecret"
+        ]
+      },
+      "UpdateWhatsappCredentialsDto": {
+        "type": "object",
+        "properties": {
+          "appId": {
+            "type": "string",
+            "description": "App ID do app Meta (necessário para validar)"
+          },
+          "accessToken": {
+            "type": "string",
+            "description": "Novo token permanente"
+          },
+          "appSecret": {
+            "type": "string",
+            "description": "Novo App Secret"
+          }
+        },
+        "required": [
+          "appId"
+        ]
+      },
+      "SetWhatsappAgentDto": {
+        "type": "object",
+        "properties": {
+          "agentId": {
+            "type": "object",
+            "nullable": true,
+            "description": "Agente do número; null = primeiro agente publicado"
+          }
+        },
+        "required": [
+          "agentId"
         ]
       },
       "SendMessageDto": {
@@ -6506,6 +6964,21 @@
             "type": "string",
             "minLength": 8,
             "description": "Senha inicial; o usuário pode trocar depois"
+          },
+          "plan": {
+            "type": "string",
+            "enum": [
+              "starter",
+              "pro",
+              "business",
+              "agency"
+            ],
+            "description": "Com plano: cria também a organização do usuário nesse plano (ele vira dono). Sem plano: ele cria a organização no 1º acesso."
+          },
+          "organizationName": {
+            "type": "string",
+            "example": "Clínica São José",
+            "description": "Nome da organização (padrão: nome do usuário). Só com plano."
           }
         },
         "required": [
@@ -6574,7 +7047,8 @@
               "publicApi",
               "crmConnectors",
               "whiteLabel",
-              "campaigns"
+              "campaigns",
+              "pcConnector"
             ]
           },
           "enabled": {

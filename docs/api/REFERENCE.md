@@ -2,7 +2,7 @@
 
 > Arquivo gerado por `pnpm --filter @walletz/api docs:openapi`. Não edite à mão.
 
-Versão 1.0 · 151 rotas · prefixo `/api/v1` · autenticação Bearer (JWT), exceto onde indicado "sem JWT" (login, webhooks, callback OAuth, conector local — protegidos por outros meios).
+Versão 1.0 · 160 rotas · prefixo `/api/v1` · autenticação Bearer (JWT), exceto onde indicado "sem JWT" (login, webhooks, callback OAuth, conector local — protegidos por outros meios).
 
 ## Módulos
 
@@ -12,17 +12,17 @@ Versão 1.0 · 151 rotas · prefixo `/api/v1` · autenticação Bearer (JWT), ex
 | [tenants](#tenants) | Organizações e configurações | 11 |
 | [users](#users) | Usuários e convites | 1 |
 | [agents](#agents) | Agentes de IA | 14 |
-| [knowledge](#knowledge) | Base de conhecimento | 7 |
+| [knowledge](#knowledge) | Base de conhecimento | 10 |
 | [teach](#teach) | Ensinar a IA (fatos, diretrizes, exemplos) | 7 |
 | [lab](#lab) | Laboratório de testes | 1 |
 | [conversations](#conversations) | Conversas e inbox | 7 |
 | [contacts](#contacts) | Contatos e leads | 5 |
 | [campaigns](#campaigns) | Campanhas e cadências | 8 |
 | [calendars](#calendars) | Agendas Google e Microsoft | 12 |
-| [whatsapp](#whatsapp) | WhatsApp Business | 12 |
+| [whatsapp](#whatsapp) | WhatsApp Business | 17 |
 | [privacy](#privacy) | LGPD: exportação e exclusão de dados | 4 |
 | [pc-connector](#pc-connector) | Conector local (agente no computador do cliente) | 8 |
-| [admin](#admin) | Administração da plataforma | 15 |
+| [admin](#admin) | Administração da plataforma | 16 |
 | [health](#health) | Health checks | 2 |
 | [ai-connections](#ai-connections) |  | 9 |
 | [webchat](#webchat) |  | 4 |
@@ -62,8 +62,8 @@ Organizações e configurações
 | `GET` | `/api/v1/tenants/{tenantId}/feature-flags` | Recursos liberados para a organização (plano + exceções) | Bearer |
 | `GET` | `/api/v1/tenants/{tenantId}/plan` | Plano da organização, uso de cada limite e recursos liberados | Bearer |
 | `GET` | `/api/v1/tenants/{tenantId}/members` | Listar membros do tenant | Bearer |
-| `POST` | `/api/v1/tenants/{tenantId}/members/invite` | Convidar membro | Bearer |
-| `PATCH` | `/api/v1/tenants/{tenantId}/members/{membershipId}/role` | Alterar papel do membro | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/members` | Adicionar usuário à organização (login novo, exclusivo desta organização) | Bearer |
+| `PATCH` | `/api/v1/tenants/{tenantId}/members/{membershipId}/role` | Alterar papel do membro (o dono não muda) | Bearer |
 | `DELETE` | `/api/v1/tenants/{tenantId}/members/{membershipId}` | Remover membro | Bearer |
 
 ## users
@@ -101,13 +101,16 @@ Base de conhecimento
 
 | Método | Rota | Descrição | Auth |
 |---|---|---|---|
-| `GET` | `/api/v1/tenants/{tenantId}/knowledge` | Listar fontes de conhecimento do tenant | Bearer |
-| `GET` | `/api/v1/tenants/{tenantId}/knowledge/{sourceId}` | Detalhes da fonte de conhecimento | Bearer |
-| `DELETE` | `/api/v1/tenants/{tenantId}/knowledge/{sourceId}` | Remover fonte de conhecimento | Bearer |
-| `POST` | `/api/v1/tenants/{tenantId}/knowledge/upload` | Upload de arquivo (PDF, DOCX, TXT, CSV) | Bearer |
-| `POST` | `/api/v1/tenants/{tenantId}/knowledge/url` | Indexar URL | Bearer |
-| `POST` | `/api/v1/tenants/{tenantId}/knowledge/typed` | Criar fonte de texto digitado | Bearer |
-| `POST` | `/api/v1/tenants/{tenantId}/knowledge/{sourceId}/retry` | Reprocessar fonte com falha | Bearer |
+| `GET` | `/api/v1/tenants/{tenantId}/knowledge/formats` | Formatos aceitos e limite técnico por arquivo | Bearer |
+| `GET` | `/api/v1/tenants/{tenantId}/knowledge` | Listar documentos da base de conhecimento | Bearer |
+| `GET` | `/api/v1/tenants/{tenantId}/knowledge/{sourceId}` | Detalhes do documento: metadados, trechos, indexação e prévia do texto | Bearer |
+| `DELETE` | `/api/v1/tenants/{tenantId}/knowledge/{sourceId}` | Excluir documento (arquivo, texto, trechos e embeddings) | Bearer |
+| `GET` | `/api/v1/tenants/{tenantId}/knowledge/{sourceId}/download` | Baixar o arquivo original | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/knowledge/upload` | Enviar arquivo (PDF, DOCX, TXT, MD, CSV, HTML) | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/knowledge/url` | Indexar URL (ainda não disponível) | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/knowledge/typed` | Criar conteúdo digitado (título, conteúdo, agente, contexto) | Bearer |
+| `PATCH` | `/api/v1/tenants/{tenantId}/knowledge/{sourceId}/agent` | Alterar a associação: agente específico ou compartilhado (null) | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/knowledge/{sourceId}/retry` | Reprocessar (também indexa documentos que aguardavam IA) | Bearer |
 
 ## teach
 
@@ -199,11 +202,16 @@ WhatsApp Business
 |---|---|---|---|
 | `GET` | `/api/v1/webhook/whatsapp` | Meta webhook verification (GET challenge) | sem JWT |
 | `POST` | `/api/v1/webhook/whatsapp` | Receive WhatsApp Cloud API webhook events | sem JWT |
+| `GET` | `/api/v1/webhook/whatsapp/{accountId}` | Verificação do webhook exclusivo de um número (app Meta do cliente) | sem JWT |
+| `POST` | `/api/v1/webhook/whatsapp/{accountId}` | Eventos do webhook exclusivo de um número (assinados com o App Secret do cliente) | sem JWT |
 | `GET` | `/api/v1/tenants/{tenantId}/whatsapp/accounts` | List WhatsApp accounts for tenant | Bearer |
-| `POST` | `/api/v1/tenants/{tenantId}/whatsapp/accounts` | Connect a WhatsApp account (manual — for advanced/technical use) | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/whatsapp/accounts` | Conectar número com o app Meta do próprio cliente (token permanente + App Secret, validados na Meta) | Bearer |
 | `GET` | `/api/v1/tenants/{tenantId}/whatsapp/accounts/{accountId}` | Get WhatsApp account details | Bearer |
 | `DELETE` | `/api/v1/tenants/{tenantId}/whatsapp/accounts/{accountId}` | Disconnect a WhatsApp account | Bearer |
 | `POST` | `/api/v1/tenants/{tenantId}/whatsapp/embedded-signup` | Complete WhatsApp connection via Meta Embedded Signup (code exchange on backend) | Bearer |
+| `GET` | `/api/v1/tenants/{tenantId}/whatsapp/accounts/{accountId}/webhook-setup` | Callback URL e token de verificação para colar no app Meta do cliente | Bearer |
+| `PUT` | `/api/v1/tenants/{tenantId}/whatsapp/accounts/{accountId}/credentials` | Trocar token e/ou App Secret (validados na Meta antes de substituir) | Bearer |
+| `PATCH` | `/api/v1/tenants/{tenantId}/whatsapp/accounts/{accountId}/agent` | Definir o agente que responde neste número | Bearer |
 | `POST` | `/api/v1/tenants/{tenantId}/whatsapp/accounts/{accountId}/reconnect` | Reconnect WhatsApp account (renew token via Embedded Signup) | Bearer |
 | `POST` | `/api/v1/tenants/{tenantId}/whatsapp/accounts/{accountId}/send` | Send a text message via WhatsApp | Bearer |
 | `POST` | `/api/v1/tenants/{tenantId}/whatsapp/accounts/{accountId}/sync-templates` | Sync templates from Meta | Bearer |
@@ -253,6 +261,7 @@ Administração da plataforma
 | `GET` | `/api/v1/admin/llm` | Conexões de IA (chave do próprio cliente) de todas as organizações | Bearer |
 | `POST` | `/api/v1/admin/tenants/{tenantId}/suspend` | Suspender organização (bloqueia o uso; dados preservados) | Bearer |
 | `POST` | `/api/v1/admin/tenants/{tenantId}/reactivate` | Reativar organização suspensa | Bearer |
+| `POST` | `/api/v1/admin/tenants/{tenantId}/activate` | Ativar organização (encerra o trial; cliente contratado) | Bearer |
 | `POST` | `/api/v1/admin/tenants/{tenantId}/extend-trial` | Estender o período de trial | Bearer |
 | `PATCH` | `/api/v1/admin/tenants/{tenantId}/plan` | Alterar o plano comercial da organização (Starter, Pro, Business, Agency) | Bearer |
 | `PATCH` | `/api/v1/admin/tenants/{tenantId}/features` | Liberar/bloquear um recurso fora do plano (sob medida); null volta ao padrão | Bearer |

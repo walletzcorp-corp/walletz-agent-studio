@@ -596,6 +596,27 @@ export class AdminService {
     return updated;
   }
 
+  /**
+   * Cliente contratado: encerra o trial. Sem isso, a organização é bloqueada quando
+   * o trial vence (TRIAL_EXPIRED). Suspensa/cancelada não ativa por aqui.
+   */
+  async activateTenant(tenantId: string, actor: AdminActor) {
+    const tenant = await this.findTenantOrThrow(tenantId);
+    if (tenant.status === 'active') return tenant;
+    if (tenant.status !== 'trial') {
+      throw new BadRequestException('Só organizações em trial podem ser ativadas. Reative a organização suspensa primeiro.');
+    }
+    const updated = await this.updateTenant(tenantId, { status: 'active' });
+    this.logAction(
+      actor,
+      tenantId,
+      'admin.tenant.activated',
+      { status: tenant.status, trialEndsAt: tenant.trialEndsAt?.toISOString() ?? null },
+      { status: 'active' },
+    );
+    return updated;
+  }
+
   async extendTrial(tenantId: string, days: number, actor: AdminActor) {
     const tenant = await this.findTenantOrThrow(tenantId);
     const base = tenant.trialEndsAt && tenant.trialEndsAt > new Date() ? tenant.trialEndsAt : new Date();

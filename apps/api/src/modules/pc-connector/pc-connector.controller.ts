@@ -15,6 +15,7 @@ import { PcConnectorService } from './pc-connector.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RbacGuard } from '../../shared/rbac/rbac.guard';
 import { Roles } from '../../shared/rbac/roles.decorator';
+import { PlanExempt, RequiresFeature } from '../../shared/plans/requires-feature.decorator';
 
 // ── Authenticated tenant routes ───────────────────────────────────────────────
 
@@ -22,6 +23,7 @@ import { Roles } from '../../shared/rbac/roles.decorator';
 @Controller('tenants/:tenantId/pc-connector')
 @UseGuards(JwtAuthGuard, RbacGuard)
 @ApiBearerAuth()
+@RequiresFeature('pcConnector')
 export class PcConnectorTenantController {
   constructor(private readonly svc: PcConnectorService) {}
 
@@ -35,6 +37,7 @@ export class PcConnectorTenantController {
   @Get('devices')
   @Roles('viewer')
   @ApiOperation({ summary: 'Listar dispositivos conectados' })
+  @PlanExempt()
   listDevices(@Param('tenantId') tenantId: string) {
     return this.svc.listDevices(tenantId);
   }
@@ -42,6 +45,7 @@ export class PcConnectorTenantController {
   @Get('devices/:deviceId')
   @Roles('viewer')
   @ApiOperation({ summary: 'Obter dispositivo' })
+  @PlanExempt()
   getDevice(@Param('tenantId') tenantId: string, @Param('deviceId') deviceId: string) {
     return this.svc.getDevice(tenantId, deviceId);
   }
@@ -61,6 +65,7 @@ export class PcConnectorTenantController {
   @Roles('admin')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Desconectar dispositivo' })
+  @PlanExempt()
   disconnect(@Param('tenantId') tenantId: string, @Param('deviceId') deviceId: string) {
     return this.svc.disconnectDevice(tenantId, deviceId);
   }
@@ -84,7 +89,8 @@ export class PcConnectorPublicController {
   getPendingCommands(
     @Param('deviceId') deviceId: string,
   ) {
-    // Secret validation via header is handled in service
+    // ATENÇÃO: o dispositivo ainda não é autenticado nestas rotas; por isso o recurso fica
+    // bloqueado pelo plano (pcConnector) até ganhar segredo por dispositivo.
     return this.svc.getPendingCommands(deviceId);
   }
 

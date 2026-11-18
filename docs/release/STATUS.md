@@ -1,6 +1,6 @@
 # Status da Release — Walletz Agent Studio
 
-**Última atualização**: 2026-11-16  
+**Última atualização**: 2026-11-18  
 **Sprint atual**: 7 — Microsoft Graph Integration + Token Auto-Refresh + Teams Meeting
 
 ---
@@ -143,6 +143,26 @@ Ver detalhes em [EXTERNAL_BLOCKERS.md](EXTERNAL_BLOCKERS.md).
 | Validação de CPF/CNPJ (dígitos verificadores) no servidor e no front | ✅ | `shared/validation/tax-id.ts`; 400 "CPF inválido" / 409 "Já existe um cliente com este CPF." |
 | Painel `/admin/clientes`: botão "Novo cliente", filtro PF/PJ, coluna tipo/documento, busca por CPF/CNPJ | ✅ | CPF mascarado na lista (`***.456.789-**`), completo só no detalhe |
 | Testes | ✅ | unit 10 (CPF/CNPJ + DTO); E2E API 13/13 com banco real (inclui 403 para não-admin e campo extra recusado); navegador 6/6 |
+
+## Plano e papel validados em toda chamada da API (2026-11-18)
+
+Regra: a API sempre confere o plano atual da organização para continuar ou não, e não só ao criar. Regras completas em [PLANOS_E_ACESSOS.md](../product/PLANOS_E_ACESSOS.md).
+
+| Item | Status | Evidência |
+|------|--------|-----------|
+| Guard único nas rotas de organização | ✅ | `RbacGuard`: vínculo → suspensa/trial vencido → usuário dentro do limite → recurso do plano (`@RequiresFeature`) → papel (`@Roles`) |
+| Negação por padrão | ✅ | rota de organização sem `@Roles` → 403 `ROUTE_ROLE_NOT_DEFINED`; teste `route-roles.spec.ts` varre todos os controllers e falha se faltar papel, guard ou recurso |
+| Rotas que estavam abertas a qualquer membro | ✅ corrigido | campanhas, contatos (excluir/importar), conversas, envio avulso de WhatsApp, templates/estatísticas, exportação LGPD, Laboratório |
+| Recurso validado em toda rota, não só ao criar | ✅ | WhatsApp, agendas, webhooks, webchat, campanhas e PC Connector; consultar/excluir continuam liberados (`@PlanExempt`) |
+| Mesma regra fora do HTTP autenticado | ✅ | webhook de entrada do WhatsApp (o agente não responde), webchat público (widget indisponível), entrega de webhooks (descartada), ferramentas de agenda do agente, PC Connector (inclusive rotas públicas do script) |
+| Rebaixamento de plano: só os mais novos param | ✅ | usuários (o dono nunca), agentes, números, agendas, widgets, webhooks e chaves de IA acima do limite ficam bloqueados no uso (`PLAN_LIMIT_EXCEEDED`); nada é apagado; voltar de plano libera |
+| Trial vencido bloqueia | ✅ | 403 `TRIAL_EXPIRED` no painel e nos canais; nova ação do admin **Ativar organização** (`POST /v1/admin/tenants/:id/activate`, auditada) encerra o trial |
+| Corrida no limite | ✅ | criação reserva a vaga com `pg_advisory_xact_lock` por organização e recurso (agentes, usuários, chaves de IA, widgets, webhooks, WhatsApp, agendas) |
+| PC Connector | 🔒 bloqueado | `in_development` em todos os planos até autenticar o dispositivo (falha da análise de 04/11 §4.5) |
+| Painel | ✅ | faixa fixa para trial vencido, organização suspensa e usuário acima do limite; mensagens de plano mostradas como a API envia |
+| `SMTP_SECURE=false` lido como verdadeiro | ✅ corrigido | variável de ambiente agora é comparada como texto |
+| Testes | ✅ | unit 127 (inclui 14 do guard e 4 de cobertura de rotas); integração com Postgres 4/4 (`pnpm --filter @walletz/api test:integration`); E2E HTTP local 27/27 (papéis, recurso fora do plano, corrida com 5 criações simultâneas → 1, rebaixamento Pro→Starter, trial vencido e ativação, exceção do admin) |
+| Pendente | ⏳ | fluxo antigo de WhatsApp (Embedded Signup) confere o limite mas sem a trava; as organizações de produção estão em trial (vencem 26–30/11) e precisam ser ativadas pelo admin |
 
 ## Planos v4.2 e chave de IA do próprio cliente (BYOK) (2026-11-16)
 

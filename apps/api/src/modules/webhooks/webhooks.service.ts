@@ -166,7 +166,8 @@ export class WebhooksService implements OnModuleInit {
     const events = this.validateEvents(dto.events);
     const secret = `whsec_${crypto.randomBytes(24).toString('base64url')}`;
 
-    const [row] = await this.db
+    const [row] = await this.planLimits.withSlot(tenantId, 'outboundWebhooks', (tx) =>
+      tx
       .insert(outboundWebhooks)
       .values({
         tenantId,
@@ -176,7 +177,8 @@ export class WebhooksService implements OnModuleInit {
         events,
         createdByUserId: userId,
       })
-      .returning();
+      .returning(),
+    );
 
     await this.audit.log({
       tenantId,
@@ -197,6 +199,7 @@ export class WebhooksService implements OnModuleInit {
     userId: string,
   ): Promise<WebhookView> {
     const row = await this.getRow(tenantId, id);
+    await this.planLimits.assertWithinPlan(tenantId, 'outboundWebhooks', row.id);
     const patch: Partial<OutboundWebhook> = { updatedAt: new Date() };
     if (dto.url !== undefined) patch.url = (await this.assertSafeUrl(dto.url)).toString();
     if (dto.events !== undefined) patch.events = this.validateEvents(dto.events);
@@ -224,6 +227,7 @@ export class WebhooksService implements OnModuleInit {
 
   async rotateSecret(tenantId: string, id: string, userId: string): Promise<{ secret: string }> {
     await this.getRow(tenantId, id);
+    await this.planLimits.assertWithinPlan(tenantId, 'outboundWebhooks', id);
     const secret = `whsec_${crypto.randomBytes(24).toString('base64url')}`;
     await this.db
       .update(outboundWebhooks)
@@ -245,6 +249,7 @@ export class WebhooksService implements OnModuleInit {
   /** Envia agora um evento de teste e devolve o resultado (sem nova tentativa). */
   async sendTest(tenantId: string, id: string): Promise<{ ok: boolean; status: number | null; error: string | null }> {
     const row = await this.getRow(tenantId, id);
+    await this.planLimits.assertWithinPlan(tenantId, 'outboundWebhooks', row.id);
     try {
       const status = await this.post(row, 'webhook.test', crypto.randomUUID(), { message: 'Teste do Walletz Studio IA' });
       return { ok: true, status, error: null };
@@ -270,7 +275,11 @@ export class WebhooksService implements OnModuleInit {
             isNull(outboundWebhooks.deletedAt),
           ),
         );
-      const targets = hooks.filter((h) => ((h.events as string[]) ?? []).includes(event));
+      if (hooks.length === 0) return;
+      // Plano: organização ativa, webhooks no plano e só os webhooks dentro do limite (os mais antigos).
+      if (!(await this.planLimits.isUsable(tenantId, { feature: 'outboundWebhooks' }))) return;
+      const allowed = await this.planLimits.allowedIds(tenantId, 'outboundWebhooks');
+      const targets = hooks.filter((h) => allowed.has(h.id) && ((h.events as string[]) ?? []).includes(event));
       if (targets.length === 0) return;
       const occurredAt = new Date().toISOString();
       await this.db.insert(outboxEvents).values(
@@ -291,6 +300,15 @@ export class WebhooksService implements OnModuleInit {
     const webhookId = String(payload['webhookId'] ?? '');
     const [row] = await this.db.select().from(outboundWebhooks).where(eq(outboundWebhooks.id, webhookId)).limit(1);
     if (!row || row.deletedAt || !row.isActive) return; // removido/pausado: descarta
+    // Plano mudou entre o enfileiramento e a entrega: não entrega (e não tenta de novo).
+    const blocked = await this.planLimits.usageBlock(row.tenantId, {
+      feature: 'outboundWebhooks',
+      item: { resource: 'outboundWebhooks', id: row.id },
+    });
+    if (blocked) {
+      this.logger.warn(`Entrega do webhook ${row.id} descartada: ${blocked.message}`);
+      return;
+    }
 
     const event = String(payload['event']);
     const deliveryId = String(payload['deliveryId']);

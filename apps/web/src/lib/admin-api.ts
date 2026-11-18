@@ -252,6 +252,7 @@ export const adminApi = {
   suspend: (id: string, reason: string) => api.post(`/admin/tenants/${id}/suspend`, { reason }),
   reactivate: (id: string) => api.post(`/admin/tenants/${id}/reactivate`),
   extendTrial: (id: string, days: number) => api.post(`/admin/tenants/${id}/extend-trial`, { days }),
+  activate: (id: string) => api.post(`/admin/tenants/${id}/activate`),
   setTokenLimit: (id: string, limit: number | null) =>
     api.patch(`/admin/tenants/${id}/token-limit`, { limit }),
   setPlan: (id: string, plan: PlanSlug) => api.patch(`/admin/tenants/${id}/plan`, { plan }),
@@ -338,6 +339,7 @@ export const ACTION_LABELS: Record<string, string> = {
   'admin.tenant.suspended': 'Organização suspensa (admin)',
   'admin.tenant.reactivated': 'Organização reativada (admin)',
   'admin.tenant.trial_extended': 'Trial estendido (admin)',
+  'admin.tenant.activated': 'Organização ativada — fim do trial (admin)',
   'admin.tenant.token_limit_set': 'Limite de tokens alterado (admin)',
   'admin.user.created': 'Usuário criado (admin)',
   'admin.tenant.created': 'Cliente cadastrado (admin)',

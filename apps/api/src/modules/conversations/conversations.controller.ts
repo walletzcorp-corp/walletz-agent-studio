@@ -8,6 +8,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RbacGuard } from '../../shared/rbac/rbac.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { ConversationsService } from './conversations.service';
+import { Roles } from '../../shared/rbac/roles.decorator';
 
 class SendMessageBody {
   @IsString() @IsNotEmpty() @MaxLength(4096)
@@ -25,6 +26,7 @@ export class ConversationsController {
   @ApiOperation({ summary: 'Listar conversas (inbox)' })
   @ApiQuery({ name: 'status', required: false })
   @ApiQuery({ name: 'agentId', required: false })
+  @Roles('viewer')
   list(
     @Param('tenantId') tenantId: string,
     @Query('status') status?: string,
@@ -37,6 +39,7 @@ export class ConversationsController {
 
   @Get(':conversationId')
   @ApiOperation({ summary: 'Detalhar conversa' })
+  @Roles('viewer')
   get(
     @Param('tenantId') tenantId: string,
     @Param('conversationId') conversationId: string,
@@ -46,6 +49,7 @@ export class ConversationsController {
 
   @Get(':conversationId/messages')
   @ApiOperation({ summary: 'Listar mensagens da conversa' })
+  @Roles('viewer')
   getMessages(
     @Param('tenantId') tenantId: string,
     @Param('conversationId') conversationId: string,
@@ -55,6 +59,7 @@ export class ConversationsController {
 
   @Post(':conversationId/messages')
   @ApiOperation({ summary: 'Enviar mensagem como atendente humano' })
+  @Roles('agent_operator')
   sendMessage(
     @Param('tenantId') tenantId: string,
     @Param('conversationId') conversationId: string,
@@ -67,6 +72,7 @@ export class ConversationsController {
   @Post(':conversationId/assume')
   @ApiOperation({ summary: 'Assumir a conversa (pausa a IA)' })
   @HttpCode(200)
+  @Roles('agent_operator')
   assume(
     @Param('tenantId') tenantId: string,
     @Param('conversationId') conversationId: string,
@@ -78,6 +84,7 @@ export class ConversationsController {
   @Post(':conversationId/return-to-ai')
   @ApiOperation({ summary: 'Devolver a conversa para a IA' })
   @HttpCode(200)
+  @Roles('agent_operator')
   returnToAi(
     @Param('tenantId') tenantId: string,
     @Param('conversationId') conversationId: string,
@@ -88,6 +95,7 @@ export class ConversationsController {
   @Post(':conversationId/resolve')
   @ApiOperation({ summary: 'Marcar conversa como resolvida' })
   @HttpCode(200)
+  @Roles('agent_operator')
   resolve(
     @Param('tenantId') tenantId: string,
     @Param('conversationId') conversationId: string,

@@ -55,7 +55,9 @@ export class AgentsService {
     const template = dto.template ?? 'custom';
     const defaults = AGENT_TEMPLATE_DEFAULTS[template]!;
 
-    const [agent] = await this.db
+    // Reserva a vaga com trava: duas criações simultâneas não passam do limite do plano.
+    const [agent] = await this.planLimits.withSlot(tenantId, 'agents', (tx) =>
+      tx
       .insert(agents)
       .values({
         id: createId(),
@@ -73,7 +75,8 @@ export class AgentsService {
         createdByUserId: userId,
         status: 'draft',
       })
-      .returning();
+      .returning(),
+    );
 
     await this.auditService.log({
       userId,
@@ -115,6 +118,7 @@ export class AgentsService {
 
   async publish(id: string, tenantId: string, userId: string): Promise<AgentRelease> {
     const agent = await this.findById(id, tenantId);
+    await this.planLimits.assertUsable(tenantId, { item: { resource: 'agents', id: agent.id } });
 
     if (agent.status === 'archived') {
       throw new BadRequestException('Cannot publish an archived agent');
@@ -187,6 +191,7 @@ export class AgentsService {
 
   async resume(id: string, tenantId: string, userId: string): Promise<void> {
     const agent = await this.findById(id, tenantId);
+    await this.planLimits.assertUsable(tenantId, { item: { resource: 'agents', id: agent.id } });
     if (!agent.currentReleaseId) {
       throw new BadRequestException('Agent has no published release. Publish first.');
     }
@@ -223,6 +228,7 @@ export class AgentsService {
 
   async rollbackToRelease(agentId: string, releaseId: string, tenantId: string, userId: string): Promise<void> {
     const agent = await this.findById(agentId, tenantId);
+    await this.planLimits.assertUsable(tenantId, { item: { resource: 'agents', id: agent.id } });
 
     const [release] = await this.db
       .select()

@@ -7,6 +7,8 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RbacGuard } from '../../shared/rbac/rbac.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { CampaignsService } from './campaigns.service';
+import { Roles } from '../../shared/rbac/roles.decorator';
+import { PlanExempt, RequiresFeature } from '../../shared/plans/requires-feature.decorator';
 
 class CreateSegmentBody {
   @IsString() @IsNotEmpty() name!: string;
@@ -29,6 +31,7 @@ class CreateCampaignBody {
 @ApiTags('campaigns')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RbacGuard)
+@RequiresFeature('campaigns')
 @Controller()
 export class CampaignsController {
   constructor(private readonly campaignsService: CampaignsService) {}
@@ -37,12 +40,15 @@ export class CampaignsController {
 
   @Get('tenants/:tenantId/segments')
   @ApiOperation({ summary: 'Listar segmentos de contatos' })
+  @Roles('viewer')
+  @PlanExempt()
   listSegments(@Param('tenantId') tenantId: string) {
     return this.campaignsService.listSegments(tenantId);
   }
 
   @Post('tenants/:tenantId/segments')
   @ApiOperation({ summary: 'Criar segmento de contatos' })
+  @Roles('manager')
   createSegment(
     @Param('tenantId') tenantId: string,
     @Body() body: CreateSegmentBody,
@@ -54,6 +60,8 @@ export class CampaignsController {
   @Delete('tenants/:tenantId/segments/:segmentId')
   @ApiOperation({ summary: 'Excluir segmento' })
   @HttpCode(204)
+  @Roles('admin')
+  @PlanExempt()
   deleteSegment(
     @Param('tenantId') tenantId: string,
     @Param('segmentId') segmentId: string,
@@ -65,12 +73,16 @@ export class CampaignsController {
 
   @Get('tenants/:tenantId/campaigns')
   @ApiOperation({ summary: 'Listar campanhas' })
+  @Roles('viewer')
+  @PlanExempt()
   listCampaigns(@Param('tenantId') tenantId: string) {
     return this.campaignsService.listCampaigns(tenantId);
   }
 
   @Get('tenants/:tenantId/campaigns/:campaignId')
   @ApiOperation({ summary: 'Detalhar campanha' })
+  @Roles('viewer')
+  @PlanExempt()
   getCampaign(
     @Param('tenantId') tenantId: string,
     @Param('campaignId') campaignId: string,
@@ -80,6 +92,7 @@ export class CampaignsController {
 
   @Post('tenants/:tenantId/campaigns')
   @ApiOperation({ summary: 'Criar campanha (rascunho)' })
+  @Roles('manager')
   createCampaign(
     @Param('tenantId') tenantId: string,
     @Body() body: CreateCampaignBody,
@@ -90,6 +103,7 @@ export class CampaignsController {
 
   @Get('tenants/:tenantId/campaigns/:campaignId/eligibility')
   @ApiOperation({ summary: 'Send Policy Gateway — check eligible recipients' })
+  @Roles('manager')
   checkEligibility(
     @Param('tenantId') tenantId: string,
     @Param('campaignId') campaignId: string,
@@ -100,6 +114,7 @@ export class CampaignsController {
   @Post('tenants/:tenantId/campaigns/:campaignId/launch')
   @HttpCode(200)
   @ApiOperation({ summary: 'Launch campaign after policy check' })
+  @Roles('admin')
   launchCampaign(
     @Param('tenantId') tenantId: string,
     @Param('campaignId') campaignId: string,

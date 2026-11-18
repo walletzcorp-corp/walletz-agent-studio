@@ -5,6 +5,7 @@
 | [REFERENCE.md](REFERENCE.md) | Lista de todas as rotas por módulo (gerada) |
 | [openapi.json](openapi.json) | Especificação OpenAPI 3: importe no Postman, Insomnia ou gerador de cliente (gerada) |
 | Swagger UI | Documentação interativa: só na máquina de desenvolvimento |
+| [PLANOS_E_ACESSOS.md](../product/PLANOS_E_ACESSOS.md) | Regras de plano, papéis e códigos de erro 403 aplicados em toda rota |
 
 ## Swagger (somente local)
 

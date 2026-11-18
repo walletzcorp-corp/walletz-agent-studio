@@ -178,7 +178,8 @@ export class AiProvidersService {
     const existing = await this.list(tenantId);
     const makeDefault = dto.makeDefault === true || existing.length === 0;
 
-    const row = await this.db.transaction(async (tx) => {
+    // Reserva a vaga com trava: duas conexões simultâneas não passam do limite do plano.
+    const row = await this.planLimits.withSlot(tenantId, 'aiConnections', async (tx) => {
       if (makeDefault) {
         await tx
           .update(aiProviderConnections)
@@ -409,11 +410,17 @@ export class AiProvidersService {
    * Bloqueia (sem chamar o provedor) quando a chave está inválida ou sem faturamento.
    */
   async resolveForAgent(tenantId: string, agentConnectionId: string | null): Promise<ResolvedLlm> {
-    const rows = await this.db
+    const allRows = await this.db
       .select()
       .from(aiProviderConnections)
       .where(and(eq(aiProviderConnections.tenantId, tenantId), isNull(aiProviderConnections.deletedAt)))
       .orderBy(asc(aiProviderConnections.createdAt));
+    // Só as conexões dentro do limite do plano podem ser usadas (as mais novas acima dele ficam paradas).
+    const allowed = await this.planLimits.allowedIds(tenantId, 'aiConnections');
+    if (agentConnectionId && allRows.some((r) => r.id === agentConnectionId) && !allowed.has(agentConnectionId)) {
+      await this.planLimits.assertWithinPlan(tenantId, 'aiConnections', agentConnectionId);
+    }
+    const rows = allRows.filter((r) => allowed.has(r.id));
 
     const row =
       (agentConnectionId ? rows.find((r) => r.id === agentConnectionId) : undefined) ??
@@ -478,7 +485,8 @@ export class AiProvidersService {
         ),
       )
       .orderBy(asc(aiProviderConnections.createdAt));
-    const capable = rows.filter((r) => embeddingModelId(r.provider));
+    const allowed = await this.planLimits.allowedIds(tenantId, 'aiConnections');
+    const capable = rows.filter((r) => allowed.has(r.id) && embeddingModelId(r.provider));
     const row = capable.find((r) => r.isDefault) ?? capable.find((r) => r.provider === 'openai') ?? capable[0];
     if (!row) return null;
     const apiKey = this.decryptKey(row);

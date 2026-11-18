@@ -31,6 +31,7 @@ export class PrivacyController {
 
   @Get('tenants/:tenantId/privacy/contacts/:contactId/export')
   @ApiOperation({ summary: 'LGPD Art. 18 I — Export all data for a data subject' })
+  @Roles('admin')
   exportContactData(
     @Param('tenantId') tenantId: string,
     @Param('contactId') contactId: string,
@@ -58,6 +59,7 @@ export class PrivacyController {
 
   @Get('tenants/:tenantId/privacy/consents')
   @ApiOperation({ summary: 'List all consent records for tenant' })
+  @Roles('manager')
   listConsents(
     @Param('tenantId') tenantId: string,
     @Query('channel') channel?: string,

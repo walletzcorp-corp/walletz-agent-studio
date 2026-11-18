@@ -17,8 +17,9 @@ export class MailService {
     } else {
       this.transporter = nodemailer.createTransport({
         host,
-        port: configService.get<number>('SMTP_PORT', 587),
-        secure: configService.get<boolean>('SMTP_SECURE', false),
+        // Variável de ambiente é texto: "false" não pode virar true.
+        secure: String(configService.get<string>('SMTP_SECURE') ?? '').trim().toLowerCase() === 'true',
+        port: Number(configService.get<string>('SMTP_PORT') ?? 587),
         auth: {
           user: configService.getOrThrow('SMTP_USER'),
           pass: configService.getOrThrow('SMTP_PASS'),

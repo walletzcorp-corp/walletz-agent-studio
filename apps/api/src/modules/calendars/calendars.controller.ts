@@ -13,12 +13,14 @@ import { RbacGuard } from '../../shared/rbac/rbac.guard';
 import { Roles } from '../../shared/rbac/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/auth.service';
+import { PlanExempt, RequiresFeature } from '../../shared/plans/requires-feature.decorator';
 
 @ApiTags('calendars')
 @Controller('tenants/:tenantId/calendars')
 @UseGuards(JwtAuthGuard, RbacGuard)
 @ApiBearerAuth()
 @ApiHeader({ name: 'x-tenant-slug', required: false })
+@RequiresFeature('calendars')
 export class CalendarsController {
   constructor(private readonly svc: CalendarsService) {}
 
@@ -27,6 +29,7 @@ export class CalendarsController {
   @Get('connections')
   @Roles('viewer')
   @ApiOperation({ summary: 'Listar conexões de calendário do tenant' })
+  @PlanExempt()
   listConnections(@Param('tenantId') tenantId: string) {
     return this.svc.listConnections(tenantId);
   }
@@ -35,6 +38,7 @@ export class CalendarsController {
   @Roles('admin')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Desconectar calendário' })
+  @PlanExempt()
   async disconnect(
     @Param('tenantId') tenantId: string,
     @Param('connectionId') connectionId: string,
@@ -125,6 +129,7 @@ export class CalendarsCallbackController {
 @Controller('tenants/:tenantId/calendars')
 @UseGuards(JwtAuthGuard, RbacGuard)
 @ApiBearerAuth()
+@RequiresFeature('calendars')
 export class CalendarsAvailabilityController {
   constructor(private readonly svc: CalendarsService) {}
 
@@ -148,6 +153,7 @@ export class CalendarsAvailabilityController {
   @ApiQuery({ name: 'from', required: false })
   @ApiQuery({ name: 'to', required: false })
   @ApiOperation({ summary: 'Listar reuniões' })
+  @PlanExempt()
   listMeetings(
     @Param('tenantId') tenantId: string,
     @Query('from') from?: string,
@@ -201,6 +207,7 @@ export class CalendarsAvailabilityController {
   @Get('agents/:agentId/settings')
   @Roles('viewer')
   @ApiOperation({ summary: 'Obter configurações de agendamento do agente' })
+  @PlanExempt()
   getAgentSettings(
     @Param('tenantId') tenantId: string,
     @Param('agentId') agentId: string,
