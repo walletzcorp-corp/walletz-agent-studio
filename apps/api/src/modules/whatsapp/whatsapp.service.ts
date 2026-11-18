@@ -290,53 +290,125 @@ export class WhatsappService {
       });
     }
 
-    // ── Passo 5+6: Validar WABA e Phone Number via /phone_numbers ────────────────
-    // Nota: GET /{wabaId} direto falha com subcode 2388339 para WABAs que não
-    // suportam esse endpoint. A listagem de /phone_numbers valida implicitamente
-    // que o WABA existe e é acessível com o token, e ainda confirma o número.
-    let phones: Array<{ id: string; display_phone_number?: string; verified_name?: string }> = [];
+    // ── Passo 5+6: Validar WABA e Phone Number ────────────────────────────────
+    // GET /{wabaId}/phone_numbers requer whatsapp_business_management. Para WABAs
+    // com subcode 2388339 ("not supported for this account"), tentamos GET
+    // /{phoneNumberId} direto como fallback — o token já foi validado acima.
+    let phone: { id: string; display_phone_number?: string; verified_name?: string } | undefined;
     try {
       const resp = await firstValueFrom(
         this.httpService.get(`${META_GRAPH_URL}/${input.wabaId}/phone_numbers`, {
           params: { access_token: input.accessToken, fields: 'id,display_phone_number,verified_name' },
         }),
       );
-      phones = (resp.data as { data?: typeof phones }).data ?? [];
+      const phones = (resp.data as { data?: typeof phone[] }).data ?? [];
+      phone = phones.find((p) => p?.id === input.phoneNumberId);
+      if (!phone) {
+        throw new BadRequestException({
+          code: 'PHONE_NUMBER_NOT_ACCESSIBLE',
+          message: 'Este Phone Number ID não pertence à conta WhatsApp Business (WABA) informada.',
+        });
+      }
     } catch (err) {
+      if (err instanceof BadRequestException) throw err;
       const e = this.extractMetaError(err);
-      this.logger.warn(`PHONE_NUMBER_NOT_ACCESSIBLE (list failed) wabaId=${input.wabaId} httpStatus=${e.httpStatus} code=${e.code} subcode=${e.subcode} fbtrace=${e.fbtrace}`);
-      throw new BadRequestException({
-        code: 'WABA_NOT_ACCESSIBLE',
-        message: 'WABA ID inválido ou token sem permissão para acessar esta conta WhatsApp Business.',
-      });
-    }
-
-    const phone = phones.find((p) => p.id === input.phoneNumberId);
-    if (!phone) {
-      this.logger.warn(`PHONE_NUMBER_NOT_ACCESSIBLE phoneNumberId=${input.phoneNumberId} not found in wabaId=${input.wabaId}`);
-      throw new BadRequestException({
-        code: 'PHONE_NUMBER_NOT_ACCESSIBLE',
-        message: 'Este Phone Number ID não pertence à conta WhatsApp Business (WABA) informada.',
-      });
+      this.logger.warn(`PHONE_NUMBER_LIST_FAILED wabaId=${input.wabaId} httpStatus=${e.httpStatus} code=${e.code} subcode=${e.subcode} fbtrace=${e.fbtrace} — trying GET /${input.phoneNumberId}`);
+      try {
+        const resp2 = await firstValueFrom(
+          this.httpService.get(`${META_GRAPH_URL}/${input.phoneNumberId}`, {
+            params: { access_token: input.accessToken, fields: 'id,display_phone_number,verified_name' },
+          }),
+        );
+        phone = resp2.data as typeof phone;
+      } catch (err2) {
+        const e2 = this.extractMetaError(err2);
+        this.logger.warn(`PHONE_NUMBER_DIRECT_LOOKUP_FAILED phoneNumberId=${input.phoneNumberId} httpStatus=${e2.httpStatus} code=${e2.code}`);
+        // Prossegue sem dados de exibição — token e WABA já foram validados acima
+      }
     }
 
     return {
-      ...(phone.verified_name ? { displayName: phone.verified_name } : {}),
-      ...(phone.display_phone_number ? { phoneNumber: phone.display_phone_number } : {}),
+      ...(phone?.verified_name ? { displayName: phone.verified_name } : {}),
+      ...(phone?.display_phone_number ? { phoneNumber: phone.display_phone_number } : {}),
       tokenExpiresAt: debug.expires_at ? new Date(debug.expires_at * 1000) : null,
     };
   }
 
   /** Inscreve o app do cliente para receber os eventos da WABA (sem isso o webhook não recebe mensagens). */
-  private async subscribeApp(wabaId: string, accessToken: string): Promise<boolean> {
+  private async subscribeApp(wabaId: string, accessToken: string): Promise<{
+    success: boolean;
+    error?: { httpStatus?: number; code?: number; subcode?: number; message?: string; type?: string; fbtrace?: string };
+  }> {
     try {
       await firstValueFrom(
         this.httpService.post(`${META_GRAPH_URL}/${wabaId}/subscribed_apps`, null, { params: { access_token: accessToken } }),
       );
-      return true;
+      return { success: true };
     } catch (err) {
-      this.logger.warn(`Falha ao inscrever app na WABA ${wabaId}: ${this.metaError(err)}`);
-      return false;
+      const e = this.extractMetaError(err);
+      this.logger.warn(`WABA_SUBSCRIBE_FAILED wabaId=${wabaId} httpStatus=${e.httpStatus} code=${e.code} subcode=${e.subcode} fbtrace=${e.fbtrace}`);
+      return { success: false, error: { ...e, message: this.metaError(err) } };
+    }
+  }
+
+  /** Reinscreveu o app na WABA e verifica a lista de apps inscritos. Retorna diagnóstico completo. */
+  async resubscribeWaba(tenantId: string, accountId: string): Promise<{
+    success: boolean;
+    subscribed: boolean;
+    subscribedApps: Array<{ id: string; name?: string }>;
+    error?: { httpStatus?: number; code?: number; subcode?: number; message?: string; type?: string; fbtrace?: string };
+  }> {
+    const account = await this.getAccount(tenantId, accountId);
+    const accessToken = this.decryptToken(account);
+
+    const subResult = await this.subscribeApp(account.wabaId, accessToken);
+    if (!subResult.success) {
+      return { success: false, subscribed: false, subscribedApps: [], error: subResult.error };
+    }
+
+    // Verificar lista de apps inscritos (GET /{wabaId}/subscribed_apps)
+    let subscribedApps: Array<{ id: string; name?: string }> = [];
+    try {
+      const resp = await firstValueFrom(
+        this.httpService.get(`${META_GRAPH_URL}/${account.wabaId}/subscribed_apps`, {
+          params: { access_token: accessToken },
+        }),
+      );
+      subscribedApps = (resp.data as { data?: typeof subscribedApps }).data ?? [];
+    } catch (err) {
+      const e = this.extractMetaError(err);
+      this.logger.warn(`WABA_GET_SUBSCRIPTIONS_FAILED wabaId=${account.wabaId} httpStatus=${e.httpStatus} code=${e.code} subcode=${e.subcode}`);
+    }
+
+    await this.auditService.log({
+      action: 'whatsapp.waba_resubscribed',
+      resourceType: 'whatsapp_account',
+      resourceId: accountId,
+      tenantId,
+      metadata: { wabaId: account.wabaId, subscribedCount: subscribedApps.length },
+    });
+
+    return { success: true, subscribed: true, subscribedApps };
+  }
+
+  /** Lista apps inscritos na WABA para diagnóstico. */
+  async getWabaSubscriptions(tenantId: string, accountId: string): Promise<{
+    subscribedApps: Array<{ id: string; name?: string }>;
+    error?: { httpStatus?: number; code?: number; subcode?: number; message?: string; fbtrace?: string };
+  }> {
+    const account = await this.getAccount(tenantId, accountId);
+    const accessToken = this.decryptToken(account);
+
+    try {
+      const resp = await firstValueFrom(
+        this.httpService.get(`${META_GRAPH_URL}/${account.wabaId}/subscribed_apps`, {
+          params: { access_token: accessToken },
+        }),
+      );
+      return { subscribedApps: (resp.data as { data?: Array<{ id: string; name?: string }> }).data ?? [] };
+    } catch (err) {
+      const e = this.extractMetaError(err);
+      return { subscribedApps: [], error: { ...e, message: this.metaError(err) } };
     }
   }
 
@@ -400,7 +472,7 @@ export class WhatsappService {
       .onConflictDoUpdate({ target: whatsappAccounts.phoneNumberId, set: { tenantId, connectedByUserId: userId, ...values } })
       .returning();
 
-    const subscribed = await this.subscribeApp(values.wabaId, accessToken);
+    const { success: subscribed } = await this.subscribeApp(values.wabaId, accessToken);
 
     await this.auditService.log({
       action: 'whatsapp.account_connected',
