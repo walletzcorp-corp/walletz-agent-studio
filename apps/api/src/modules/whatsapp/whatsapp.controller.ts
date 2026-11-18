@@ -7,10 +7,10 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger'
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RbacGuard } from '../../shared/rbac/rbac.guard';
 import { Roles } from '../../shared/rbac/roles.decorator';
-import { RequiresFeature } from '../../shared/plans/requires-feature.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { WhatsappService } from './whatsapp.service';
 import { ConnectWhatsappDto, EmbeddedSignupDto, SendMessageDto, UpdateWhatsappCredentialsDto, SetWhatsappAgentDto } from './dto/connect-account.dto';
+import { PlanExempt, RequiresFeature } from '../../shared/plans/requires-feature.decorator';
 
 @ApiTags('whatsapp')
 @RequiresFeature('whatsapp')
@@ -77,6 +77,8 @@ export class WhatsappController {
   @UseGuards(JwtAuthGuard, RbacGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'List WhatsApp accounts for tenant' })
+  @Roles('viewer')
+  @PlanExempt()
   listAccounts(@Param('tenantId') tenantId: string) {
     return this.whatsappService.listAccounts(tenantId).then((rows) => rows.map((r) => this.whatsappService.toView(r)));
   }
@@ -85,6 +87,8 @@ export class WhatsappController {
   @UseGuards(JwtAuthGuard, RbacGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get WhatsApp account details' })
+  @Roles('viewer')
+  @PlanExempt()
   getAccount(
     @Param('tenantId') tenantId: string,
     @Param('accountId') accountId: string,
@@ -175,6 +179,7 @@ export class WhatsappController {
   @Roles('admin', 'owner')
   @HttpCode(204)
   @ApiOperation({ summary: 'Disconnect a WhatsApp account' })
+  @PlanExempt()
   disconnectAccount(
     @Param('tenantId') tenantId: string,
     @Param('accountId') accountId: string,
@@ -187,6 +192,7 @@ export class WhatsappController {
   @UseGuards(JwtAuthGuard, RbacGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Send a text message via WhatsApp' })
+  @Roles('admin')
   sendMessage(
     @Param('tenantId') tenantId: string,
     @Param('accountId') accountId: string,
@@ -236,6 +242,7 @@ export class WhatsappController {
   @UseGuards(JwtAuthGuard, RbacGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'List approved templates' })
+  @Roles('viewer')
   listTemplates(
     @Param('tenantId') tenantId: string,
     @Param('accountId') accountId: string,
@@ -247,6 +254,7 @@ export class WhatsappController {
   @UseGuards(JwtAuthGuard, RbacGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get message statistics for account' })
+  @Roles('viewer')
   getStats(
     @Param('tenantId') tenantId: string,
     @Param('accountId') accountId: string,
