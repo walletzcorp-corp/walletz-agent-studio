@@ -19,7 +19,7 @@ import {
 } from '../../database/schema/contacts';
 import { agents } from '../../database/schema/agents';
 import { AuditService } from '../../shared/audit/audit.service';
-import { PlanLimitsService } from '../../shared/plans/plan-limits.service';
+import { PlanLimitsService, type DbExecutor } from '../../shared/plans/plan-limits.service';
 import { WebhooksService } from '../webhooks/webhooks.service';
 import { EncryptionService } from '../../shared/crypto/encryption.service';
 import { createId } from '../../database/utils/id';
@@ -100,6 +100,17 @@ export class WhatsappService {
     await this.planLimits.assertCanAdd(tenantId, 'whatsappNumbers');
   }
 
+  /**
+   * Usar um número exige, a cada operação: organização ativa, WhatsApp no plano e o número
+   * dentro do limite. Depois de um rebaixamento, os números mais novos ficam bloqueados.
+   */
+  private assertAccountUsable(tenantId: string, accountId: string): Promise<void> {
+    return this.planLimits.assertUsable(tenantId, {
+      feature: 'whatsapp',
+      item: { resource: 'whatsappNumbers', id: accountId },
+    });
+  }
+
   // ─── Accounts ────────────────────────────────────────────────────────────────
 
   async listAccounts(tenantId: string): Promise<WhatsappAccount[]> {
@@ -152,6 +163,7 @@ export class WhatsappService {
   /** Dados que o cliente cola no painel da Meta (Webhook → Callback URL e Verify token). */
   async webhookSetup(tenantId: string, accountId: string): Promise<{ callbackUrl: string; verifyToken: string; fields: string[] }> {
     const account = await this.getAccount(tenantId, accountId);
+    await this.assertAccountUsable(tenantId, account.id);
     if (account.credentialSource !== 'client') {
       throw new BadRequestException('Este número foi conectado pelo app da Walletz; o webhook já é gerenciado pela plataforma.');
     }
@@ -359,6 +371,7 @@ export class WhatsappService {
     error?: { httpStatus?: number; code?: number; subcode?: number; message?: string; type?: string; fbtrace?: string };
   }> {
     const account = await this.getAccount(tenantId, accountId);
+    await this.assertAccountUsable(tenantId, account.id);
     const accessToken = this.decryptToken(account);
 
     const subResult = await this.subscribeApp(account.wabaId, accessToken);
@@ -466,11 +479,16 @@ export class WhatsappService {
       updatedAt: new Date(),
     };
 
-    const [account] = await this.db
-      .insert(whatsappAccounts)
-      .values({ id: accountId, tenantId, phoneNumberId, connectedByUserId: userId, ...values })
-      .onConflictDoUpdate({ target: whatsappAccounts.phoneNumberId, set: { tenantId, connectedByUserId: userId, ...values } })
-      .returning();
+    const upsert = (db: DbExecutor) =>
+      db
+        .insert(whatsappAccounts)
+        .values({ id: accountId, tenantId, phoneNumberId, connectedByUserId: userId, ...values })
+        .onConflictDoUpdate({ target: whatsappAccounts.phoneNumberId, set: { tenantId, connectedByUserId: userId, ...values } })
+        .returning();
+    // Número novo reserva a vaga com trava; o mesmo número só atualiza as credenciais.
+    const [account] = existing && existing.tenantId === tenantId
+      ? await upsert(this.db)
+      : await this.planLimits.withSlot(tenantId, 'whatsappNumbers', upsert);
 
     const { success: subscribed } = await this.subscribeApp(values.wabaId, accessToken);
 
@@ -501,6 +519,7 @@ export class WhatsappService {
     userId: string,
   ): Promise<WhatsappAccountView> {
     const account = await this.getAccount(tenantId, accountId);
+    await this.assertAccountUsable(tenantId, account.id);
     const accessToken = dto.accessToken?.trim() || this.decryptToken(account);
     const appSecret = dto.appSecret?.trim() || (account.appSecret ? this.encryptionService.tryDecrypt(account.appSecret) : null);
     if (!appSecret) throw new BadRequestException('Informe o App Secret do app da Meta.');
@@ -538,7 +557,9 @@ export class WhatsappService {
   /** Define qual agente responde neste número (null = primeiro agente publicado). */
   async setAccountAgent(tenantId: string, accountId: string, agentId: string | null, userId: string): Promise<WhatsappAccountView> {
     const account = await this.getAccount(tenantId, accountId);
+    await this.assertAccountUsable(tenantId, account.id);
     await this.assertAgentOfTenant(tenantId, agentId);
+    if (agentId) await this.planLimits.assertWithinPlan(tenantId, 'agents', agentId);
     const [updated] = await this.db
       .update(whatsappAccounts)
       .set({ agentId, updatedAt: new Date() })
@@ -703,6 +724,7 @@ export class WhatsappService {
     userId: string,
   ): Promise<WhatsappAccount> {
     const existing = await this.getAccount(tenantId, accountId);
+    await this.assertAccountUsable(tenantId, existing.id);
     // Reuse the embedded signup flow — it upserts on phoneNumberId conflict
     dto.phoneNumberId = dto.phoneNumberId ?? existing.phoneNumberId;
     dto.wabaId = dto.wabaId ?? existing.wabaId;
@@ -773,6 +795,7 @@ export class WhatsappService {
     dto: SendMessageDto,
   ): Promise<{ messageId: string; status: string }> {
     const account = await this.getAccount(tenantId, accountId);
+    await this.assertAccountUsable(tenantId, account.id);
 
     if (account.status !== 'connected') {
       throw new BadRequestException('WhatsApp account is not connected');
@@ -853,6 +876,10 @@ export class WhatsappService {
     agentId: string,
     traceId: string,
   ): Promise<void> {
+    if (!(await this.planLimits.isUsable(account.tenantId, { feature: 'whatsapp', item: { resource: 'whatsappNumbers', id: account.id } }))) {
+      this.logger.warn(`Resposta não enviada: número ${account.id} bloqueado pelo plano`);
+      return;
+    }
     const logId = createId();
     const idempotencyKey = `ai-${traceId}`;
 
@@ -1259,8 +1286,19 @@ export class WhatsappService {
     userMessage: string,
     tenantId: string,
   ): Promise<void> {
-    // Agente do número; sem agente definido, o primeiro publicado (depois qualquer não arquivado)
-    const candidates = await this.db
+    // A mensagem do contato fica registrada; o agente só responde se o plano cobre o número.
+    const blocked = await this.planLimits.usageBlock(tenantId, {
+      feature: 'whatsapp',
+      item: { resource: 'whatsappNumbers', id: account.id },
+    });
+    if (blocked) {
+      this.logger.warn(`Agente não respondeu no número ${account.id}: ${blocked.message}`);
+      return;
+    }
+    // Agente do número; sem agente definido, o primeiro publicado (depois qualquer não arquivado).
+    // Só concorrem agentes dentro do limite do plano (os mais novos acima dele ficam parados).
+    const allowedAgents = await this.planLimits.allowedIds(tenantId, 'agents');
+    const allCandidates = await this.db
       .select({ id: agents.id, status: agents.status })
       .from(agents)
       .where(and(
@@ -1268,6 +1306,12 @@ export class WhatsappService {
         isNull(agents.deletedAt),
         ne(agents.status, 'archived'),
       ));
+    if (account.agentId && allCandidates.some((a) => a.id === account.agentId) && !allowedAgents.has(account.agentId)) {
+      // O agente escolhido para o número passou do limite: não troca por outro sem o cliente decidir.
+      this.logger.warn(`Agente ${account.agentId} do número ${account.id} está acima do limite do plano; sem resposta`);
+      return;
+    }
+    const candidates = allCandidates.filter((a) => allowedAgents.has(a.id));
     const agent =
       (account.agentId ? candidates.find((a) => a.id === account.agentId) : undefined) ??
       candidates.find((a) => a.status === 'published') ??
@@ -1334,6 +1378,7 @@ export class WhatsappService {
   // ─── Templates ───────────────────────────────────────────────────────────────
 
   async syncTemplates(accountId: string, tenantId: string): Promise<void> {
+    await this.assertAccountUsable(tenantId, accountId);
     const [account] = await this.db
       .select()
       .from(whatsappAccounts)
