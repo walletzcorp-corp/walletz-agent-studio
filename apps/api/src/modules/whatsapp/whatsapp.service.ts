@@ -158,17 +158,35 @@ export class WhatsappService {
     return { callbackUrl: this.webhookUrlFor(account.id), verifyToken: account.verifyToken, fields: ['messages'] };
   }
 
-  /** Mensagem de erro legível de uma resposta da Graph API (axios). */
+  /** Mensagem de erro legível de uma resposta da Graph API (axios) — NÃO usar em contexto de credenciais. */
   private metaError(err: unknown): string {
     const data = (err as { response?: { data?: { error?: { message?: string; code?: number } } } })?.response?.data?.error;
     if (data?.message) return `${data.message}${data.code ? ` (código ${data.code})` : ''}`;
     return err instanceof Error ? err.message : String(err);
   }
 
+  /** Extrai apenas campos seguros de um erro Meta para logging — nunca inclui secrets, tokens ou cabeçalhos. */
+  private extractMetaError(err: unknown): { httpStatus?: number; code?: number; subcode?: number; fbtrace?: string; type?: string } {
+    const resp = (err as { response?: { status?: number; data?: { error?: { code?: number; error_subcode?: number; fbtrace_id?: string; type?: string } } } })?.response;
+    const error = resp?.data?.error;
+    return {
+      httpStatus: resp?.status,
+      code: error?.code,
+      subcode: error?.error_subcode,
+      fbtrace: error?.fbtrace_id,
+      type: error?.type,
+    };
+  }
+
   /**
-   * Valida as credenciais do app Meta do próprio cliente:
-   * - debug_token (App ID|App Secret): token válido, do mesmo app, com permissão de WhatsApp; App Secret correto
-   * - o número pertence à conta WhatsApp Business (WABA) informada
+   * Valida as credenciais do app Meta do próprio cliente seguindo o fluxo oficial:
+   * 1. App ID + App Secret → App Access Token (oauth/access_token)
+   * 2. debug_token com App Access Token → valida System User Token
+   * 3. Verifica app_id, is_valid, e ambas as permissões de WhatsApp
+   * 4. Valida WABA ID e Phone Number ID com o System User Token
+   *
+   * NUNCA registra: App Secret, System User Token, cabeçalho Authorization.
+   * Registra de forma segura: HTTP status, Meta error code, subcode, fbtrace_id.
    */
   private async validateClientCredentials(input: {
     appId: string;
@@ -177,28 +195,118 @@ export class WhatsappService {
     wabaId: string;
     phoneNumberId: string;
   }): Promise<{ displayName?: string; phoneNumber?: string; tokenExpiresAt: Date | null }> {
-    let debug: { is_valid?: boolean; app_id?: string; scopes?: string[]; expires_at?: number; error?: { message?: string } } | undefined;
+
+    // ── Passo 1: App ID + App Secret → App Access Token ──────────────────────────
+    let appAccessToken: string;
+    try {
+      const tokenResp = await firstValueFrom(
+        this.httpService.get(`${META_GRAPH_URL}/oauth/access_token`, {
+          params: {
+            client_id: input.appId,
+            client_secret: input.appSecret,
+            grant_type: 'client_credentials',
+          },
+        }),
+      );
+      const tokenData = tokenResp.data as { access_token?: string };
+      if (!tokenData.access_token) throw new Error('access_token ausente na resposta');
+      appAccessToken = tokenData.access_token;
+    } catch (err) {
+      const e = this.extractMetaError(err);
+      this.logger.warn(`APP_CREDENTIALS_INVALID appId=${input.appId} httpStatus=${e.httpStatus} code=${e.code} subcode=${e.subcode} fbtrace=${e.fbtrace}`);
+      throw new BadRequestException({
+        code: 'APP_CREDENTIALS_INVALID',
+        message: 'App ID ou App Secret inválidos. Verifique as credenciais do seu app Meta.',
+      });
+    }
+
+    // ── Passo 2: Consultar app via App Access Token (confirmação do app) ──────────
+    try {
+      await firstValueFrom(
+        this.httpService.get(`${META_GRAPH_URL}/${input.appId}`, {
+          params: { fields: 'id,name', access_token: appAccessToken },
+        }),
+      );
+    } catch (err) {
+      const e = this.extractMetaError(err);
+      this.logger.warn(`APP_CREDENTIALS_INVALID (app lookup) appId=${input.appId} httpStatus=${e.httpStatus} code=${e.code} subcode=${e.subcode} fbtrace=${e.fbtrace}`);
+      throw new BadRequestException({
+        code: 'APP_CREDENTIALS_INVALID',
+        message: 'Não foi possível confirmar o app Meta. Verifique o App ID.',
+      });
+    }
+
+    // ── Passo 3: Validar System User Token via debug_token ────────────────────────
+    let debug: {
+      is_valid?: boolean;
+      app_id?: string;
+      scopes?: string[];
+      expires_at?: number;
+      error?: { message?: string; code?: number };
+    } | undefined;
     try {
       const resp = await firstValueFrom(
         this.httpService.get(`${META_GRAPH_URL}/debug_token`, {
-          params: { input_token: input.accessToken, access_token: `${input.appId}|${input.appSecret}` },
+          params: { input_token: input.accessToken, access_token: appAccessToken },
         }),
       );
       debug = (resp.data as { data?: typeof debug }).data;
     } catch (err) {
-      throw new BadRequestException(`A Meta recusou o App ID/App Secret: ${this.metaError(err)}`);
-    }
-    if (!debug?.is_valid) {
-      throw new BadRequestException(`Token de acesso inválido ou expirado${debug?.error?.message ? `: ${debug.error.message}` : '.'}`);
-    }
-    if (debug.app_id && debug.app_id !== input.appId) {
-      throw new BadRequestException('O token de acesso pertence a outro app da Meta (App ID diferente).');
-    }
-    const scopes = debug.scopes ?? [];
-    if (!scopes.includes('whatsapp_business_messaging')) {
-      throw new BadRequestException('O token não tem a permissão "whatsapp_business_messaging". Gere um token de Usuário do Sistema com essa permissão.');
+      const e = this.extractMetaError(err);
+      this.logger.warn(`SYSTEM_USER_TOKEN_INVALID (debug_token failed) appId=${input.appId} httpStatus=${e.httpStatus} code=${e.code} subcode=${e.subcode} fbtrace=${e.fbtrace}`);
+      throw new BadRequestException({
+        code: 'SYSTEM_USER_TOKEN_INVALID',
+        message: 'Token do Usuário do Sistema inválido ou expirado.',
+      });
     }
 
+    // ── Passo 4a: Verificar is_valid ──────────────────────────────────────────────
+    if (!debug?.is_valid) {
+      this.logger.warn(`SYSTEM_USER_TOKEN_INVALID is_valid=false appId=${input.appId} metaMsg=${debug?.error?.message ?? ''}`);
+      throw new BadRequestException({
+        code: 'SYSTEM_USER_TOKEN_INVALID',
+        message: 'Token do Usuário do Sistema inválido ou expirado.',
+      });
+    }
+
+    // ── Passo 4b: Verificar app_id do token ───────────────────────────────────────
+    if (debug.app_id && debug.app_id !== input.appId) {
+      this.logger.warn(`TOKEN_APP_MISMATCH tokenAppId=${debug.app_id} expectedAppId=${input.appId}`);
+      throw new BadRequestException({
+        code: 'TOKEN_APP_MISMATCH',
+        message: 'O token pertence a outro app da Meta. Gere um token no mesmo app informado.',
+      });
+    }
+
+    // ── Passo 4c: Verificar permissões obrigatórias ───────────────────────────────
+    const scopes = debug.scopes ?? [];
+    const requiredScopes = ['whatsapp_business_management', 'whatsapp_business_messaging'];
+    const missingScopes = requiredScopes.filter((s) => !scopes.includes(s));
+    if (missingScopes.length > 0) {
+      this.logger.warn(`MISSING_WHATSAPP_PERMISSIONS appId=${input.appId} missing=${missingScopes.join(',')}`);
+      throw new BadRequestException({
+        code: 'MISSING_WHATSAPP_PERMISSIONS',
+        message: `Permissões ausentes no token: ${missingScopes.join(', ')}. Gere um novo token de Usuário do Sistema com essas permissões.`,
+      });
+    }
+
+    // ── Passo 5: Validar WABA ID ──────────────────────────────────────────────────
+    try {
+      await firstValueFrom(
+        this.httpService.get(`${META_GRAPH_URL}/${input.wabaId}`, {
+          params: { access_token: input.accessToken, fields: 'id,name' },
+        }),
+      );
+    } catch (err) {
+      const e = this.extractMetaError(err);
+      this.logger.warn(`WABA_NOT_ACCESSIBLE wabaId=${input.wabaId} httpStatus=${e.httpStatus} code=${e.code} subcode=${e.subcode} fbtrace=${e.fbtrace}`);
+      throw new BadRequestException({
+        code: 'WABA_NOT_ACCESSIBLE',
+        message: 'Conta WhatsApp Business (WABA ID) não acessível com este token. Verifique o WABA ID e as permissões do Usuário do Sistema.',
+      });
+    }
+
+    // ── Passo 6: Validar Phone Number ID na WABA ──────────────────────────────────
     let phones: Array<{ id: string; display_phone_number?: string; verified_name?: string }> = [];
     try {
       const resp = await firstValueFrom(
@@ -208,12 +316,23 @@ export class WhatsappService {
       );
       phones = (resp.data as { data?: typeof phones }).data ?? [];
     } catch (err) {
-      throw new BadRequestException(`Não foi possível ler a conta WhatsApp Business (WABA ID): ${this.metaError(err)}`);
+      const e = this.extractMetaError(err);
+      this.logger.warn(`PHONE_NUMBER_NOT_ACCESSIBLE (list failed) wabaId=${input.wabaId} httpStatus=${e.httpStatus} code=${e.code} subcode=${e.subcode} fbtrace=${e.fbtrace}`);
+      throw new BadRequestException({
+        code: 'PHONE_NUMBER_NOT_ACCESSIBLE',
+        message: 'Não foi possível listar os números da WABA. Verifique as permissões do token.',
+      });
     }
+
     const phone = phones.find((p) => p.id === input.phoneNumberId);
     if (!phone) {
-      throw new BadRequestException('Este Phone Number ID não pertence à conta WhatsApp Business (WABA) informada.');
+      this.logger.warn(`PHONE_NUMBER_NOT_ACCESSIBLE phoneNumberId=${input.phoneNumberId} not found in wabaId=${input.wabaId}`);
+      throw new BadRequestException({
+        code: 'PHONE_NUMBER_NOT_ACCESSIBLE',
+        message: 'Este Phone Number ID não pertence à conta WhatsApp Business (WABA) informada.',
+      });
     }
+
     return {
       ...(phone.verified_name ? { displayName: phone.verified_name } : {}),
       ...(phone.display_phone_number ? { phoneNumber: phone.display_phone_number } : {}),
