@@ -7,11 +7,13 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger'
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RbacGuard } from '../../shared/rbac/rbac.guard';
 import { Roles } from '../../shared/rbac/roles.decorator';
+import { RequiresFeature } from '../../shared/plans/requires-feature.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { WhatsappService } from './whatsapp.service';
 import { ConnectWhatsappDto, EmbeddedSignupDto, SendMessageDto, UpdateWhatsappCredentialsDto, SetWhatsappAgentDto } from './dto/connect-account.dto';
 
 @ApiTags('whatsapp')
+@RequiresFeature('whatsapp')
 @Controller()
 export class WhatsappController {
   private readonly logger = new Logger(WhatsappController.name);
