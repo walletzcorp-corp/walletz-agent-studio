@@ -144,6 +144,20 @@ Ver detalhes em [EXTERNAL_BLOCKERS.md](EXTERNAL_BLOCKERS.md).
 | Painel `/admin/clientes`: botão "Novo cliente", filtro PF/PJ, coluna tipo/documento, busca por CPF/CNPJ | ✅ | CPF mascarado na lista (`***.456.789-**`), completo só no detalhe |
 | Testes | ✅ | unit 10 (CPF/CNPJ + DTO); E2E API 13/13 com banco real (inclui 403 para não-admin e campo extra recusado); navegador 6/6 |
 
+## Chave do Google Gemini: cota gratuita e modelos novos (2026-11-18)
+
+Problema: uma chave Gemini gratuita válida era recusada como "indisponível por faturamento".
+
+| Item | Status | Evidência |
+|------|--------|-----------|
+| Cota gratuita ≠ faturamento | ✅ corrigido | o Google usa a mesma frase do OpenAI ("exceeded your current quota… billing details") para o limite gratuito por minuto/dia; agora 429 do Google só é faturamento com `limit: 0` (modelo sem nível gratuito, ex.: Pro); senão é limite de taxa |
+| Classificação com a mensagem inteira | ✅ corrigido | antes a mensagem era cortada em 500 caracteres e o `limit: 0` se perdia; os detalhes de cota do Google entram na frente da mensagem guardada |
+| Modelo padrão do Gemini | ✅ corrigido | 2.x foi retirado para contas novas (404); padrão agora `gemini-3.1-flash-lite`; sem modelo escolhido, o teste tenta o próximo candidato quando o modelo foi retirado |
+| Teste de conexão | ✅ | `max_tokens` do teste 32 → 256 (modelos que "pensam" não respondiam) |
+| Mensagem ao cliente | ✅ | erros de faturamento, limite e modelo mostram a resposta original do provedor (sem a chave) |
+| Chave no formato novo `AQ.…` | ✅ | ocultada em logs e mensagens (antes só `AIza…`); dica do campo atualizada |
+| Testes | ✅ | unit 135/135; E2E local com chave gratuita real: Pro → 402 com a mensagem certa, 2.5-flash → 422 modelo, sem modelo → conexão criada com `gemini-3.1-flash-lite` e o agente respondeu no Laboratório; a chave não aparece no log |
+
 ## Plano e papel validados em toda chamada da API (2026-11-18)
 
 Regra: a API sempre confere o plano atual da organização para continuar ou não, e não só ao criar. Regras completas em [PLANOS_E_ACESSOS.md](../product/PLANOS_E_ACESSOS.md).

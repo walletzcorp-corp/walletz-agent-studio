@@ -37,8 +37,8 @@ async function post(provider: AiProvider, url: string, headers: Record<string, s
   }
   const data: unknown = await res.json().catch(() => null);
   if (!res.ok) {
-    const message = redactSecrets(extractErrorMessage(data, res.statusText || `HTTP ${res.status}`));
-    throw new LlmProviderError(classifyProviderError(res.status, message), provider, message, res.status);
+    const raw = extractErrorMessage(data, res.statusText || `HTTP ${res.status}`);
+    throw new LlmProviderError(classifyProviderError(res.status, raw), provider, redactSecrets(raw), res.status);
   }
   return data;
 }

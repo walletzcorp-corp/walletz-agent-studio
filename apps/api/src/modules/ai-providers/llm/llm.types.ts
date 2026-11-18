@@ -73,10 +73,23 @@ const BILLING_PATTERN =
 const MODEL_PATTERN = /model/i;
 const NOT_FOUND_PATTERN = /not[_ ]found|does not exist|invalid model|not a valid model|unknown model|no endpoints found|not supported/i;
 
-/** Classifica uma falha HTTP do provedor (status + mensagem). */
+/** Resposta de cota do Google (Gemini): 429 RESOURCE_EXHAUSTED. */
+const GOOGLE_QUOTA_PATTERN = /RESOURCE_EXHAUSTED|generativelanguage\.googleapis\.com|ai\.google\.dev/i;
+/** Cota zerada para o modelo (ex.: modelo sem nível gratuito): só libera com faturamento ativo. */
+const ZERO_QUOTA_PATTERN = /limit:\s*0(?![\d.])|quotaValue["':\s]+0(?![\d.])/i;
+
+/**
+ * Classifica uma falha HTTP do provedor (status + mensagem).
+ * Passe a mensagem completa (antes de `redactSecrets`, que corta o texto).
+ */
 export function classifyProviderError(status: number | undefined, message: string): LlmErrorKind {
   if (status === 401 || status === 403) return 'auth';
   if (status === 402) return 'billing';
+  // O Google usa a mesma frase do OpenAI ("exceeded your current quota… billing details") para o
+  // limite da cota gratuita por minuto/dia. Só é faturamento quando a cota do modelo é zero.
+  if (status === 429 && GOOGLE_QUOTA_PATTERN.test(message)) {
+    return ZERO_QUOTA_PATTERN.test(message) ? 'billing' : 'rate_limit';
+  }
   if (BILLING_PATTERN.test(message)) return 'billing';
   if (status === 429) return 'rate_limit';
   if (status === 404) return MODEL_PATTERN.test(message) || NOT_FOUND_PATTERN.test(message) ? 'model' : 'bad_request';
@@ -93,5 +106,7 @@ export function redactSecrets(text: string): string {
   return text
     .replace(/(sk-[A-Za-z0-9_-]{6})[A-Za-z0-9_-]+/g, '$1…')
     .replace(/(AIza[A-Za-z0-9_-]{4})[A-Za-z0-9_-]+/g, '$1…')
+    // Formato novo de chave do Google AI Studio: "AQ.xxxx…"
+    .replace(/\b(AQ\.[A-Za-z0-9_-]{4})[A-Za-z0-9_.-]{16,}/g, '$1…')
     .slice(0, 500);
 }
