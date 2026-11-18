@@ -41,6 +41,7 @@ export class CampaignsService {
   }
 
   async createSegment(tenantId: string, userId: string, data: { name: string; description?: string; filters?: Record<string, unknown> }) {
+    await this.planLimits.assertUsable(tenantId, { feature: 'campaigns' });
     const [seg] = await this.db
       .insert(segments)
       .values({
@@ -100,6 +101,7 @@ export class CampaignsService {
       scheduledAt?: string;
     },
   ) {
+    await this.planLimits.assertUsable(tenantId, { feature: 'campaigns' });
     const [campaign] = await this.db
       .insert(campaigns)
       .values({
@@ -322,7 +324,7 @@ export class CampaignsService {
   }
 
   async launchCampaign(tenantId: string, campaignId: string, userId: string) {
-    await this.planLimits.assertFeature(tenantId, 'campaigns');
+    await this.planLimits.assertUsable(tenantId, { feature: 'campaigns' });
     const campaign = await this.getCampaign(tenantId, campaignId);
 
     if (!['draft', 'scheduled'].includes(campaign.status)) {

@@ -9,6 +9,7 @@ import { RbacGuard } from '../../shared/rbac/rbac.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { ContactsService, type ImportContactDto } from './contacts.service';
 import { parse as parseCsvSync } from 'csv-parse/sync';
+import { Roles } from '../../shared/rbac/roles.decorator';
 
 @ApiTags('contacts')
 @ApiBearerAuth()
@@ -19,6 +20,7 @@ export class ContactsController {
 
   @Get()
   @ApiOperation({ summary: 'List contacts' })
+  @Roles('viewer')
   list(
     @Param('tenantId') tenantId: string,
     @Query('search') search?: string,
@@ -34,6 +36,7 @@ export class ContactsController {
 
   @Get(':contactId')
   @ApiOperation({ summary: 'Get contact' })
+  @Roles('viewer')
   get(
     @Param('tenantId') tenantId: string,
     @Param('contactId') contactId: string,
@@ -43,6 +46,7 @@ export class ContactsController {
 
   @Post('import/json')
   @ApiOperation({ summary: 'Import contacts from JSON array' })
+  @Roles('manager')
   importJson(
     @Param('tenantId') tenantId: string,
     @Body() body: { contacts: ImportContactDto[] },
@@ -56,6 +60,7 @@ export class ContactsController {
   @ApiConsumes('multipart/form-data')
   @ApiBody({ schema: { type: 'object', properties: { file: { type: 'string', format: 'binary' } } } })
   @ApiOperation({ summary: 'Import contacts from CSV/XLSX' })
+  @Roles('manager')
   async importCsv(
     @Param('tenantId') tenantId: string,
     @UploadedFile() file: Express.Multer.File,
@@ -99,6 +104,7 @@ export class ContactsController {
   @Delete(':contactId')
   @HttpCode(204)
   @ApiOperation({ summary: 'Delete contact' })
+  @Roles('admin')
   delete(
     @Param('tenantId') tenantId: string,
     @Param('contactId') contactId: string,

@@ -114,6 +114,13 @@ export class AdminController {
     return this.adminService.reactivateTenant(tenantId, actorFrom(user, req));
   }
 
+  @Post('tenants/:tenantId/activate')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Ativar organização (encerra o trial; cliente contratado)' })
+  activate(@Param('tenantId') tenantId: string, @CurrentUser() user: JwtPayload, @Req() req: Request) {
+    return this.adminService.activateTenant(tenantId, actorFrom(user, req));
+  }
+
   @Post('tenants/:tenantId/extend-trial')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Estender o período de trial' })

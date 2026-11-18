@@ -6,6 +6,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RbacGuard } from '../../shared/rbac/rbac.guard';
 import { LabService } from './lab.service';
 import { LabChatDto } from './dto/chat.dto';
+import { Roles } from '../../shared/rbac/roles.decorator';
 
 @ApiTags('lab')
 @ApiBearerAuth()
@@ -15,6 +16,7 @@ export class LabController {
   constructor(private readonly labService: LabService) {}
 
   @Post('chat')
+  @Roles('manager')
   @HttpCode(200)
   @ApiOperation({ summary: 'Test agent in the lab with RAG' })
   chat(

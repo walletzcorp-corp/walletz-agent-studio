@@ -49,7 +49,13 @@ function build() {
     {} as MicrosoftGraphAuthService,
     {} as AvailabilityService,
     redis as unknown as Redis,
-    { assertFeature: jest.fn(async () => undefined), assertCanAdd: jest.fn(async () => undefined) } as unknown as PlanLimitsService,
+    {
+      assertFeature: jest.fn(async () => undefined),
+      assertCanAdd: jest.fn(async () => undefined),
+      assertUsable: jest.fn(async () => undefined),
+      // Reserva de vaga: executa a criação direto no banco falso.
+      withSlot: jest.fn(async (_t: string, _r: string, create: (tx: unknown) => Promise<unknown>) => create(db)),
+    } as unknown as PlanLimitsService,
     { emit: jest.fn(async () => undefined) } as unknown as WebhooksService,
   );
   return { svc, redis, google, inserted };

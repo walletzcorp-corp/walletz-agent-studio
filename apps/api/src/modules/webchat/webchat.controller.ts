@@ -34,6 +34,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/auth.service';
 import { WebchatService } from './webchat.service';
 import { WIDGET_SCRIPT } from './widget-script';
+import { PlanExempt, RequiresFeature } from '../../shared/plans/requires-feature.decorator';
 
 export class CreateWidgetDto {
   @ApiProperty()
@@ -135,12 +136,14 @@ export class VisitorMessageDto {
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RbacGuard)
 @Controller('tenants/:tenantId/webchat/widgets')
+@RequiresFeature('webchat')
 export class WebchatAdminController {
   constructor(private readonly service: WebchatService) {}
 
   @Get()
   @Roles('viewer')
   @ApiOperation({ summary: 'Listar widgets de webchat' })
+  @PlanExempt()
   list(@Param('tenantId') tenantId: string) {
     return this.service.list(tenantId);
   }
@@ -168,6 +171,7 @@ export class WebchatAdminController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @Roles('manager')
   @ApiOperation({ summary: 'Remover widget' })
+  @PlanExempt()
   async remove(@Param('tenantId') tenantId: string, @Param('widgetId') widgetId: string, @CurrentUser() user: JwtPayload) {
     await this.service.remove(tenantId, widgetId, user.sub);
   }

@@ -65,7 +65,11 @@ function service(rows: AiProviderConnection[]) {
     db,
     encryption,
     audit as unknown as AuditService,
-    {} as PlanLimitsService,
+    // Todas as conexões dentro do limite do plano (o bloqueio por plano é testado à parte).
+    {
+      allowedIds: async () => new Set(rows.map((r) => r.id)),
+      assertWithinPlan: async () => undefined,
+    } as unknown as PlanLimitsService,
   );
   return { svc, updates, audit };
 }

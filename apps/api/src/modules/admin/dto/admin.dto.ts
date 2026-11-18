@@ -258,6 +258,7 @@ export const OVERRIDABLE_FEATURES = [
   'crmConnectors',
   'whiteLabel',
   'campaigns',
+  'pcConnector',
 ] as const;
 
 export class SetFeatureOverrideDto {

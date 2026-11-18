@@ -6,6 +6,7 @@ import { knowledgeItems } from '../../database/schema/knowledge';
 import { KnowledgeRetrievalService } from '../knowledge/knowledge-retrieval.service';
 import { createId } from '../../database/utils/id';
 import { SchedulingToolsService, type ToolContext } from '../calendars/scheduling-tools.service';
+import { PlanLimitsService } from '../../shared/plans/plan-limits.service';
 import { PcConnectorService } from '../pc-connector/pc-connector.service';
 import { LlmUsageService } from '../../shared/llm-usage/llm-usage.service';
 import type { LabChatDto, ChatMessageDto } from './dto/chat.dto';
@@ -143,6 +144,7 @@ export class LabService {
     private readonly llmUsage: LlmUsageService,
     private readonly aiProviders: AiProvidersService,
     private readonly retrieval: KnowledgeRetrievalService,
+    private readonly planLimits: PlanLimitsService,
   ) {}
 
   async chat(
@@ -160,6 +162,9 @@ export class LabService {
       .limit(1);
 
     if (!agent) throw new NotFoundException('Agent not found');
+
+    /* Plano: organização ativa e agente dentro do limite (os mais novos acima dele ficam parados). */
+    await this.planLimits.assertUsable(tenantId, { item: { resource: 'agents', id: agent.id } });
 
     /* Chave de IA do próprio cliente (BYOK). Sem conexão válida, nada é enviado ao provedor. */
     const llm = await this.aiProviders.resolveForAgent(tenantId, agent.aiConnectionId);
@@ -185,10 +190,11 @@ export class LabService {
 
     /* Check if scheduling is enabled for this agent */
     const agentSettings = await this.schedulingTools.loadSettings(dto.agentId, tenantId);
-    const schedulingEnabled = agentSettings?.canSchedule === true;
+    const schedulingEnabled = agentSettings?.canSchedule === true && (await this.planLimits.hasFeature(tenantId, 'calendars'));
 
     /* Check for connected PC devices for this tenant */
-    const pcDevicesList = await this.pcConnector.listDevices(tenantId);
+    const pcAllowed = await this.planLimits.hasFeature(tenantId, 'pcConnector');
+    const pcDevicesList = pcAllowed ? await this.pcConnector.listDevices(tenantId) : [];
     const onlineDevice = pcDevicesList.find(
       (d: { pairedAt: Date | null; lastSeenAt: Date | null }) => d.pairedAt && d.lastSeenAt && Date.now() - d.lastSeenAt.getTime() < 30_000,
     ) as (typeof pcDevicesList)[0] | undefined;

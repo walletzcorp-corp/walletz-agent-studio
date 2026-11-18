@@ -1,6 +1,8 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { ACCOUNT_BLOCKED_EVENT } from '../../lib/api';
+import { planWhatsappUrl } from '../../lib/contact';
 import { useRouter, usePathname } from 'next/navigation';
 import { Sidebar } from '../../components/sidebar';
 import { UserMenu } from '../../components/user-menu';
@@ -20,6 +22,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     if (!isAuthenticated) router.replace('/auth/login');
     else if (needsOrganization) router.replace('/auth/organizacao');
   }, [isAuthenticated, isLoading, needsOrganization, router]);
+
+  // Trial vencido, organização suspensa ou usuário acima do limite do plano (vem da API).
+  const [accountBlock, setAccountBlock] = useState<string | null>(null);
+  useEffect(() => {
+    const onBlocked = (e: Event) => {
+      const detail = (e as CustomEvent<{ message?: string }>).detail;
+      setAccountBlock(detail?.message ?? 'O acesso a esta organização está bloqueado.');
+    };
+    window.addEventListener(ACCOUNT_BLOCKED_EVENT, onBlocked);
+    return () => window.removeEventListener(ACCOUNT_BLOCKED_EVENT, onBlocked);
+  }, []);
 
   useEffect(() => {
     const handler = () => logout();
@@ -63,6 +76,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Main area */}
       <div className="flex flex-1 flex-col overflow-hidden">
         <Topbar email={email} tenantName={tenantName ?? undefined} tenantId={tenantId ?? undefined} onLogout={() => void logout()} />
+        {accountBlock && (
+          <div role="alert" className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-amber-300 bg-amber-50 px-6 py-2.5 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
+            <span className="font-medium">{accountBlock}</span>
+            <a href={planWhatsappUrl()} target="_blank" rel="noreferrer" className="underline underline-offset-2">
+              Falar com a Walletz
+            </a>
+          </div>
+        )}
         <main className="flex-1 overflow-auto">
           {children}
         </main>

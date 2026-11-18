@@ -176,6 +176,7 @@ export class CalendarsService {
 
     if (existing.length === 0) {
       try {
+        await this.planLimits.assertUsable(tenantId, { feature: 'calendars' });
         await this.planLimits.assertCanAdd(tenantId, 'calendars');
       } catch (err: unknown) {
         // O callback mostra só mensagens de BadRequest ao usuário.
@@ -198,7 +199,8 @@ export class CalendarsService {
         })
         .where(eq(calendarConnections.id, existing[0]!.id));
     } else {
-      await this.db.insert(calendarConnections).values({
+      // Agenda nova reserva a vaga com trava (duas conexões simultâneas não passam do limite).
+      await this.planLimits.withSlot(tenantId, 'calendars', (tx) => tx.insert(calendarConnections).values({
         tenantId,
         connectedByUserId: userId,
         provider,
@@ -209,7 +211,7 @@ export class CalendarsService {
         tokenExpiresAt: tokens.expiresAt,
         scopes: tokens.scopes,
         syncStatus: 'pending',
-      });
+      }));
     }
 
     await this.auditService.log({
@@ -259,6 +261,7 @@ export class CalendarsService {
   }
 
   async triggerSync(tenantId: string): Promise<{ queued: number }> {
+    await this.planLimits.assertUsable(tenantId, { feature: 'calendars' });
     const conns = await this.db
       .select()
       .from(calendarConnections)
@@ -282,6 +285,7 @@ export class CalendarsService {
     agentId: string,
     daysAhead = 7,
   ): Promise<{ start: string; end: string }[]> {
+    await this.planLimits.assertUsable(tenantId, { feature: 'calendars' });
     const [settings] = await this.db
       .select()
       .from(agentCalendarSettings)
@@ -361,6 +365,7 @@ export class CalendarsService {
   /* ── Meetings ── */
 
   async createMeeting(tenantId: string, userId: string, dto: CreateMeetingDto): Promise<CalendarMeeting> {
+    await this.planLimits.assertUsable(tenantId, { feature: 'calendars' });
     const startAt = new Date(dto.startAt);
     const endAt = new Date(dto.endAt);
 
@@ -482,6 +487,7 @@ export class CalendarsService {
     userId: string,
     dto: RescheduleMeetingDto,
   ): Promise<CalendarMeeting> {
+    await this.planLimits.assertUsable(tenantId, { feature: 'calendars' });
     const [meeting] = await this.db
       .select()
       .from(calendarMeetings)
@@ -540,6 +546,7 @@ export class CalendarsService {
     userId: string,
     reason?: string,
   ): Promise<void> {
+    await this.planLimits.assertUsable(tenantId, { feature: 'calendars' });
     const [meeting] = await this.db
       .select()
       .from(calendarMeetings)
@@ -675,6 +682,8 @@ export class CalendarsService {
       addTeams?: boolean;
     },
   ): Promise<{ id: string; meetUrl?: string }> {
+    // Só agendas dentro do limite do plano falam com o provedor (as mais novas acima dele ficam paradas).
+    await this.planLimits.assertUsable(tenantId, { feature: 'calendars', item: { resource: 'calendars', id: connectionId } });
     const [conn] = await this.db
       .select()
       .from(calendarConnections)

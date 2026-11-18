@@ -42,7 +42,8 @@ export type PlanFeatureKey =
   | 'publicApi'
   | 'crmConnectors'
   | 'whiteLabel'
-  | 'campaigns';
+  | 'campaigns'
+  | 'pcConnector';
 
 export interface PlanDefinition {
   slug: PlanSlug;
@@ -87,6 +88,7 @@ export const FEATURE_LABELS: Record<PlanFeatureKey, string> = {
   crmConnectors: 'Trello / CRM de catálogo',
   whiteLabel: 'White Label e subcontas',
   campaigns: 'Campanhas em massa',
+  pcConnector: 'Conector de computador',
 };
 
 export const SUPPORT_LABELS: Record<PlanDefinition['support'], string> = {

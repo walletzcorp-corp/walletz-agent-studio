@@ -38,6 +38,8 @@ export interface CreateMeetingInput {
   timezone?: string;
 }
 
+import { PlanLimitsService } from '../../shared/plans/plan-limits.service';
+
 @Injectable()
 export class SchedulingToolsService {
   private readonly logger = new Logger(SchedulingToolsService.name);
@@ -46,6 +48,7 @@ export class SchedulingToolsService {
     @Inject(DRIZZLE_TOKEN) private readonly db: DrizzleDB,
     private readonly calendarsService: CalendarsService,
     private readonly availabilityService: AvailabilityService,
+    private readonly planLimits: PlanLimitsService,
   ) {}
 
   /* ── Tool: get_availability ────────────────────────────────────────────── */
@@ -329,6 +332,8 @@ export class SchedulingToolsService {
     toolInput: Record<string, unknown>,
     ctx: ToolContext,
   ): Promise<unknown> {
+    // O agente só agenda se o plano inclui agendas e o agente está dentro do limite.
+    await this.planLimits.assertUsable(ctx.tenantId, { feature: 'calendars', item: { resource: 'agents', id: ctx.agentId } });
     switch (toolName) {
       case 'get_availability':
         return this.getAvailability(ctx, typeof toolInput['days_ahead'] === 'number' ? toolInput['days_ahead'] : 7);

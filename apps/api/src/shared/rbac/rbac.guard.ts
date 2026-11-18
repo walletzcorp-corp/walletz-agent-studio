@@ -3,46 +3,70 @@ import {
   CanActivate,
   ExecutionContext,
   ForbiddenException,
+  Logger,
   UnauthorizedException,
   Inject,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, isNull } from 'drizzle-orm';
 import { ROLES_KEY, type MembershipRole } from './roles.decorator';
 import { PermissionsService } from './permissions.service';
 import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';
 import { memberships } from '../../database/schema/users';
 import { tenants } from '../../database/schema/tenants';
 import type { JwtPayload } from '../../modules/auth/auth.service';
+import { isFeatureEnabled, resolvePlan, type PlanFeatures } from '../plans/plan-catalog';
+import { featureBlockedError, limitExceededError, PlanLimitsService, tenantBlockedError } from '../plans/plan-limits.service';
+import { PLAN_EXEMPT_KEY, REQUIRED_FEATURE_KEY } from '../plans/requires-feature.decorator';
 
+/**
+ * Porta de entrada de toda rota de organização (`tenants/:tenantId/...`). Na ordem:
+ *  1. vínculo ativo do usuário com o tenant (isolamento);
+ *  2. organização suspensa/cancelada ou trial vencido → bloqueia;
+ *  3. usuário acima do limite de usuários do plano (rebaixamento) → bloqueia;
+ *  4. recurso exigido pela rota (@RequiresFeature) liberado no plano atual;
+ *  5. papel mínimo (@Roles). Rota de organização sem @Roles é negada por padrão.
+ */
 @Injectable()
 export class RbacGuard implements CanActivate {
+  private readonly logger = new Logger(RbacGuard.name);
+
   constructor(
     private readonly reflector: Reflector,
     private readonly permissionsService: PermissionsService,
+    private readonly planLimits: PlanLimitsService,
     @Inject(DRIZZLE_TOKEN) private readonly db: DrizzleDB,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const requiredRoles = this.reflector.getAllAndOverride<MembershipRole[]>(ROLES_KEY, [
-      context.getHandler(),
-      context.getClass(),
-    ]);
-
+    const targets = [context.getHandler(), context.getClass()];
+    const requiredRoles = this.reflector.getAllAndOverride<MembershipRole[]>(ROLES_KEY, targets);
     const hasRequiredRoles = !!requiredRoles && requiredRoles.length > 0;
+    const requiredFeature = this.reflector.getAllAndOverride<keyof PlanFeatures | undefined>(REQUIRED_FEATURE_KEY, targets);
+    const planExempt = this.reflector.get<boolean | undefined>(PLAN_EXEMPT_KEY, context.getHandler()) === true;
 
     const request = context.switchToHttp().getRequest<{
       user?: JwtPayload;
       tenantId?: string;
       params?: Record<string, string>;
+      method?: string;
+      route?: { path?: string };
     }>();
     const paramTenantId = request.params?.['tenantId'];
 
-    // Sem @Roles e sem :tenantId na rota = qualquer usuário autenticado.
-    // Com :tenantId, o vínculo com o tenant é SEMPRE exigido (isolamento),
-    // mesmo sem @Roles.
-    if (!hasRequiredRoles && !paramTenantId) {
+    // Rota fora de organização e sem exigências = qualquer usuário autenticado.
+    if (!hasRequiredRoles && !paramTenantId && !requiredFeature) {
       return true;
+    }
+
+    // Negação por padrão: toda rota de organização declara o papel mínimo.
+    if (paramTenantId && !hasRequiredRoles) {
+      this.logger.error(`Rota de organização sem @Roles: ${request.method ?? ''} ${request.route?.path ?? ''}`);
+      throw new ForbiddenException({
+        statusCode: 403,
+        error: 'ROUTE_ROLE_NOT_DEFINED',
+        message: 'Esta operação não está liberada. Fale com o suporte Walletz.',
+      });
     }
 
     const user = request.user;
@@ -63,27 +87,44 @@ export class RbacGuard implements CanActivate {
 
     const [membership] = await this.db
       .select({
+        id: memberships.id,
         role: memberships.role,
         status: memberships.status,
         tenantStatus: tenants.status,
+        trialEndsAt: tenants.trialEndsAt,
+        planId: tenants.planId,
+        featureFlags: tenants.featureFlags,
       })
       .from(memberships)
       .innerJoin(tenants, eq(tenants.id, memberships.tenantId))
-      .where(and(eq(memberships.tenantId, tenantId), eq(memberships.userId, user.sub)))
+      .where(and(eq(memberships.tenantId, tenantId), eq(memberships.userId, user.sub), isNull(tenants.deletedAt)))
       .limit(1);
 
     if (!membership || membership.status !== 'active') {
       throw new ForbiddenException('No active membership in this tenant');
     }
 
-    // Suspensão/cancelamento feitos pelo admin da plataforma bloqueiam o uso
-    // (os dados são mantidos; reativar libera de novo).
-    if (membership.tenantStatus === 'suspended' || membership.tenantStatus === 'cancelled') {
-      throw new ForbiddenException({
-        statusCode: 403,
-        error: 'TENANT_SUSPENDED',
-        message: 'Esta organização está suspensa. Entre em contato com o suporte Walletz.',
-      });
+    // Suspensão/cancelamento pelo admin ou trial vencido bloqueiam o uso
+    // (os dados são mantidos; reativar ou ativar o plano libera de novo).
+    const tenantError = tenantBlockedError(membership.tenantStatus, membership.trialEndsAt);
+    if (tenantError) throw tenantError;
+
+    const plan = resolvePlan(membership.planId);
+
+    // Depois de um rebaixamento, os usuários mais novos acima do limite ficam sem acesso
+    // (o dono nunca). Nada é apagado: ampliar o plano ou remover usuários libera de novo.
+    if (!(await this.planLimits.isWithinPlan(tenantId, 'users', membership.id))) {
+      throw limitExceededError(plan, 'users');
+    }
+
+    if (requiredFeature && !planExempt) {
+      const overrides =
+        membership.featureFlags && typeof membership.featureFlags === 'object'
+          ? (membership.featureFlags as Record<string, unknown>)
+          : {};
+      if (!isFeatureEnabled(plan, overrides, requiredFeature)) {
+        throw featureBlockedError(plan, requiredFeature);
+      }
     }
 
     if (
@@ -96,3 +137,4 @@ export class RbacGuard implements CanActivate {
     return true;
   }
 }
+

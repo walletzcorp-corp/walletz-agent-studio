@@ -231,6 +231,16 @@ function AdminActions({ detail, onDone }: { detail: AdminTenantDetail; onDone: (
             <Ban className="h-3.5 w-3.5" /> Suspender
           </button>
         ) : null}
+        {tenant.status === 'trial' && (
+          <button
+            disabled={busy}
+            className={cn(btn, 'border-primary bg-primary text-primary-foreground hover:opacity-90')}
+            title="Cliente contratado: encerra o trial. Sem isso, a organização é bloqueada quando o trial vence."
+            onClick={() => void run(() => adminApi.activate(tenant.id), 'Organização ativada: o trial foi encerrado.')}
+          >
+            <CheckCircle2 className="h-3.5 w-3.5" /> Ativar organização
+          </button>
+        )}
         <button
           disabled={busy}
           className={cn(btn, panel === 'trial' ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:bg-white/5')}

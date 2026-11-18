@@ -16,12 +16,14 @@ import * as bcrypt from 'bcryptjs';
 import { createId } from '../../database/utils/id';
 import { DEFAULT_PLAN } from '../../shared/plans/plan-catalog';
 import { AuditService } from '../../shared/audit/audit.service';
+import { PlanLimitsService } from '../../shared/plans/plan-limits.service';
 
 @Injectable()
 export class TenantsService {
   constructor(
     @Inject(DRIZZLE_TOKEN) private readonly db: DrizzleDB,
     private readonly auditService: AuditService,
+    private readonly planLimits: PlanLimitsService,
   ) {}
 
   async findById(id: string): Promise<Tenant | null> {
@@ -120,7 +122,8 @@ export class TenantsService {
       throw new ConflictException('Este e-mail já tem conta na plataforma. Use outro e-mail: cada organização tem os próprios usuários.');
     }
     const passwordHash = await bcrypt.hash(dto.password, Number(process.env['BCRYPT_ROUNDS'] ?? 12));
-    const result = await this.db.transaction(async (tx) => {
+    // Reserva a vaga com trava: dois cadastros simultâneos não passam do limite de usuários.
+    const result = await this.planLimits.withSlot(tenantId, 'users', async (tx) => {
       const [user] = await tx
         .insert(users)
         .values({

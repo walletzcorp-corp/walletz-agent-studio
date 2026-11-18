@@ -7,6 +7,7 @@ import { Roles } from '../../shared/rbac/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/auth.service';
 import { WebhooksService } from './webhooks.service';
+import { PlanExempt, RequiresFeature } from '../../shared/plans/requires-feature.decorator';
 
 export class CreateWebhookDto {
   @ApiProperty({ example: 'https://meusistema.com.br/walletz/webhook' })
@@ -57,12 +58,14 @@ export class UpdateWebhookDto {
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RbacGuard)
 @Controller('tenants/:tenantId/webhooks')
+@RequiresFeature('outboundWebhooks')
 export class WebhooksController {
   constructor(private readonly service: WebhooksService) {}
 
   @Get('events')
   @Roles('viewer')
   @ApiOperation({ summary: 'Eventos disponíveis para assinatura' })
+  @PlanExempt()
   events() {
     return this.service.events();
   }
@@ -70,6 +73,7 @@ export class WebhooksController {
   @Get()
   @Roles('manager')
   @ApiOperation({ summary: 'Listar webhooks de saída' })
+  @PlanExempt()
   list(@Param('tenantId') tenantId: string) {
     return this.service.list(tenantId);
   }
@@ -113,6 +117,7 @@ export class WebhooksController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @Roles('admin')
   @ApiOperation({ summary: 'Remover webhook' })
+  @PlanExempt()
   async remove(@Param('tenantId') tenantId: string, @Param('webhookId') webhookId: string, @CurrentUser() user: JwtPayload) {
     await this.service.remove(tenantId, webhookId, user.sub);
   }

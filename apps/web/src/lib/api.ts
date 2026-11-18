@@ -3,6 +3,31 @@ import { withBasePath } from './paths';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
+/**
+ * Bloqueios da organização inteira vindos da API (valem para qualquer tela):
+ * o painel mostra a mensagem num aviso fixo em vez de erros soltos.
+ */
+export const ACCOUNT_BLOCK_CODES = ['TRIAL_EXPIRED', 'TENANT_SUSPENDED'] as const;
+export const ACCOUNT_BLOCKED_EVENT = 'walletz:account-blocked';
+
+/** Códigos de plano: a mensagem da API já explica o que fazer e deve aparecer como está. */
+export const PLAN_ERROR_CODES = [
+  'PLAN_LIMIT_REACHED',
+  'PLAN_LIMIT_EXCEEDED',
+  'FEATURE_NOT_IN_PLAN',
+  'FEATURE_IN_DEVELOPMENT',
+  ...ACCOUNT_BLOCK_CODES,
+] as const;
+
+/** Mensagem legível de um erro da API de plano/organização, ou null se não for um. */
+export function planErrorMessage(err: unknown): string | null {
+  const data = (err as { response?: { status?: number; data?: { error?: unknown; message?: unknown } } })?.response;
+  if (data?.status !== 403) return null;
+  const code = typeof data.data?.error === 'string' ? data.data.error : '';
+  const message = typeof data.data?.message === 'string' ? data.data.message : null;
+  return (PLAN_ERROR_CODES as readonly string[]).includes(code) ? message : null;
+}
+
 function createApiClient(): AxiosInstance {
   const client = axios.create({
     baseURL: `${API_BASE}/v1`,
@@ -27,6 +52,16 @@ function createApiClient(): AxiosInstance {
   client.interceptors.response.use(
     (res) => res,
     async (error: AxiosError) => {
+      if (error.response?.status === 403 && typeof window !== 'undefined') {
+        const body = error.response.data as { error?: unknown; message?: unknown } | undefined;
+        const code = typeof body?.error === 'string' ? body.error : '';
+        // Usuário acima do limite do plano também perde o acesso à organização inteira.
+        const isUserBlocked = code === 'PLAN_LIMIT_EXCEEDED' && (body as { resource?: unknown })?.resource === 'users';
+        if ((ACCOUNT_BLOCK_CODES as readonly string[]).includes(code) || isUserBlocked) {
+          const message = typeof body?.message === 'string' ? body.message : 'O acesso a esta organização está bloqueado.';
+          window.dispatchEvent(new CustomEvent(ACCOUNT_BLOCKED_EVENT, { detail: { code, message } }));
+        }
+      }
       if (error.response?.status === 401 && typeof window !== 'undefined') {
         const refreshToken = localStorage.getItem('refreshToken');
         const sessionId = localStorage.getItem('sessionId');

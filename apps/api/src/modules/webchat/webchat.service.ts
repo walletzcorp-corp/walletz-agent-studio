@@ -117,7 +117,8 @@ export class WebchatService {
     await this.planLimits.assertCanAdd(tenantId, 'webchatWidgets');
     await this.assertAgent(tenantId, input.agentId);
 
-    const [row] = await this.db
+    const [row] = await this.planLimits.withSlot(tenantId, 'webchatWidgets', (tx) =>
+      tx
       .insert(webchatWidgets)
       .values({
         tenantId,
@@ -130,7 +131,8 @@ export class WebchatService {
         primaryColor: input.primaryColor ?? '#0f766e',
         createdByUserId: userId,
       })
-      .returning();
+      .returning(),
+    );
     await this.audit.log({
       tenantId,
       userId,
@@ -144,7 +146,11 @@ export class WebchatService {
 
   async update(tenantId: string, id: string, input: WidgetInput, userId: string): Promise<WebchatWidget> {
     const existing = await this.getOwned(tenantId, id);
-    if (input.agentId) await this.assertAgent(tenantId, input.agentId);
+    await this.planLimits.assertWithinPlan(tenantId, 'webchatWidgets', existing.id);
+    if (input.agentId) {
+      await this.assertAgent(tenantId, input.agentId);
+      await this.planLimits.assertWithinPlan(tenantId, 'agents', input.agentId);
+    }
     const patch: Partial<WebchatWidget> = { updatedAt: new Date() };
     if (input.agentId !== undefined) patch.agentId = input.agentId;
     if (input.name !== undefined) patch.name = input.name.trim();
@@ -193,6 +199,13 @@ export class WebchatService {
     if (!row || !row.widget.isEnabled || row.tenantStatus === 'suspended' || row.tenantStatus === 'cancelled') {
       throw new NotFoundException('Webchat indisponível');
     }
+    // Mesma regra do painel: trial vencido, webchat fora do plano ou widget acima do limite
+    // (os mais novos, depois de rebaixar) deixam o widget indisponível no site.
+    const blocked = await this.planLimits.usageBlock(row.widget.tenantId, {
+      feature: 'webchat',
+      item: { resource: 'webchatWidgets', id: row.widget.id },
+    });
+    if (blocked) throw new NotFoundException('Webchat indisponível');
     const allowed = (row.widget.allowedOrigins as string[]) ?? [];
     if (allowed.length > 0 && (!origin || !allowed.includes(origin))) {
       throw new ForbiddenException('Este site não está autorizado a usar o webchat');
@@ -212,7 +225,9 @@ export class WebchatService {
       welcomeMessage: widget.welcomeMessage,
       primaryColor: widget.primaryColor,
       agentName: agent?.name ?? null,
-      online: agent?.status === 'published',
+      online:
+        agent?.status === 'published' &&
+        (await this.planLimits.isWithinPlan(widget.tenantId, 'agents', widget.agentId)),
     };
   }
 
@@ -375,7 +390,8 @@ export class WebchatService {
     let traceId: string | null = null;
     let aiGenerated = false;
 
-    if (agent && agent.status === 'published') {
+    const agentAllowed = !!agent && (await this.planLimits.isWithinPlan(widget.tenantId, 'agents', agent.id));
+    if (agent && agent.status === 'published' && agentAllowed) {
       try {
         const history = previous
           .reverse()

@@ -3,14 +3,34 @@ import { eq, and, inArray } from 'drizzle-orm';
 import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';
 import { pcDevices, pcCommands } from '../../database/schema';
 import { v4 as uuidv4 } from 'uuid';
+import { PlanLimitsService } from '../../shared/plans/plan-limits.service';
 
 const COMMAND_TIMEOUT_MS = 30_000;
 
 @Injectable()
 export class PcConnectorService {
-  constructor(@Inject(DRIZZLE_TOKEN) private readonly db: DrizzleDB) {}
+  constructor(
+    @Inject(DRIZZLE_TOKEN) private readonly db: DrizzleDB,
+    private readonly planLimits: PlanLimitsService,
+  ) {}
+
+  /**
+   * PC Connector fora da proposta v4.2: bloqueado em todos os planos até ser homologado
+   * (liberável só por exceção do admin). Vale também para as rotas públicas do script,
+   * que hoje não autenticam o dispositivo.
+   */
+  private assertAllowed(tenantId: string): Promise<void> {
+    return this.planLimits.assertUsable(tenantId, { feature: 'pcConnector' });
+  }
+
+  private async assertDeviceAllowed(deviceId: string): Promise<void> {
+    const [device] = await this.db.select({ tenantId: pcDevices.tenantId }).from(pcDevices).where(eq(pcDevices.id, deviceId)).limit(1);
+    if (!device) throw new NotFoundException('Device not found');
+    await this.assertAllowed(device.tenantId);
+  }
 
   async generatePairingToken(tenantId: string): Promise<{ token: string; expiresAt: Date }> {
+    await this.assertAllowed(tenantId);
     const token = uuidv4();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
     const id = uuidv4();
@@ -35,6 +55,7 @@ export class PcConnectorService {
       .where(eq(pcDevices.pairingToken, token));
 
     if (!device) throw new NotFoundException('Pairing token not found');
+    await this.assertAllowed(device.tenantId);
     if (!device.pairingExpiresAt || device.pairingExpiresAt < new Date()) {
       throw new BadRequestException('Pairing token expired');
     }
@@ -103,6 +124,7 @@ export class PcConnectorService {
     params: Record<string, unknown>,
     agentId?: string,
   ): Promise<PcCommandResult> {
+    await this.assertAllowed(tenantId);
     const [device] = await this.db
       .select()
       .from(pcDevices)
@@ -160,6 +182,7 @@ export class PcConnectorService {
   }
 
   async getPendingCommands(deviceId: string) {
+    await this.assertDeviceAllowed(deviceId);
     await this.db
       .update(pcDevices)
       .set({ lastSeenAt: new Date() })
@@ -178,6 +201,7 @@ export class PcConnectorService {
     result?: Record<string, unknown>,
     error?: string,
   ) {
+    await this.assertDeviceAllowed(deviceId);
     const [cmd] = await this.db
       .select({ id: pcCommands.id, deviceId: pcCommands.deviceId })
       .from(pcCommands)
