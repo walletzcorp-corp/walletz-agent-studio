@@ -5,7 +5,7 @@ import {
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import * as crypto from 'crypto';
-import { eq, and, isNull, ne } from 'drizzle-orm';
+import { eq, and, isNull, ne, desc } from 'drizzle-orm';
 import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';
 import {
   whatsappAccounts, whatsappMessageLogs, whatsappTemplates,
@@ -1101,6 +1101,7 @@ export class WhatsappService {
         eq(conversations.channel, 'whatsapp'),
         ne(conversations.status, 'resolved'),
       ))
+      .orderBy(desc(conversations.createdAt))
       .limit(1);
 
     let conversationId: string;
@@ -1143,7 +1144,7 @@ export class WhatsappService {
       providerMessageId: message.id,
       content,
       isAiGenerated: false,
-    });
+    }).onConflictDoNothing();
 
     // ── Update whatsapp_message_logs with conversationId + contactId ──
     await this.db
@@ -1602,6 +1603,14 @@ export class WhatsappService {
         : undefined) ?? 'AI_PROVIDER_NOT_CONFIGURED';
       aiProviderInfo = { configured: false, status: errorCode };
       issues.push(`Provedor de IA: ${errorCode}. Adicione uma chave de API em Configurações → Conexões de IA.`);
+    }
+
+    // ── Webhook env check (embedded-signup accounts only) ────────────────────
+    if (account.credentialSource !== 'client') {
+      const hasAppSecret = Boolean(process.env.META_APP_SECRET);
+      if (!hasAppSecret) {
+        issues.push('META_APP_SECRET não configurado no servidor. Sem ele o webhook global rejeita todas as mensagens (401). Configure a variável de ambiente.');
+      }
     }
 
     // ── Webhook subscription check ────────────────────────────────────────────
