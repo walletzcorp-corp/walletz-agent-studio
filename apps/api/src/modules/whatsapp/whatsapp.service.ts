@@ -1282,7 +1282,6 @@ export class WhatsappService {
       const result = await this.labService.chat(
         { agentId: agent.id, message: userMessage },
         tenantId,
-        undefined,
         { conversationId, contactId },
       );
 
