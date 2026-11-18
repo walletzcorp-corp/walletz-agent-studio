@@ -20,7 +20,7 @@ import { EncryptionService } from '../../shared/crypto/encryption.service';
 import { AuditService } from '../../shared/audit/audit.service';
 import { PlanLimitsService } from '../../shared/plans/plan-limits.service';
 import { parseRateLimitHeaders } from '../../shared/llm-usage/llm-usage.service';
-import { getAdapter, pickDefaultModel, PROVIDER_CATALOG, type ProviderInfo } from './llm/provider-catalog';
+import { getAdapter, modelCandidates, PROVIDER_CATALOG, type ProviderInfo } from './llm/provider-catalog';
 import { LlmProviderError, type LlmAdapter } from './llm/llm.types';
 import { embeddingModelId, generateEmbeddings, type EmbeddingPurpose } from './llm/embeddings';
 import type { CreateAiConnectionDto, UpdateAiConnectionDto } from './dto/ai-connection.dto';
@@ -57,6 +57,15 @@ export interface TestResult {
 }
 
 const TEST_SYSTEM = 'Você está sendo testado pela plataforma Walletz. Responda apenas: OK';
+const TEST_MAX_TOKENS = 256;
+const MAX_MODEL_ATTEMPTS = 3;
+
+/** Resposta original do provedor (já sem chaves), para o cliente conferir o motivo exato. */
+function providerDetail(err: LlmProviderError): string {
+  const text = err.providerMessage.replace(/\s+/g, ' ').trim();
+  if (!text) return '';
+  return ` Resposta do provedor: "${text.length > 240 ? `${text.slice(0, 239)}…` : text}"`;
+}
 
 export function maskKey(last4: string): string {
   return `••••••••${last4}`;
@@ -142,8 +151,10 @@ export class AiProvidersService {
           HttpStatus.UNPROCESSABLE_ENTITY,
         );
       }
-      const model = requestedModel ?? pickDefaultModel(provider, models);
-      if (!model) {
+      // Modelo escolhido pelo cliente: só ele. Sem escolha: tenta os candidatos enquanto o
+      // provedor disser que o modelo não existe mais (ex.: Gemini 2.x retirado para contas novas).
+      const candidates = requestedModel ? [requestedModel] : modelCandidates(provider, models).slice(0, MAX_MODEL_ATTEMPTS);
+      if (candidates.length === 0) {
         throw new HttpException(
           {
             statusCode: HttpStatus.UNPROCESSABLE_ENTITY,
@@ -153,19 +164,34 @@ export class AiProvidersService {
           HttpStatus.UNPROCESSABLE_ENTITY,
         );
       }
-      await adapter
-        .createSession({
-          apiKey,
-          model,
-          system: TEST_SYSTEM,
-          history: [{ role: 'user', content: 'Teste de conexão' }],
-          tools: [],
-          maxTokens: 32,
-        })
-        .send();
-      return { model, models };
+      let lastModelError: LlmProviderError | null = null;
+      for (const model of candidates) {
+        try {
+          await adapter
+            .createSession({
+              apiKey,
+              model,
+              system: TEST_SYSTEM,
+              history: [{ role: 'user', content: 'Teste de conexão' }],
+              tools: [],
+              // Folga para modelos que "pensam" antes de responder (com 32 alguns não respondem).
+              maxTokens: TEST_MAX_TOKENS,
+            })
+            .send();
+          return { model, models };
+        } catch (err) {
+          if (!(err instanceof LlmProviderError) || err.kind !== 'model' || requestedModel) throw err;
+          this.logger.warn(`Modelo indisponível no teste (${provider}/${model}), tentando o próximo: ${err.providerMessage}`);
+          lastModelError = err;
+        }
+      }
+      throw lastModelError!;
     } catch (err) {
-      if (err instanceof LlmProviderError) throw this.toHttpError(err, requestedModel);
+      if (err instanceof LlmProviderError) {
+        // Sem a chave (providerMessage já passa por redactSecrets): ajuda a diagnosticar recusas.
+        this.logger.warn(`Validação de chave recusada: ${err.provider} ${err.kind} (${err.status ?? '-'}): ${err.providerMessage}`);
+        throw this.toHttpError(err, requestedModel);
+      }
       throw err;
     }
   }
@@ -585,19 +611,23 @@ export class AiProvidersService {
         return make(
           HttpStatus.PAYMENT_REQUIRED,
           'AI_PROVIDER_BILLING',
-          `Provedor de IA indisponível por faturamento (${name}): a conta recusou a cobrança (sem créditos ou quota). Regularize diretamente no provedor; a Walletz não vende créditos de IA.`,
+          err.provider === 'gemini'
+            ? `Provedor de IA indisponível por faturamento (${name}): este modelo não tem cota gratuita na sua conta. Ative o faturamento do projeto no Google AI Studio ou escolha um modelo Flash-Lite (ex.: gemini-3.1-flash-lite). A Walletz não vende créditos de IA.${providerDetail(err)}`
+            : `Provedor de IA indisponível por faturamento (${name}): a conta recusou a cobrança (sem créditos ou quota). Regularize diretamente no provedor; a Walletz não vende créditos de IA.${providerDetail(err)}`,
         );
       case 'rate_limit':
         return make(
           HttpStatus.TOO_MANY_REQUESTS,
           'AI_PROVIDER_RATE_LIMIT',
-          `O ${name} limitou a taxa de chamadas da sua conta. Aguarde alguns instantes ou amplie os limites no provedor.`,
+          err.provider === 'gemini'
+            ? `O ${name} atingiu o limite da cota da sua conta (no nível gratuito, poucas chamadas por minuto e por dia). Aguarde e tente de novo, ou ative o faturamento no Google AI Studio para limites maiores.${providerDetail(err)}`
+            : `O ${name} limitou a taxa de chamadas da sua conta. Aguarde alguns instantes ou amplie os limites no provedor.${providerDetail(err)}`,
         );
       case 'model':
         return make(
           HttpStatus.UNPROCESSABLE_ENTITY,
           'AI_PROVIDER_MODEL',
-          `O modelo${model ? ` "${model}"` : ''} não está disponível na sua conta ${name}. Escolha outro modelo em Config. IA.`,
+          `O modelo${model ? ` "${model}"` : ''} não está disponível na sua conta ${name}. Escolha outro modelo em Config. IA.${providerDetail(err)}`,
         );
       case 'unavailable':
         return make(

@@ -45,8 +45,10 @@ export const PROVIDER_CATALOG: Record<AiProvider, ProviderInfo> = {
   gemini: {
     id: 'gemini',
     name: 'Google Gemini',
-    keyHint: 'AIza…',
-    preferredModels: ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'],
+    keyHint: 'AIza… ou AQ.…',
+    // 11/2026: 2.x retirados para contas novas (404); Pro sem cota gratuita (429 limit: 0);
+    // Flash 3.x instável no nível gratuito. Flash-Lite responde em conta gratuita.
+    preferredModels: ['gemini-3.1-flash-lite', 'gemini-flash-lite-latest', 'gemini-3.5-flash', 'gemini-2.5-flash'],
     links: {
       buyCredits: 'https://ai.google.dev/gemini-api/docs/billing?hl=pt-BR',
       createKey: 'https://aistudio.google.com/api-keys',
@@ -98,12 +100,21 @@ export function getAdapter(provider: AiProvider): LlmAdapter {
 
 /** Escolhe o modelo padrão entre os disponíveis na conta do cliente. */
 export function pickDefaultModel(provider: AiProvider, available: string[]): string | null {
+  return modelCandidates(provider, available)[0] ?? null;
+}
+
+/**
+ * Modelos a testar, na ordem: preferidos disponíveis (exatos, depois versões datadas,
+ * ex.: "claude-sonnet-4-6-20260101") e, por fim, o primeiro da lista do provedor.
+ */
+export function modelCandidates(provider: AiProvider, available: string[]): string[] {
   const preferred = PROVIDER_CATALOG[provider].preferredModels;
-  for (const model of preferred) if (available.includes(model)) return model;
-  // Ex.: "claude-sonnet-4-6-20260101" quando só existe a versão datada.
-  for (const model of preferred) {
-    const dated = available.find((id) => id.startsWith(`${model}-`));
-    if (dated) return dated;
-  }
-  return available[0] ?? null;
+  const out: string[] = [];
+  const add = (m: string | undefined) => {
+    if (m && !out.includes(m)) out.push(m);
+  };
+  for (const model of preferred) if (available.includes(model)) add(model);
+  for (const model of preferred) add(available.find((id) => id.startsWith(`${model}-`)));
+  add(available[0]);
+  return out;
 }

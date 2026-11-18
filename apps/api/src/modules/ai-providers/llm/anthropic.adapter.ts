@@ -103,8 +103,8 @@ export class AnthropicAdapter implements LlmAdapter {
       error?: { message?: string };
     };
     if (!res.ok) {
-      const message = redactSecrets(body.error?.message ?? res.statusText);
-      throw new LlmProviderError(classifyProviderError(res.status, message), 'anthropic', message, res.status);
+      const raw = body.error?.message ?? res.statusText;
+      throw new LlmProviderError(classifyProviderError(res.status, raw), 'anthropic', redactSecrets(raw), res.status);
     }
     return (body.data ?? []).map((m) => m.id);
   }

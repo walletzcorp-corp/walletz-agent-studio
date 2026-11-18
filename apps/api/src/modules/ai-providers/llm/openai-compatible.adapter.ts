@@ -45,14 +45,42 @@ export function toWireToolName(name: string): string {
   return name.replace(/[^a-zA-Z0-9_-]/g, '__').slice(0, 64);
 }
 
+/** "Cota GenerateRequestsPerDay…-FreeTier, limit: 0; tente em 14s" a partir de error.details do Google. */
+function googleQuotaSummary(details: unknown): string | null {
+  if (!Array.isArray(details)) return null;
+  const quotas: string[] = [];
+  let retry: string | null = null;
+  for (const d of details) {
+    if (!d || typeof d !== 'object') continue;
+    const violations = (d as { violations?: unknown }).violations;
+    if (Array.isArray(violations)) {
+      for (const v of violations) {
+        const q = v as { quotaId?: unknown; quotaMetric?: unknown; quotaValue?: unknown };
+        const name = typeof q.quotaId === 'string' ? q.quotaId : typeof q.quotaMetric === 'string' ? q.quotaMetric : null;
+        if (!name) continue;
+        const value = typeof q.quotaValue === 'string' || typeof q.quotaValue === 'number' ? `, limit: ${q.quotaValue}` : '';
+        quotas.push(`${name}${value}`);
+      }
+    }
+    const delay = (d as { retryDelay?: unknown }).retryDelay;
+    if (typeof delay === 'string') retry = delay;
+  }
+  if (quotas.length === 0) return null;
+  return `Cota ${quotas.slice(0, 3).join('; ')}${retry ? `; tente em ${retry}` : ''}`;
+}
+
 /** Extrai a mensagem de erro dos formatos OpenAI, Gemini (lista) e OpenRouter. */
 export function extractErrorMessage(body: unknown, fallback: string): string {
   const candidate = Array.isArray(body) ? body[0] : body;
   if (candidate && typeof candidate === 'object') {
     const err = (candidate as { error?: unknown }).error;
     if (err && typeof err === 'object') {
-      const e = err as { message?: unknown; code?: unknown; status?: unknown };
+      const e = err as { message?: unknown; code?: unknown; status?: unknown; details?: unknown };
       const parts = [e.message, e.code, e.status].filter((p) => typeof p === 'string' && p.length > 0);
+      // Gemini: a cota estourada e o limite vêm em details (QuotaFailure/RetryInfo). Vai na frente
+      // para não se perder quando a mensagem é cortada antes de ser guardada.
+      const quota = googleQuotaSummary(e.details);
+      if (quota) parts.unshift(quota);
       if (parts.length > 0) return parts.join(' — ');
     }
     if (typeof err === 'string') return err;
@@ -84,15 +112,15 @@ async function request<T>(
   }
   const body: unknown = await res.json().catch(() => null);
   if (!res.ok) {
-    const message = redactSecrets(extractErrorMessage(body, res.statusText || `HTTP ${res.status}`));
-    throw new LlmProviderError(classifyProviderError(res.status, message), config.provider, message, res.status);
+    const raw = extractErrorMessage(body, res.statusText || `HTTP ${res.status}`);
+    throw new LlmProviderError(classifyProviderError(res.status, raw), config.provider, redactSecrets(raw), res.status);
   }
   // OpenRouter pode responder 200 com { error } quando o provedor final falha.
   if (body && typeof body === 'object' && 'error' in body && !('choices' in body) && !('data' in body)) {
-    const message = redactSecrets(extractErrorMessage(body, 'erro do provedor'));
+    const raw = extractErrorMessage(body, 'erro do provedor');
     const code = (body as { error?: { code?: unknown } }).error?.code;
     const status = typeof code === 'number' ? code : undefined;
-    throw new LlmProviderError(classifyProviderError(status, message), config.provider, message, status);
+    throw new LlmProviderError(classifyProviderError(status, raw), config.provider, redactSecrets(raw), status);
   }
   return { data: body as T, headers: res.headers };
 }
