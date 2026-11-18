@@ -3,7 +3,7 @@ import {
   UseGuards, Headers, RawBodyRequest, Req, HttpCode, Logger, Patch, Put,
 } from '@nestjs/common';
 import type { Request } from 'express';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RbacGuard } from '../../shared/rbac/rbac.guard';
 import { Roles } from '../../shared/rbac/roles.decorator';
@@ -77,9 +77,8 @@ export class WhatsappController {
   @UseGuards(JwtAuthGuard, RbacGuard)
   @ApiBearerAuth()
   @Roles('viewer')
-  @ApiOperation({ summary: 'List WhatsApp accounts for tenant' })
-  @Roles('viewer')
   @PlanExempt()
+  @ApiOperation({ summary: 'List WhatsApp accounts for tenant' })
   listAccounts(@Param('tenantId') tenantId: string) {
     return this.whatsappService.listAccounts(tenantId).then((rows) => rows.map((r) => this.whatsappService.toView(r)));
   }
@@ -88,9 +87,8 @@ export class WhatsappController {
   @UseGuards(JwtAuthGuard, RbacGuard)
   @ApiBearerAuth()
   @Roles('viewer')
-  @ApiOperation({ summary: 'Get WhatsApp account details' })
-  @Roles('viewer')
   @PlanExempt()
+  @ApiOperation({ summary: 'Get WhatsApp account details' })
   getAccount(
     @Param('tenantId') tenantId: string,
     @Param('accountId') accountId: string,
@@ -180,8 +178,8 @@ export class WhatsappController {
   @ApiBearerAuth()
   @Roles('admin', 'owner')
   @HttpCode(204)
-  @ApiOperation({ summary: 'Disconnect a WhatsApp account' })
   @PlanExempt()
+  @ApiOperation({ summary: 'Disconnect a WhatsApp account' })
   disconnectAccount(
     @Param('tenantId') tenantId: string,
     @Param('accountId') accountId: string,
@@ -195,7 +193,6 @@ export class WhatsappController {
   @ApiBearerAuth()
   @Roles('agent_operator')
   @ApiOperation({ summary: 'Send a text message via WhatsApp' })
-  @Roles('admin')
   sendMessage(
     @Param('tenantId') tenantId: string,
     @Param('accountId') accountId: string,
@@ -246,7 +243,6 @@ export class WhatsappController {
   @ApiBearerAuth()
   @Roles('viewer')
   @ApiOperation({ summary: 'List approved templates' })
-  @Roles('viewer')
   listTemplates(
     @Param('tenantId') tenantId: string,
     @Param('accountId') accountId: string,
@@ -259,11 +255,22 @@ export class WhatsappController {
   @ApiBearerAuth()
   @Roles('viewer')
   @ApiOperation({ summary: 'Get message statistics for account' })
-  @Roles('viewer')
   getStats(
     @Param('tenantId') tenantId: string,
     @Param('accountId') accountId: string,
   ) {
     return this.whatsappService.getStats(tenantId, accountId);
+  }
+
+  @Get('tenants/:tenantId/whatsapp/accounts/:accountId/pipeline-check')
+  @UseGuards(JwtAuthGuard, RbacGuard)
+  @ApiBearerAuth()
+  @Roles('admin', 'owner')
+  @ApiOperation({ summary: 'Diagnóstico completo do pipeline WhatsApp → IA: agente, provedor de IA, webhook subscription' })
+  checkPipeline(
+    @Param('tenantId') tenantId: string,
+    @Param('accountId') accountId: string,
+  ) {
+    return this.whatsappService.checkPipeline(tenantId, accountId);
   }
 }

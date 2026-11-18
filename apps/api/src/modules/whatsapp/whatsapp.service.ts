@@ -24,6 +24,7 @@ import { WebhooksService } from '../webhooks/webhooks.service';
 import { EncryptionService } from '../../shared/crypto/encryption.service';
 import { createId } from '../../database/utils/id';
 import { LabService } from '../lab/lab.service';
+import { AiProvidersService } from '../ai-providers/ai-providers.service';
 import type { ConnectWhatsappDto, EmbeddedSignupDto, SendMessageDto } from './dto/connect-account.dto';
 
 const META_GRAPH_URL = 'https://graph.facebook.com/v22.0';
@@ -80,6 +81,7 @@ export class WhatsappService {
     private readonly labService: LabService,
     private readonly planLimits: PlanLimitsService,
     private readonly webhooks: WebhooksService,
+    private readonly aiProviders: AiProvidersService,
   ) {}
 
   /** WhatsApp oficial só nos planos que o incluem, até o limite de números. */
@@ -1349,8 +1351,93 @@ export class WhatsappService {
       });
       this.logger.log(`AI reply sent for conversation ${conversationId} (trace: ${result.traceId})`);
     } catch (err) {
+      const response = typeof (err as { getResponse?: () => unknown }).getResponse === 'function'
+        ? (err as { getResponse: () => unknown }).getResponse()
+        : null;
+      const errorCode = typeof response === 'object' && response !== null
+        ? (response as { error?: string }).error
+        : undefined;
       const msg = err instanceof Error ? err.message : String(err);
-      this.logger.error(`AI response pipeline failed: ${msg}`);
+      this.logger.error(
+        `AI pipeline failed [${errorCode ?? 'UNKNOWN'}] tenant=${tenantId} agent=${agent.id} conv=${conversationId}: ${msg}`,
+      );
+      // Para erros permanentes de config, envia uma resposta de fallback para o contato não ficar sem retorno.
+      const isConfigError = errorCode === 'AI_PROVIDER_NOT_CONFIGURED'
+        || errorCode === 'AI_PROVIDER_INVALID_KEY'
+        || errorCode === 'AI_PROVIDER_BILLING';
+      if (isConfigError) {
+        const isoDay = new Date().toISOString().slice(0, 10);
+        void this.sendAiFallback(
+          account, to, conversationId, contactId,
+          `fallback-${errorCode}-${conversationId}-${isoDay}`,
+        );
+      }
+    }
+  }
+
+  /** Envia mensagem de fallback ao contato quando o pipeline de IA falha com erro permanente de configuração.
+   *  Idempotente: um envio por conversationId por erro por dia. */
+  private async sendAiFallback(
+    account: WhatsappAccount,
+    to: string,
+    conversationId: string,
+    contactId: string,
+    idempotencyKey: string,
+  ): Promise<void> {
+    const [dup] = await this.db
+      .select({ id: whatsappMessageLogs.id })
+      .from(whatsappMessageLogs)
+      .where(and(
+        eq(whatsappMessageLogs.tenantId, account.tenantId),
+        eq(whatsappMessageLogs.idempotencyKey, idempotencyKey),
+      ))
+      .limit(1);
+    if (dup) return;
+
+    const text = 'Olá! No momento não estou disponível para responder automaticamente. Por favor, tente novamente em breve ou entre em contato por outro canal.';
+    const logId = createId();
+
+    await this.db.insert(whatsappMessageLogs).values({
+      id: logId,
+      tenantId: account.tenantId,
+      accountId: account.id,
+      direction: 'outbound',
+      status: 'pending',
+      to,
+      messageType: 'text',
+      content: { text },
+      conversationId,
+      contactId,
+      idempotencyKey,
+    });
+
+    const bearerToken = this.decryptToken(account);
+    try {
+      const resp = await firstValueFrom(
+        this.httpService.post(
+          `${META_GRAPH_URL}/${account.phoneNumberId}/messages`,
+          {
+            messaging_product: 'whatsapp',
+            recipient_type: 'individual',
+            to,
+            type: 'text',
+            text: { preview_url: false, body: text },
+          },
+          { headers: { Authorization: `Bearer ${bearerToken}` } },
+        ),
+      );
+      const data = resp.data as { messages?: Array<{ id: string }> };
+      const providerMsgId = data.messages?.[0]?.id ?? '';
+      await this.db
+        .update(whatsappMessageLogs)
+        .set({ status: 'sent', providerMessageId: providerMsgId, sentAt: new Date() })
+        .where(eq(whatsappMessageLogs.id, logId));
+    } catch (e) {
+      this.logger.warn(`AI fallback message send failed: ${e}`);
+      await this.db
+        .update(whatsappMessageLogs)
+        .set({ status: 'failed', errorMessage: String(e), failedAt: new Date() })
+        .where(eq(whatsappMessageLogs.id, logId));
     }
   }
 
@@ -1453,6 +1540,88 @@ export class WhatsappService {
     const failed = logs.filter((l) => l.status === 'failed').length;
 
     return { sent, received, failed, total: logs.length };
+  }
+
+  // ─── Pipeline Diagnostics ────────────────────────────────────────────────────
+
+  /** Verifica todos os pré-requisitos do pipeline WhatsApp → IA para um número. */
+  async checkPipeline(tenantId: string, accountId: string): Promise<{
+    ready: boolean;
+    account: { status: string; hasAgent: boolean; agentId: string | null; agentStatus?: string };
+    aiProvider: { configured: boolean; status?: string; provider?: string };
+    webhookSubscription: { subscribed: boolean; apps: Array<{ id: string; name?: string }> };
+    issues: string[];
+  }> {
+    const account = await this.getAccount(tenantId, accountId);
+    const issues: string[] = [];
+
+    if (account.status !== 'connected') {
+      issues.push(`Conta WhatsApp com status "${account.status}". Reconecte a conta.`);
+    }
+
+    // ── Agent check ───────────────────────────────────────────────────────────
+    let agentStatus: string | undefined;
+    if (account.agentId) {
+      const [agentRow] = await this.db
+        .select({ status: agents.status, deletedAt: agents.deletedAt })
+        .from(agents)
+        .where(and(eq(agents.id, account.agentId), eq(agents.tenantId, tenantId)))
+        .limit(1);
+      if (!agentRow || agentRow.deletedAt) {
+        issues.push('Agente atribuído ao número foi excluído. Atribua outro em Contas → Agente.');
+      } else {
+        agentStatus = agentRow.status;
+        if (agentRow.status !== 'published') {
+          issues.push(`Agente não está publicado (status: "${agentRow.status}"). Publique o agente no Studio.`);
+        }
+      }
+    } else {
+      const [anyAgent] = await this.db
+        .select({ id: agents.id })
+        .from(agents)
+        .where(and(eq(agents.tenantId, tenantId), isNull(agents.deletedAt), ne(agents.status, 'archived')))
+        .limit(1);
+      if (!anyAgent) {
+        issues.push('Nenhum agente encontrado. Crie e publique um agente no Studio.');
+      } else {
+        issues.push('Nenhum agente atribuído a este número. Use Contas → Agente no painel para atribuir.');
+      }
+    }
+
+    // ── AI provider check ─────────────────────────────────────────────────────
+    let aiProviderInfo: { configured: boolean; status?: string; provider?: string } = { configured: false };
+    try {
+      const resolved = await this.aiProviders.resolveForAgent(tenantId, null);
+      aiProviderInfo = { configured: true, status: 'active', provider: resolved.provider };
+    } catch (err) {
+      const response = typeof (err as { getResponse?: () => unknown }).getResponse === 'function'
+        ? (err as { getResponse: () => unknown }).getResponse()
+        : null;
+      const errorCode = (typeof response === 'object' && response !== null
+        ? (response as { error?: string }).error
+        : undefined) ?? 'AI_PROVIDER_NOT_CONFIGURED';
+      aiProviderInfo = { configured: false, status: errorCode };
+      issues.push(`Provedor de IA: ${errorCode}. Adicione uma chave de API em Configurações → Conexões de IA.`);
+    }
+
+    // ── Webhook subscription check ────────────────────────────────────────────
+    const { subscribedApps } = await this.getWabaSubscriptions(tenantId, accountId);
+    if (subscribedApps.length === 0) {
+      issues.push('Nenhum app inscrito na WABA. Chame POST .../waba-subscribe ou clique em "Reinscreveu WABA" no painel.');
+    }
+
+    return {
+      ready: issues.length === 0,
+      account: {
+        status: account.status,
+        hasAgent: Boolean(account.agentId),
+        agentId: account.agentId,
+        agentStatus,
+      },
+      aiProvider: aiProviderInfo,
+      webhookSubscription: { subscribed: subscribedApps.length > 0, apps: subscribedApps },
+      issues,
+    };
   }
 
   // ─── Helpers ─────────────────────────────────────────────────────────────────
