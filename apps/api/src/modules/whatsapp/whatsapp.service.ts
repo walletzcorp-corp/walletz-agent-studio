@@ -290,23 +290,10 @@ export class WhatsappService {
       });
     }
 
-    // ── Passo 5: Validar WABA ID ──────────────────────────────────────────────────
-    try {
-      await firstValueFrom(
-        this.httpService.get(`${META_GRAPH_URL}/${input.wabaId}`, {
-          params: { access_token: input.accessToken, fields: 'id,name' },
-        }),
-      );
-    } catch (err) {
-      const e = this.extractMetaError(err);
-      this.logger.warn(`WABA_NOT_ACCESSIBLE wabaId=${input.wabaId} httpStatus=${e.httpStatus} code=${e.code} subcode=${e.subcode} fbtrace=${e.fbtrace}`);
-      throw new BadRequestException({
-        code: 'WABA_NOT_ACCESSIBLE',
-        message: 'Conta WhatsApp Business (WABA ID) não acessível com este token. Verifique o WABA ID e as permissões do Usuário do Sistema.',
-      });
-    }
-
-    // ── Passo 6: Validar Phone Number ID na WABA ──────────────────────────────────
+    // ── Passo 5+6: Validar WABA e Phone Number via /phone_numbers ────────────────
+    // Nota: GET /{wabaId} direto falha com subcode 2388339 para WABAs que não
+    // suportam esse endpoint. A listagem de /phone_numbers valida implicitamente
+    // que o WABA existe e é acessível com o token, e ainda confirma o número.
     let phones: Array<{ id: string; display_phone_number?: string; verified_name?: string }> = [];
     try {
       const resp = await firstValueFrom(
@@ -319,8 +306,8 @@ export class WhatsappService {
       const e = this.extractMetaError(err);
       this.logger.warn(`PHONE_NUMBER_NOT_ACCESSIBLE (list failed) wabaId=${input.wabaId} httpStatus=${e.httpStatus} code=${e.code} subcode=${e.subcode} fbtrace=${e.fbtrace}`);
       throw new BadRequestException({
-        code: 'PHONE_NUMBER_NOT_ACCESSIBLE',
-        message: 'Não foi possível listar os números da WABA. Verifique as permissões do token.',
+        code: 'WABA_NOT_ACCESSIBLE',
+        message: 'WABA ID inválido ou token sem permissão para acessar esta conta WhatsApp Business.',
       });
     }
 
