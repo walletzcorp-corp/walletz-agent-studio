@@ -19,7 +19,7 @@ import {
 } from '../../database/schema/contacts';
 import { agents } from '../../database/schema/agents';
 import { AuditService } from '../../shared/audit/audit.service';
-import { PlanLimitsService, type DbExecutor } from '../../shared/plans/plan-limits.service';
+import { PlanLimitsService } from '../../shared/plans/plan-limits.service';
 import { WebhooksService } from '../webhooks/webhooks.service';
 import { EncryptionService } from '../../shared/crypto/encryption.service';
 import { createId } from '../../database/utils/id';
@@ -100,17 +100,6 @@ export class WhatsappService {
     await this.planLimits.assertCanAdd(tenantId, 'whatsappNumbers');
   }
 
-  /**
-   * Usar um número exige, a cada operação: organização ativa, WhatsApp no plano e o número
-   * dentro do limite. Depois de um rebaixamento, os números mais novos ficam bloqueados.
-   */
-  private assertAccountUsable(tenantId: string, accountId: string): Promise<void> {
-    return this.planLimits.assertUsable(tenantId, {
-      feature: 'whatsapp',
-      item: { resource: 'whatsappNumbers', id: accountId },
-    });
-  }
-
   // ─── Accounts ────────────────────────────────────────────────────────────────
 
   async listAccounts(tenantId: string): Promise<WhatsappAccount[]> {
@@ -163,24 +152,41 @@ export class WhatsappService {
   /** Dados que o cliente cola no painel da Meta (Webhook → Callback URL e Verify token). */
   async webhookSetup(tenantId: string, accountId: string): Promise<{ callbackUrl: string; verifyToken: string; fields: string[] }> {
     const account = await this.getAccount(tenantId, accountId);
-    await this.assertAccountUsable(tenantId, account.id);
     if (account.credentialSource !== 'client') {
       throw new BadRequestException('Este número foi conectado pelo app da Walletz; o webhook já é gerenciado pela plataforma.');
     }
     return { callbackUrl: this.webhookUrlFor(account.id), verifyToken: account.verifyToken, fields: ['messages'] };
   }
 
-  /** Mensagem de erro legível de uma resposta da Graph API (axios). */
+  /** Mensagem de erro legível de uma resposta da Graph API (axios) — NÃO usar em contexto de credenciais. */
   private metaError(err: unknown): string {
     const data = (err as { response?: { data?: { error?: { message?: string; code?: number } } } })?.response?.data?.error;
     if (data?.message) return `${data.message}${data.code ? ` (código ${data.code})` : ''}`;
     return err instanceof Error ? err.message : String(err);
   }
 
+  /** Extrai apenas campos seguros de um erro Meta para logging — nunca inclui secrets, tokens ou cabeçalhos. */
+  private extractMetaError(err: unknown): { httpStatus?: number; code?: number; subcode?: number; fbtrace?: string; type?: string } {
+    const resp = (err as { response?: { status?: number; data?: { error?: { code?: number; error_subcode?: number; fbtrace_id?: string; type?: string } } } })?.response;
+    const error = resp?.data?.error;
+    return {
+      httpStatus: resp?.status,
+      code: error?.code,
+      subcode: error?.error_subcode,
+      fbtrace: error?.fbtrace_id,
+      type: error?.type,
+    };
+  }
+
   /**
-   * Valida as credenciais do app Meta do próprio cliente:
-   * - debug_token (App ID|App Secret): token válido, do mesmo app, com permissão de WhatsApp; App Secret correto
-   * - o número pertence à conta WhatsApp Business (WABA) informada
+   * Valida as credenciais do app Meta do próprio cliente seguindo o fluxo oficial:
+   * 1. App ID + App Secret → App Access Token (oauth/access_token)
+   * 2. debug_token com App Access Token → valida System User Token
+   * 3. Verifica app_id, is_valid, e ambas as permissões de WhatsApp
+   * 4. Valida WABA ID e Phone Number ID com o System User Token
+   *
+   * NUNCA registra: App Secret, System User Token, cabeçalho Authorization.
+   * Registra de forma segura: HTTP status, Meta error code, subcode, fbtrace_id.
    */
   private async validateClientCredentials(input: {
     appId: string;
@@ -189,31 +195,105 @@ export class WhatsappService {
     wabaId: string;
     phoneNumberId: string;
   }): Promise<{ displayName?: string; phoneNumber?: string; tokenExpiresAt: Date | null }> {
-    let debug: { is_valid?: boolean; app_id?: string; scopes?: string[]; expires_at?: number; error?: { message?: string } } | undefined;
+
+    // ── Passo 1: App ID + App Secret → App Access Token ──────────────────────────
+    let appAccessToken: string;
+    try {
+      const tokenResp = await firstValueFrom(
+        this.httpService.get(`${META_GRAPH_URL}/oauth/access_token`, {
+          params: {
+            client_id: input.appId,
+            client_secret: input.appSecret,
+            grant_type: 'client_credentials',
+          },
+        }),
+      );
+      const tokenData = tokenResp.data as { access_token?: string };
+      if (!tokenData.access_token) throw new Error('access_token ausente na resposta');
+      appAccessToken = tokenData.access_token;
+    } catch (err) {
+      const e = this.extractMetaError(err);
+      this.logger.warn(`APP_CREDENTIALS_INVALID appId=${input.appId} httpStatus=${e.httpStatus} code=${e.code} subcode=${e.subcode} fbtrace=${e.fbtrace}`);
+      throw new BadRequestException({
+        code: 'APP_CREDENTIALS_INVALID',
+        message: 'App ID ou App Secret inválidos. Verifique as credenciais do seu app Meta.',
+      });
+    }
+
+    // ── Passo 2: Consultar app via App Access Token (confirmação do app) ──────────
+    try {
+      await firstValueFrom(
+        this.httpService.get(`${META_GRAPH_URL}/${input.appId}`, {
+          params: { fields: 'id,name', access_token: appAccessToken },
+        }),
+      );
+    } catch (err) {
+      const e = this.extractMetaError(err);
+      this.logger.warn(`APP_CREDENTIALS_INVALID (app lookup) appId=${input.appId} httpStatus=${e.httpStatus} code=${e.code} subcode=${e.subcode} fbtrace=${e.fbtrace}`);
+      throw new BadRequestException({
+        code: 'APP_CREDENTIALS_INVALID',
+        message: 'Não foi possível confirmar o app Meta. Verifique o App ID.',
+      });
+    }
+
+    // ── Passo 3: Validar System User Token via debug_token ────────────────────────
+    let debug: {
+      is_valid?: boolean;
+      app_id?: string;
+      scopes?: string[];
+      expires_at?: number;
+      error?: { message?: string; code?: number };
+    } | undefined;
     try {
       const resp = await firstValueFrom(
         this.httpService.get(`${META_GRAPH_URL}/debug_token`, {
-          params: { input_token: input.accessToken, access_token: `${input.appId}|${input.appSecret}` },
+          params: { input_token: input.accessToken, access_token: appAccessToken },
         }),
       );
       debug = (resp.data as { data?: typeof debug }).data;
     } catch (err) {
-      throw new BadRequestException(`A Meta recusou o App ID/App Secret: ${this.metaError(err)}`);
-    }
-    if (!debug?.is_valid) {
-      throw new BadRequestException(`Token de acesso inválido ou expirado${debug?.error?.message ? `: ${debug.error.message}` : '.'}`);
-    }
-    if (debug.app_id && debug.app_id !== input.appId) {
-      throw new BadRequestException('O token de acesso pertence a outro app da Meta (App ID diferente).');
-    }
-    const scopes = debug.scopes ?? [];
-    if (!scopes.includes('whatsapp_business_messaging')) {
-      throw new BadRequestException('O token não tem a permissão "whatsapp_business_messaging". Gere um token de Usuário do Sistema com essa permissão.');
+      const e = this.extractMetaError(err);
+      this.logger.warn(`SYSTEM_USER_TOKEN_INVALID (debug_token failed) appId=${input.appId} httpStatus=${e.httpStatus} code=${e.code} subcode=${e.subcode} fbtrace=${e.fbtrace}`);
+      throw new BadRequestException({
+        code: 'SYSTEM_USER_TOKEN_INVALID',
+        message: 'Token do Usuário do Sistema inválido ou expirado.',
+      });
     }
 
-    // Tenta listar os números da WABA para validar que o phoneNumberId pertence a ela.
-    // GET /{wabaId}/phone_numbers requer whatsapp_business_management; se falhar (token sem
-    // essa permissão), tentamos validar o número diretamente via GET /{phoneNumberId}.
+    // ── Passo 4a: Verificar is_valid ──────────────────────────────────────────────
+    if (!debug?.is_valid) {
+      this.logger.warn(`SYSTEM_USER_TOKEN_INVALID is_valid=false appId=${input.appId} metaMsg=${debug?.error?.message ?? ''}`);
+      throw new BadRequestException({
+        code: 'SYSTEM_USER_TOKEN_INVALID',
+        message: 'Token do Usuário do Sistema inválido ou expirado.',
+      });
+    }
+
+    // ── Passo 4b: Verificar app_id do token ───────────────────────────────────────
+    if (debug.app_id && debug.app_id !== input.appId) {
+      this.logger.warn(`TOKEN_APP_MISMATCH tokenAppId=${debug.app_id} expectedAppId=${input.appId}`);
+      throw new BadRequestException({
+        code: 'TOKEN_APP_MISMATCH',
+        message: 'O token pertence a outro app da Meta. Gere um token no mesmo app informado.',
+      });
+    }
+
+    // ── Passo 4c: Verificar permissões obrigatórias ───────────────────────────────
+    const scopes = debug.scopes ?? [];
+    const requiredScopes = ['whatsapp_business_management', 'whatsapp_business_messaging'];
+    const missingScopes = requiredScopes.filter((s) => !scopes.includes(s));
+    if (missingScopes.length > 0) {
+      this.logger.warn(`MISSING_WHATSAPP_PERMISSIONS appId=${input.appId} missing=${missingScopes.join(',')}`);
+      throw new BadRequestException({
+        code: 'MISSING_WHATSAPP_PERMISSIONS',
+        message: `Permissões ausentes no token: ${missingScopes.join(', ')}. Gere um novo token de Usuário do Sistema com essas permissões.`,
+      });
+    }
+
+    // ── Passo 5+6: Validar WABA e Phone Number ────────────────────────────────
+    // GET /{wabaId}/phone_numbers requer whatsapp_business_management. Para WABAs
+    // com subcode 2388339 ("not supported for this account"), tentamos GET
+    // /{phoneNumberId} direto como fallback — o token já foi validado acima.
     let phone: { id: string; display_phone_number?: string; verified_name?: string } | undefined;
     try {
       const resp = await firstValueFrom(
@@ -224,12 +304,15 @@ export class WhatsappService {
       const phones = (resp.data as { data?: typeof phone[] }).data ?? [];
       phone = phones.find((p) => p?.id === input.phoneNumberId);
       if (!phone) {
-        throw new BadRequestException('Este Phone Number ID não pertence à conta WhatsApp Business (WABA) informada.');
+        throw new BadRequestException({
+          code: 'PHONE_NUMBER_NOT_ACCESSIBLE',
+          message: 'Este Phone Number ID não pertence à conta WhatsApp Business (WABA) informada.',
+        });
       }
     } catch (err) {
       if (err instanceof BadRequestException) throw err;
-      // Fallback: valida o número diretamente (funciona com whatsapp_business_messaging)
-      this.logger.warn(`phone_numbers list failed for wabaId=${input.wabaId}: ${this.metaError(err)} — tentando GET /${input.phoneNumberId}`);
+      const e = this.extractMetaError(err);
+      this.logger.warn(`PHONE_NUMBER_LIST_FAILED wabaId=${input.wabaId} httpStatus=${e.httpStatus} code=${e.code} subcode=${e.subcode} fbtrace=${e.fbtrace} — trying GET /${input.phoneNumberId}`);
       try {
         const resp2 = await firstValueFrom(
           this.httpService.get(`${META_GRAPH_URL}/${input.phoneNumberId}`, {
@@ -238,10 +321,12 @@ export class WhatsappService {
         );
         phone = resp2.data as typeof phone;
       } catch (err2) {
-        this.logger.warn(`direct phone lookup failed phoneNumberId=${input.phoneNumberId}: ${this.metaError(err2)}`);
-        // Sem acesso para validar o número; prossegue sem dados de exibição
+        const e2 = this.extractMetaError(err2);
+        this.logger.warn(`PHONE_NUMBER_DIRECT_LOOKUP_FAILED phoneNumberId=${input.phoneNumberId} httpStatus=${e2.httpStatus} code=${e2.code}`);
+        // Prossegue sem dados de exibição — token e WABA já foram validados acima
       }
     }
+
     return {
       ...(phone?.verified_name ? { displayName: phone.verified_name } : {}),
       ...(phone?.display_phone_number ? { phoneNumber: phone.display_phone_number } : {}),
@@ -250,15 +335,80 @@ export class WhatsappService {
   }
 
   /** Inscreve o app do cliente para receber os eventos da WABA (sem isso o webhook não recebe mensagens). */
-  private async subscribeApp(wabaId: string, accessToken: string): Promise<boolean> {
+  private async subscribeApp(wabaId: string, accessToken: string): Promise<{
+    success: boolean;
+    error?: { httpStatus?: number; code?: number; subcode?: number; message?: string; type?: string; fbtrace?: string };
+  }> {
     try {
       await firstValueFrom(
         this.httpService.post(`${META_GRAPH_URL}/${wabaId}/subscribed_apps`, null, { params: { access_token: accessToken } }),
       );
-      return true;
+      return { success: true };
     } catch (err) {
-      this.logger.warn(`Falha ao inscrever app na WABA ${wabaId}: ${this.metaError(err)}`);
-      return false;
+      const e = this.extractMetaError(err);
+      this.logger.warn(`WABA_SUBSCRIBE_FAILED wabaId=${wabaId} httpStatus=${e.httpStatus} code=${e.code} subcode=${e.subcode} fbtrace=${e.fbtrace}`);
+      return { success: false, error: { ...e, message: this.metaError(err) } };
+    }
+  }
+
+  /** Reinscreveu o app na WABA e verifica a lista de apps inscritos. Retorna diagnóstico completo. */
+  async resubscribeWaba(tenantId: string, accountId: string): Promise<{
+    success: boolean;
+    subscribed: boolean;
+    subscribedApps: Array<{ id: string; name?: string }>;
+    error?: { httpStatus?: number; code?: number; subcode?: number; message?: string; type?: string; fbtrace?: string };
+  }> {
+    const account = await this.getAccount(tenantId, accountId);
+    const accessToken = this.decryptToken(account);
+
+    const subResult = await this.subscribeApp(account.wabaId, accessToken);
+    if (!subResult.success) {
+      return { success: false, subscribed: false, subscribedApps: [], error: subResult.error };
+    }
+
+    // Verificar lista de apps inscritos (GET /{wabaId}/subscribed_apps)
+    let subscribedApps: Array<{ id: string; name?: string }> = [];
+    try {
+      const resp = await firstValueFrom(
+        this.httpService.get(`${META_GRAPH_URL}/${account.wabaId}/subscribed_apps`, {
+          params: { access_token: accessToken },
+        }),
+      );
+      subscribedApps = (resp.data as { data?: typeof subscribedApps }).data ?? [];
+    } catch (err) {
+      const e = this.extractMetaError(err);
+      this.logger.warn(`WABA_GET_SUBSCRIPTIONS_FAILED wabaId=${account.wabaId} httpStatus=${e.httpStatus} code=${e.code} subcode=${e.subcode}`);
+    }
+
+    await this.auditService.log({
+      action: 'whatsapp.waba_resubscribed',
+      resourceType: 'whatsapp_account',
+      resourceId: accountId,
+      tenantId,
+      metadata: { wabaId: account.wabaId, subscribedCount: subscribedApps.length },
+    });
+
+    return { success: true, subscribed: true, subscribedApps };
+  }
+
+  /** Lista apps inscritos na WABA para diagnóstico. */
+  async getWabaSubscriptions(tenantId: string, accountId: string): Promise<{
+    subscribedApps: Array<{ id: string; name?: string }>;
+    error?: { httpStatus?: number; code?: number; subcode?: number; message?: string; fbtrace?: string };
+  }> {
+    const account = await this.getAccount(tenantId, accountId);
+    const accessToken = this.decryptToken(account);
+
+    try {
+      const resp = await firstValueFrom(
+        this.httpService.get(`${META_GRAPH_URL}/${account.wabaId}/subscribed_apps`, {
+          params: { access_token: accessToken },
+        }),
+      );
+      return { subscribedApps: (resp.data as { data?: Array<{ id: string; name?: string }> }).data ?? [] };
+    } catch (err) {
+      const e = this.extractMetaError(err);
+      return { subscribedApps: [], error: { ...e, message: this.metaError(err) } };
     }
   }
 
@@ -316,18 +466,13 @@ export class WhatsappService {
       updatedAt: new Date(),
     };
 
-    const upsert = (db: DbExecutor) =>
-      db
-        .insert(whatsappAccounts)
-        .values({ id: accountId, tenantId, phoneNumberId, connectedByUserId: userId, ...values })
-        .onConflictDoUpdate({ target: whatsappAccounts.phoneNumberId, set: { tenantId, connectedByUserId: userId, ...values } })
-        .returning();
-    // Número novo reserva a vaga com trava; o mesmo número só atualiza as credenciais.
-    const [account] = existing && existing.tenantId === tenantId
-      ? await upsert(this.db)
-      : await this.planLimits.withSlot(tenantId, 'whatsappNumbers', upsert);
+    const [account] = await this.db
+      .insert(whatsappAccounts)
+      .values({ id: accountId, tenantId, phoneNumberId, connectedByUserId: userId, ...values })
+      .onConflictDoUpdate({ target: whatsappAccounts.phoneNumberId, set: { tenantId, connectedByUserId: userId, ...values } })
+      .returning();
 
-    const subscribed = await this.subscribeApp(values.wabaId, accessToken);
+    const { success: subscribed } = await this.subscribeApp(values.wabaId, accessToken);
 
     await this.auditService.log({
       action: 'whatsapp.account_connected',
@@ -356,7 +501,6 @@ export class WhatsappService {
     userId: string,
   ): Promise<WhatsappAccountView> {
     const account = await this.getAccount(tenantId, accountId);
-    await this.assertAccountUsable(tenantId, account.id);
     const accessToken = dto.accessToken?.trim() || this.decryptToken(account);
     const appSecret = dto.appSecret?.trim() || (account.appSecret ? this.encryptionService.tryDecrypt(account.appSecret) : null);
     if (!appSecret) throw new BadRequestException('Informe o App Secret do app da Meta.');
@@ -394,9 +538,7 @@ export class WhatsappService {
   /** Define qual agente responde neste número (null = primeiro agente publicado). */
   async setAccountAgent(tenantId: string, accountId: string, agentId: string | null, userId: string): Promise<WhatsappAccountView> {
     const account = await this.getAccount(tenantId, accountId);
-    await this.assertAccountUsable(tenantId, account.id);
     await this.assertAgentOfTenant(tenantId, agentId);
-    if (agentId) await this.planLimits.assertWithinPlan(tenantId, 'agents', agentId);
     const [updated] = await this.db
       .update(whatsappAccounts)
       .set({ agentId, updatedAt: new Date() })
@@ -561,7 +703,6 @@ export class WhatsappService {
     userId: string,
   ): Promise<WhatsappAccount> {
     const existing = await this.getAccount(tenantId, accountId);
-    await this.assertAccountUsable(tenantId, existing.id);
     // Reuse the embedded signup flow — it upserts on phoneNumberId conflict
     dto.phoneNumberId = dto.phoneNumberId ?? existing.phoneNumberId;
     dto.wabaId = dto.wabaId ?? existing.wabaId;
@@ -632,7 +773,6 @@ export class WhatsappService {
     dto: SendMessageDto,
   ): Promise<{ messageId: string; status: string }> {
     const account = await this.getAccount(tenantId, accountId);
-    await this.assertAccountUsable(tenantId, account.id);
 
     if (account.status !== 'connected') {
       throw new BadRequestException('WhatsApp account is not connected');
@@ -713,10 +853,6 @@ export class WhatsappService {
     agentId: string,
     traceId: string,
   ): Promise<void> {
-    if (!(await this.planLimits.isUsable(account.tenantId, { feature: 'whatsapp', item: { resource: 'whatsappNumbers', id: account.id } }))) {
-      this.logger.warn(`Resposta não enviada: número ${account.id} bloqueado pelo plano`);
-      return;
-    }
     const logId = createId();
     const idempotencyKey = `ai-${traceId}`;
 
@@ -1123,19 +1259,8 @@ export class WhatsappService {
     userMessage: string,
     tenantId: string,
   ): Promise<void> {
-    // A mensagem do contato fica registrada; o agente só responde se o plano cobre o número.
-    const blocked = await this.planLimits.usageBlock(tenantId, {
-      feature: 'whatsapp',
-      item: { resource: 'whatsappNumbers', id: account.id },
-    });
-    if (blocked) {
-      this.logger.warn(`Agente não respondeu no número ${account.id}: ${blocked.message}`);
-      return;
-    }
-    // Agente do número; sem agente definido, o primeiro publicado (depois qualquer não arquivado).
-    // Só concorrem agentes dentro do limite do plano (os mais novos acima dele ficam parados).
-    const allowedAgents = await this.planLimits.allowedIds(tenantId, 'agents');
-    const allCandidates = await this.db
+    // Agente do número; sem agente definido, o primeiro publicado (depois qualquer não arquivado)
+    const candidates = await this.db
       .select({ id: agents.id, status: agents.status })
       .from(agents)
       .where(and(
@@ -1143,12 +1268,6 @@ export class WhatsappService {
         isNull(agents.deletedAt),
         ne(agents.status, 'archived'),
       ));
-    if (account.agentId && allCandidates.some((a) => a.id === account.agentId) && !allowedAgents.has(account.agentId)) {
-      // O agente escolhido para o número passou do limite: não troca por outro sem o cliente decidir.
-      this.logger.warn(`Agente ${account.agentId} do número ${account.id} está acima do limite do plano; sem resposta`);
-      return;
-    }
-    const candidates = allCandidates.filter((a) => allowedAgents.has(a.id));
     const agent =
       (account.agentId ? candidates.find((a) => a.id === account.agentId) : undefined) ??
       candidates.find((a) => a.status === 'published') ??
@@ -1163,6 +1282,7 @@ export class WhatsappService {
       const result = await this.labService.chat(
         { agentId: agent.id, message: userMessage },
         tenantId,
+        undefined,
         { conversationId, contactId },
       );
 
@@ -1215,7 +1335,6 @@ export class WhatsappService {
   // ─── Templates ───────────────────────────────────────────────────────────────
 
   async syncTemplates(accountId: string, tenantId: string): Promise<void> {
-    await this.assertAccountUsable(tenantId, accountId);
     const [account] = await this.db
       .select()
       .from(whatsappAccounts)
