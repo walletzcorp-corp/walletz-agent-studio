@@ -211,24 +211,40 @@ export class WhatsappService {
       throw new BadRequestException('O token não tem a permissão "whatsapp_business_messaging". Gere um token de Usuário do Sistema com essa permissão.');
     }
 
-    let phones: Array<{ id: string; display_phone_number?: string; verified_name?: string }> = [];
+    // Tenta listar os números da WABA para validar que o phoneNumberId pertence a ela.
+    // GET /{wabaId}/phone_numbers requer whatsapp_business_management; se falhar (token sem
+    // essa permissão), tentamos validar o número diretamente via GET /{phoneNumberId}.
+    let phone: { id: string; display_phone_number?: string; verified_name?: string } | undefined;
     try {
       const resp = await firstValueFrom(
         this.httpService.get(`${META_GRAPH_URL}/${input.wabaId}/phone_numbers`, {
           params: { access_token: input.accessToken, fields: 'id,display_phone_number,verified_name' },
         }),
       );
-      phones = (resp.data as { data?: typeof phones }).data ?? [];
+      const phones = (resp.data as { data?: typeof phone[] }).data ?? [];
+      phone = phones.find((p) => p?.id === input.phoneNumberId);
+      if (!phone) {
+        throw new BadRequestException('Este Phone Number ID não pertence à conta WhatsApp Business (WABA) informada.');
+      }
     } catch (err) {
-      throw new BadRequestException(`Não foi possível ler a conta WhatsApp Business (WABA ID): ${this.metaError(err)}`);
-    }
-    const phone = phones.find((p) => p.id === input.phoneNumberId);
-    if (!phone) {
-      throw new BadRequestException('Este Phone Number ID não pertence à conta WhatsApp Business (WABA) informada.');
+      if (err instanceof BadRequestException) throw err;
+      // Fallback: valida o número diretamente (funciona com whatsapp_business_messaging)
+      this.logger.warn(`phone_numbers list failed for wabaId=${input.wabaId}: ${this.metaError(err)} — tentando GET /${input.phoneNumberId}`);
+      try {
+        const resp2 = await firstValueFrom(
+          this.httpService.get(`${META_GRAPH_URL}/${input.phoneNumberId}`, {
+            params: { access_token: input.accessToken, fields: 'id,display_phone_number,verified_name' },
+          }),
+        );
+        phone = resp2.data as typeof phone;
+      } catch (err2) {
+        this.logger.warn(`direct phone lookup failed phoneNumberId=${input.phoneNumberId}: ${this.metaError(err2)}`);
+        // Sem acesso para validar o número; prossegue sem dados de exibição
+      }
     }
     return {
-      ...(phone.verified_name ? { displayName: phone.verified_name } : {}),
-      ...(phone.display_phone_number ? { phoneNumber: phone.display_phone_number } : {}),
+      ...(phone?.verified_name ? { displayName: phone.verified_name } : {}),
+      ...(phone?.display_phone_number ? { phoneNumber: phone.display_phone_number } : {}),
       tokenExpiresAt: debug.expires_at ? new Date(debug.expires_at * 1000) : null,
     };
   }
