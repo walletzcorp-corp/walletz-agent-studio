@@ -20,7 +20,17 @@ async function bootstrap() {
   // Limite TÉCNICO do corpo JSON (proteção contra abuso), separado dos limites funcionais
   // dos campos: o objetivo do agente e o conteúdo digitado não têm limite de caracteres.
   // Uploads de arquivo usam multipart, com limite próprio (KNOWLEDGE_MAX_FILE_SIZE_MB).
-  app.useBodyParser('json', { limit: process.env['API_JSON_BODY_LIMIT'] ?? '2mb' });
+  //
+  // IMPORTANTE: o verify callback garante que req.rawBody seja populado ANTES que o
+  // stream seja consumido. Sem isso, useBodyParser('json') corre antes do parser
+  // interno do NestJS que captura rawBody, deixando req.rawBody = undefined e
+  // quebrando a validação de assinatura dos webhooks da Meta (HMAC calculado sobre
+  // buffer vazio ≠ assinatura real).
+  app.useBodyParser('json', {
+    limit: process.env['API_JSON_BODY_LIMIT'] ?? '2mb',
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    verify: (req: any, _res: any, buf: Buffer) => { req.rawBody = buf; },
+  });
   app.useBodyParser('urlencoded', { limit: '1mb', extended: true });
 
   const configService = app.get(ConfigService);
