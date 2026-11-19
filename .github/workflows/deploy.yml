@@ -52,6 +52,8 @@ jobs:
           tags: ${{ env.IMAGE_API }}:${{ steps.meta.outputs.tag }}
           cache-from: type=gha,scope=api
           cache-to: type=gha,mode=max,scope=api
+          build-args: |
+            META_APP_SECRET=${{ secrets.META_APP_SECRET }}
       - name: Web
         uses: docker/build-push-action@v7
         with:

@@ -19,7 +19,8 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm --filter @walletz/api dep
  && cp -r apps/api/src/database/migrations /out/dist/database/migrations
 
 FROM node:24-bookworm-slim AS runner
-ENV NODE_ENV=production PORT=3001
+ARG META_APP_SECRET
+ENV NODE_ENV=production PORT=3001 META_APP_SECRET=${META_APP_SECRET}
 WORKDIR /app
 COPY --from=builder --chown=node:node /out ./
 # StorageService grava os arquivos da base de conhecimento em ./uploads
