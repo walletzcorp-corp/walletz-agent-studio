@@ -86,6 +86,13 @@ jobs:
           printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+      - name: Atualiza variáveis de ambiente no servidor
+        env:
+          META_APP_SECRET: ${{ secrets.META_APP_SECRET }}
+        run: |
+          ssh -p "${{ vars.PROD_PORT }}" "deploy@${{ vars.PROD_HOST }}" \
+            "cd /srv/prod/agent-studio && sed -i '/^META_APP_SECRET=/d' .env && printf 'META_APP_SECRET=%s\n' '${META_APP_SECRET}' >> .env && docker compose restart api"
+        continue-on-error: true
       - name: Deploy
         run: ssh -p "${{ vars.PROD_PORT }}" "deploy@${{ vars.PROD_HOST }}" "${{ needs.build.outputs.tag }}"
       - name: Resumo
