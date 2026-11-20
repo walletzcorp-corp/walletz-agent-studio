@@ -985,6 +985,7 @@ export class WhatsappService {
       await this.db.update(messages)
         .set({ status: 'failed' })
         .where(and(eq(messages.traceId, traceId), eq(messages.conversationId, conversationId)));
+      await this.handleApiError(err, account.id, account.tenantId);
       throw err;
     }
   }
