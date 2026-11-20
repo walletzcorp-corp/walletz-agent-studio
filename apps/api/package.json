@@ -98,6 +98,9 @@
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
     },
+    "transformIgnorePatterns": [
+      "/node_modules/(?!(@nestjs/axios|@nestjs/bullmq|bullmq|rxjs)/)"
+    ],
     "collectCoverageFrom": [
       "**/*.(t|j)s",
       "!**/node_modules/**",

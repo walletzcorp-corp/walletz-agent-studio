@@ -4,6 +4,9 @@ import {
 } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
+import { InjectQueue } from '@nestjs/bullmq';
+import type { Queue } from 'bullmq';
+import { WHATSAPP_INBOUND_QUEUE, type WhatsappInboundJobData } from './whatsapp.queue';
 import * as crypto from 'crypto';
 import { eq, and, isNull, ne, desc } from 'drizzle-orm';
 import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';
@@ -82,6 +85,7 @@ export class WhatsappService {
     private readonly planLimits: PlanLimitsService,
     private readonly webhooks: WebhooksService,
     private readonly aiProviders: AiProvidersService,
+    @InjectQueue(WHATSAPP_INBOUND_QUEUE) private readonly inboundQueue: Queue<WhatsappInboundJobData>,
   ) {}
 
   /** WhatsApp oficial só nos planos que o incluem, até o limite de números. */
@@ -868,7 +872,6 @@ export class WhatsappService {
     }
   }
 
-  // Internal: send AI reply without account lookup (used in webhook pipeline)
   private async sendAiReply(
     account: WhatsappAccount,
     to: string,
@@ -877,53 +880,53 @@ export class WhatsappService {
     contactId: string,
     agentId: string,
     traceId: string,
+    inboundMessageId: string,
   ): Promise<void> {
-    if (!(await this.planLimits.isUsable(account.tenantId, { feature: 'whatsapp', item: { resource: 'whatsappNumbers', id: account.id } }))) {
-      this.logger.warn(`Resposta não enviada: número ${account.id} bloqueado pelo plano`);
+    if (!(await this.planLimits.isUsable(account.tenantId, {
+      feature: 'whatsapp', item: { resource: 'whatsappNumbers', id: account.id },
+    }))) {
+      throw new Error(`Resposta bloqueada pelo plano: número ${account.id}`);
+    }
+
+    const idempotencyKey = `ai-in-${inboundMessageId}`;
+    const [previous] = await this.db.select().from(whatsappMessageLogs)
+      .where(and(eq(whatsappMessageLogs.tenantId, account.tenantId), eq(whatsappMessageLogs.idempotencyKey, idempotencyKey)))
+      .limit(1);
+    if (previous && ['sent', 'delivered', 'read'].includes(previous.status)) {
+      this.logger.log(`Resposta já enviada para mensagem ${inboundMessageId}; ignorando retry`);
       return;
     }
-    const logId = createId();
-    const idempotencyKey = `ai-${traceId}`;
-
-    // Check idempotency
-    const [dup] = await this.db
-      .select({ id: whatsappMessageLogs.id })
-      .from(whatsappMessageLogs)
-      .where(and(
-        eq(whatsappMessageLogs.tenantId, account.tenantId),
-        eq(whatsappMessageLogs.idempotencyKey, idempotencyKey),
-      ))
-      .limit(1);
-    if (dup) return;
-
-    await this.db.insert(whatsappMessageLogs).values({
-      id: logId,
-      tenantId: account.tenantId,
-      accountId: account.id,
-      direction: 'outbound',
-      status: 'pending',
-      to,
-      messageType: 'text',
-      content: { text },
-      conversationId,
-      contactId,
-      idempotencyKey,
-    });
-
-    // Insert outbound message in messages table
-    await this.db.insert(messages).values({
-      conversationId,
-      tenantId: account.tenantId,
-      direction: 'outbound',
-      status: 'pending',
-      content: { text },
-      sentByAgentId: agentId,
-      isAiGenerated: true,
-      traceId,
-    });
+    const storedText = previous && previous.content && typeof previous.content === 'object'
+      ? String((previous.content as Record<string, unknown>)['text'] ?? text)
+      : text;
+    const logId = previous?.id ?? createId();
+    if (!previous) {
+      await this.db.insert(whatsappMessageLogs).values({
+        id: logId,
+        tenantId: account.tenantId,
+        accountId: account.id,
+        direction: 'outbound',
+        status: 'pending',
+        to,
+        messageType: 'text',
+        content: { text: storedText },
+        conversationId,
+        contactId,
+        idempotencyKey,
+      }).onConflictDoNothing();
+      await this.db.insert(messages).values({
+        conversationId,
+        tenantId: account.tenantId,
+        direction: 'outbound',
+        status: 'pending',
+        content: { text: storedText },
+        sentByAgentId: agentId,
+        isAiGenerated: true,
+        traceId,
+      });
+    }
 
     const bearerToken = this.decryptToken(account);
-
     try {
       const resp = await firstValueFrom(
         this.httpService.post(
@@ -931,34 +934,35 @@ export class WhatsappService {
           {
             messaging_product: 'whatsapp',
             recipient_type: 'individual',
-            to,
+            to: to.replace(/^\+/, ''),
             type: 'text',
-            text: { preview_url: false, body: text },
+            text: { preview_url: false, body: storedText },
           },
           { headers: { Authorization: `Bearer ${bearerToken}` } },
         ),
       );
-
       const data = resp.data as { messages?: Array<{ id: string }> };
-      const providerMsgId = data.messages?.[0]?.id ?? '';
-
-      await this.db
-        .update(whatsappMessageLogs)
-        .set({ status: 'sent', providerMessageId: providerMsgId, sentAt: new Date() })
-        .where(eq(whatsappMessageLogs.id, logId));
-
-      await this.db
-        .update(messages)
+      const providerMsgId = data.messages?.[0]?.id;
+      if (!providerMsgId) throw new Error('Meta retornou HTTP sucesso sem messages[0].id');
+      await this.db.update(whatsappMessageLogs)
+        .set({ status: 'sent', providerMessageId: providerMsgId, errorCode: null, errorMessage: null, sentAt: new Date() })
+        .where(and(eq(whatsappMessageLogs.tenantId, account.tenantId), eq(whatsappMessageLogs.idempotencyKey, idempotencyKey)));
+      await this.db.update(messages)
         .set({ status: 'sent', sentAt: new Date() })
         .where(and(eq(messages.traceId, traceId), eq(messages.conversationId, conversationId)));
-
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      this.logger.error(`AI reply send failed: ${msg}`);
-      await this.db
-        .update(whatsappMessageLogs)
-        .set({ status: 'failed', errorMessage: msg, failedAt: new Date() })
-        .where(eq(whatsappMessageLogs.id, logId));
+      const safe = this.extractMetaError(err);
+      const errorMessage = safe.code
+        ? `Meta HTTP=${safe.httpStatus ?? '?'} code=${safe.code} subcode=${safe.subcode ?? '?'} fbtrace=${safe.fbtrace ?? '?'}`
+        : (err instanceof Error ? err.message : String(err)).slice(0, 500);
+      this.logger.error(`AI reply send failed account=${account.id} inbound=${inboundMessageId}: ${errorMessage}`);
+      await this.db.update(whatsappMessageLogs)
+        .set({ status: 'failed', errorMessage, errorCode: safe.code?.toString() ?? null, failedAt: new Date() })
+        .where(and(eq(whatsappMessageLogs.tenantId, account.tenantId), eq(whatsappMessageLogs.idempotencyKey, idempotencyKey)));
+      await this.db.update(messages)
+        .set({ status: 'failed' })
+        .where(and(eq(messages.traceId, traceId), eq(messages.conversationId, conversationId)));
+      throw err;
     }
   }
 
@@ -1039,7 +1043,24 @@ export class WhatsappService {
         const phoneNumberId = value.metadata?.phone_number_id;
         if (onlyPhoneNumberId && phoneNumberId !== onlyPhoneNumberId) continue;
         for (const message of value.messages ?? []) {
-          await this.processInboundMessage(phoneNumberId, message, value.contacts?.[0]);
+          if (!phoneNumberId || !message.id) {
+            this.logger.warn('Evento WhatsApp sem phone_number_id ou message.id — descartado');
+            continue;
+          }
+          // ACK à Meta só depois de aceitar o evento na fila Redis persistente.
+          const jobId = `wa-${crypto.createHash('sha256').update(`${phoneNumberId}:${message.id}`).digest('hex')}`;
+          await this.inboundQueue.add(
+            'inbound-message',
+            { phoneNumberId, message, waContact: value.contacts?.find((c: WaContact) => c.wa_id === message.from) ?? value.contacts?.[0] },
+            {
+              jobId,
+              attempts: 3,
+              backoff: { type: 'exponential', delay: 3000 },
+              removeOnComplete: { age: 30 * 24 * 3600, count: 100_000 },
+              removeOnFail: { age: 30 * 24 * 3600, count: 100_000 },
+            },
+          );
+          this.logger.log(`WhatsApp inbound enfileirado: ${jobId.slice(0, 20)}`);
         }
 
         for (const status of value.statuses ?? []) {
@@ -1047,6 +1068,11 @@ export class WhatsappService {
         }
       }
     }
+  }
+
+  /** Executado pelo consumidor BullMQ; erros transitórios provocam retry automático. */
+  async processQueuedInbound(data: WhatsappInboundJobData): Promise<void> {
+    await this.processInboundMessage(data.phoneNumberId, data.message, data.waContact);
   }
 
   private async processInboundMessage(
@@ -1174,7 +1200,7 @@ export class WhatsappService {
     // Only respond to text messages
     if (message.type !== 'text' || !message.text?.body) return;
 
-    void this.triggerAiResponse(account, conversationId, contactId, normalizedPhone, message.text.body, tenantId);
+    await this.triggerAiResponse(account, conversationId, contactId, normalizedPhone, message.text.body, tenantId, message.id);
   }
 
   private async handleOptOut(
@@ -1288,18 +1314,16 @@ export class WhatsappService {
     to: string,
     userMessage: string,
     tenantId: string,
+    inboundMessageId: string,
   ): Promise<void> {
-    // A mensagem do contato fica registrada; o agente só responde se o plano cobre o número.
     const blocked = await this.planLimits.usageBlock(tenantId, {
       feature: 'whatsapp',
       item: { resource: 'whatsappNumbers', id: account.id },
     });
     if (blocked) {
       this.logger.warn(`Agente não respondeu no número ${account.id}: ${blocked.message}`);
-      return;
+      throw new Error(`WhatsApp bloqueado pelo plano: ${blocked.message}`);
     }
-    // Agente do número; sem agente definido, o primeiro publicado (depois qualquer não arquivado).
-    // Só concorrem agentes dentro do limite do plano (os mais novos acima dele ficam parados).
     const allowedAgents = await this.planLimits.allowedIds(tenantId, 'agents');
     const allCandidates = await this.db
       .select({ id: agents.id, status: agents.status })
@@ -1310,18 +1334,38 @@ export class WhatsappService {
         ne(agents.status, 'archived'),
       ));
     if (account.agentId && allCandidates.some((a) => a.id === account.agentId) && !allowedAgents.has(account.agentId)) {
-      // O agente escolhido para o número passou do limite: não troca por outro sem o cliente decidir.
       this.logger.warn(`Agente ${account.agentId} do número ${account.id} está acima do limite do plano; sem resposta`);
-      return;
+      throw new Error(`Agente ${account.agentId} bloqueado pelo plano`);
     }
     const candidates = allCandidates.filter((a) => allowedAgents.has(a.id));
     const agent =
       (account.agentId ? candidates.find((a) => a.id === account.agentId) : undefined) ??
-      candidates.find((a) => a.status === 'published') ??
-      candidates[0];
+      candidates.find((a) => a.status === 'published');
 
     if (!agent) {
-      this.logger.log(`No active agent found for tenant ${tenantId}, skipping AI response`);
+      this.logger.warn(`No published agent found for tenant ${tenantId}`);
+      throw new Error(`Nenhum agente publicado para o tenant ${tenantId}`);
+    }
+    if (agent.status !== 'published') {
+      throw new Error(`Agente ${agent.id} não publicado (status=${agent.status})`);
+    }
+
+    // Se a Meta falhou após a IA gerar a resposta, reenvie o texto persistido.
+    const [savedReply] = await this.db.select().from(whatsappMessageLogs)
+      .where(and(
+        eq(whatsappMessageLogs.tenantId, tenantId),
+        eq(whatsappMessageLogs.idempotencyKey, `ai-in-${inboundMessageId}`),
+      )).limit(1);
+    if (savedReply && ['sent', 'delivered', 'read'].includes(savedReply.status)) return;
+    const cachedText = savedReply && savedReply.content && typeof savedReply.content === 'object'
+      ? (savedReply.content as Record<string, unknown>)['text']
+      : null;
+    if (typeof cachedText === 'string' && cachedText.trim()) {
+      await this.sendAiReply(
+        account, to, cachedText, conversationId, contactId, agent.id,
+        `retry-${inboundMessageId}`, inboundMessageId,
+      );
+      this.logger.log(`WhatsApp response restored from previous attempt inbound=${inboundMessageId}`);
       return;
     }
 
@@ -1332,7 +1376,7 @@ export class WhatsappService {
         { conversationId, contactId },
       );
 
-      if (!result.reply) return;
+      if (!result.reply?.trim()) throw new Error(`Provedor de IA retornou resposta vazia (agent=${agent.id}, trace=${result.traceId})`);
 
       await this.sendAiReply(
         account,
@@ -1342,6 +1386,7 @@ export class WhatsappService {
         contactId,
         agent.id,
         result.traceId,
+        inboundMessageId,
       );
 
       void this.webhooks.emit(tenantId, 'message.replied', {
@@ -1362,17 +1407,18 @@ export class WhatsappService {
       this.logger.error(
         `AI pipeline failed [${errorCode ?? 'UNKNOWN'}] tenant=${tenantId} agent=${agent.id} conv=${conversationId}: ${msg}`,
       );
-      // Para erros permanentes de config, envia uma resposta de fallback para o contato não ficar sem retorno.
       const isConfigError = errorCode === 'AI_PROVIDER_NOT_CONFIGURED'
         || errorCode === 'AI_PROVIDER_INVALID_KEY'
         || errorCode === 'AI_PROVIDER_BILLING';
       if (isConfigError) {
         const isoDay = new Date().toISOString().slice(0, 10);
-        void this.sendAiFallback(
+        await this.sendAiFallback(
           account, to, conversationId, contactId,
           `fallback-${errorCode}-${conversationId}-${isoDay}`,
         );
       }
+      // Falhas não podem virar jobs "concluídos": BullMQ registra e tentará novamente.
+      throw err;
     }
   }
 
@@ -1592,7 +1638,7 @@ export class WhatsappService {
     // ── AI provider check ─────────────────────────────────────────────────────
     let aiProviderInfo: { configured: boolean; status?: string; provider?: string } = { configured: false };
     try {
-      const resolved = await this.aiProviders.resolveForAgent(tenantId, null);
+      const resolved = await this.aiProviders.resolveForAgent(tenantId, account.agentId ?? null);
       aiProviderInfo = { configured: true, status: 'active', provider: resolved.provider };
     } catch (err) {
       const response = typeof (err as { getResponse?: () => unknown }).getResponse === 'function'
@@ -1666,9 +1712,9 @@ interface WebhookPayload {
   }>;
 }
 
-interface WaContact { profile?: { name: string }; wa_id: string }
+export interface WaContact { profile?: { name: string }; wa_id: string }
 
-interface WaMessage {
+export interface WaMessage {
   id: string;
   from: string;
   timestamp: string;
