@@ -431,6 +431,29 @@ export class WhatsappService {
     }
   }
 
+  async getMessageLogs(tenantId: string, accountId: string, limit = 20): Promise<{
+    id: string; direction: string; status: string;
+    to?: string | null; from?: string | null; messageType: string;
+    providerMessageId?: string | null; errorCode?: string | null; errorMessage?: string | null;
+    sentAt?: Date | null; failedAt?: Date | null; createdAt: Date;
+  }[]> {
+    await this.getAccount(tenantId, accountId);
+    return this.db
+      .select({
+        id: whatsappMessageLogs.id, direction: whatsappMessageLogs.direction,
+        status: whatsappMessageLogs.status, to: whatsappMessageLogs.to,
+        from: whatsappMessageLogs.from, messageType: whatsappMessageLogs.messageType,
+        providerMessageId: whatsappMessageLogs.providerMessageId,
+        errorCode: whatsappMessageLogs.errorCode, errorMessage: whatsappMessageLogs.errorMessage,
+        sentAt: whatsappMessageLogs.sentAt, failedAt: whatsappMessageLogs.failedAt,
+        createdAt: whatsappMessageLogs.createdAt,
+      })
+      .from(whatsappMessageLogs)
+      .where(and(eq(whatsappMessageLogs.tenantId, tenantId), eq(whatsappMessageLogs.accountId, accountId)))
+      .orderBy(desc(whatsappMessageLogs.createdAt))
+      .limit(limit);
+  }
+
   private async assertAgentOfTenant(tenantId: string, agentId: string | null | undefined): Promise<void> {
     if (!agentId) return;
     const [agent] = await this.db
@@ -1100,7 +1123,7 @@ export class WhatsappService {
     const normalizedPhone = message.from.startsWith('+') ? message.from : `+${message.from}`;
 
     // ── Store raw log (idempotent on provider message ID) ──
-    await this.db.insert(whatsappMessageLogs).values({
+    const [logEntry] = await this.db.insert(whatsappMessageLogs).values({
       tenantId,
       accountId: account.id,
       direction: 'inbound',
@@ -1110,7 +1133,12 @@ export class WhatsappService {
       messageType: message.type,
       content,
       idempotencyKey: message.id,
-    }).onConflictDoNothing();
+    }).onConflictDoNothing().returning({ id: whatsappMessageLogs.id });
+
+    if (!logEntry) {
+      this.logger.log(`Duplicate inbound message ${message.id}, skipping`);
+      return;
+    }
 
     this.logger.log(`Inbound message from ${normalizedPhone} (${message.type})`);
 

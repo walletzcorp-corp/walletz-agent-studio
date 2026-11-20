@@ -262,6 +262,20 @@ export class WhatsappController {
     return this.whatsappService.getStats(tenantId, accountId);
   }
 
+  @Get('tenants/:tenantId/whatsapp/accounts/:accountId/message-logs')
+  @UseGuards(JwtAuthGuard, RbacGuard)
+  @ApiBearerAuth()
+  @Roles('admin', 'owner')
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiOperation({ summary: 'Logs de mensagens recentes com erros de envio (diagnóstico)' })
+  getMessageLogs(
+    @Param('tenantId') tenantId: string,
+    @Param('accountId') accountId: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.whatsappService.getMessageLogs(tenantId, accountId, limit ? Number(limit) : 20);
+  }
+
   @Get('tenants/:tenantId/whatsapp/accounts/:accountId/pipeline-check')
   @UseGuards(JwtAuthGuard, RbacGuard)
   @ApiBearerAuth()
