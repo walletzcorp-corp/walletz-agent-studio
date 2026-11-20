@@ -975,8 +975,9 @@ export class WhatsappService {
         .where(and(eq(messages.traceId, traceId), eq(messages.conversationId, conversationId)));
     } catch (err) {
       const safe = this.extractMetaError(err);
+      const metaMessage = (err as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message;
       const errorMessage = safe.code
-        ? `Meta HTTP=${safe.httpStatus ?? '?'} code=${safe.code} subcode=${safe.subcode ?? '?'} fbtrace=${safe.fbtrace ?? '?'}`
+        ? `Meta HTTP=${safe.httpStatus ?? '?'} code=${safe.code} subcode=${safe.subcode ?? '?'} type=${safe.type ?? '?'} fbtrace=${safe.fbtrace ?? '?'}${metaMessage ? ` msg="${metaMessage.slice(0, 200)}"` : ''}`
         : (err instanceof Error ? err.message : String(err)).slice(0, 500);
       this.logger.error(`AI reply send failed account=${account.id} inbound=${inboundMessageId}: ${errorMessage}`);
       await this.db.update(whatsappMessageLogs)
@@ -1626,6 +1627,7 @@ export class WhatsappService {
     account: { status: string; hasAgent: boolean; agentId: string | null; agentStatus?: string };
     aiProvider: { configured: boolean; status?: string; provider?: string };
     webhookSubscription: { subscribed: boolean; apps: Array<{ id: string; name?: string }> };
+    phoneNumberStatus?: { status?: string; qualityRating?: string; displayPhone?: string; sandbox?: boolean; error?: string };
     issues: string[];
   }> {
     const account = await this.getAccount(tenantId, accountId);
@@ -1690,8 +1692,36 @@ export class WhatsappService {
 
     // ── Webhook subscription check ────────────────────────────────────────────
     const { subscribedApps } = await this.getWabaSubscriptions(tenantId, accountId);
-    if (subscribedApps.length === 0) {
+    // Note: for credentialSource='client' accounts the per-account webhook URL is used;
+    // the /{WABA}/subscribed_apps endpoint may fail (subcode 2388339) which is expected.
+    if (subscribedApps.length === 0 && account.credentialSource !== 'client') {
       issues.push('Nenhum app inscrito na WABA. Chame POST .../waba-subscribe ou clique em "Reinscreveu WABA" no painel.');
+    }
+
+    // ── Phone number Cloud API status check ───────────────────────────────────
+    let phoneNumberStatus: { status?: string; qualityRating?: string; displayPhone?: string; sandbox?: boolean; error?: string } | undefined;
+    try {
+      const accessToken = this.decryptToken(account);
+      const resp = await firstValueFrom(
+        this.httpService.get(`${META_GRAPH_URL}/${account.phoneNumberId}`, {
+          params: { access_token: accessToken, fields: 'status,quality_rating,display_phone_number,name_status,messaging_limit_tier' },
+        }),
+      );
+      const d = resp.data as { status?: string; quality_rating?: string; display_phone_number?: string; name_status?: string; messaging_limit_tier?: string };
+      const numberStatus = d.status ?? 'unknown';
+      const isSandbox = numberStatus === 'SANDBOX' || numberStatus === 'PENDING';
+      phoneNumberStatus = {
+        status: numberStatus,
+        qualityRating: d.quality_rating,
+        displayPhone: d.display_phone_number,
+        sandbox: isSandbox,
+      };
+      if (isSandbox) {
+        issues.push(`Número WhatsApp em modo sandbox/pendente (status="${numberStatus}"). Complete a "Configuração da produção" (Etapa 2) no Meta Developer Console para habilitar envios reais.`);
+      }
+    } catch (err) {
+      const e = this.extractMetaError(err);
+      phoneNumberStatus = { error: `code=${e.code ?? '?'} subcode=${e.subcode ?? '?'} httpStatus=${e.httpStatus ?? '?'}` };
     }
 
     return {
@@ -1704,6 +1734,7 @@ export class WhatsappService {
       },
       aiProvider: aiProviderInfo,
       webhookSubscription: { subscribed: subscribedApps.length > 0, apps: subscribedApps },
+      phoneNumberStatus,
       issues,
     };
   }
