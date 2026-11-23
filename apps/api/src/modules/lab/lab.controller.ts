@@ -23,9 +23,7 @@ export class LabController {
     @Param('tenantId') tenantId: string,
     @Body() dto: LabChatDto,
   ) {
-    return this.labService.chat(dto, tenantId, {
-      conversationId: dto.conversationId,
-      contactId: dto.contactId,
-    });
+    // Teste nunca age em nome de um contato: IDs vindos da requisição não são usados.
+    return this.labService.chat(dto, tenantId);
   }
 }

@@ -144,6 +144,38 @@ Ver detalhes em [EXTERNAL_BLOCKERS.md](EXTERNAL_BLOCKERS.md).
 | Painel `/admin/clientes`: botão "Novo cliente", filtro PF/PJ, coluna tipo/documento, busca por CPF/CNPJ | ✅ | CPF mascarado na lista (`***.456.789-**`), completo só no detalhe |
 | Testes | ✅ | unit 10 (CPF/CNPJ + DTO); E2E API 13/13 com banco real (inclui 403 para não-admin e campo extra recusado); navegador 6/6 |
 
+## Política de Privacidade e Termos de Uso públicos (2026-11-23)
+
+| Item | Status | Evidência / observação |
+|------|--------|------------------------|
+| Páginas `/privacidade` e `/termos` sem login | 🔄 | build local com basePath: 200, sem rolagem lateral (1280 e 390 px), links internos ok |
+| Declaração de Uso Limitado do Google | 🔄 | pt-BR e inglês em `/privacidade#google` |
+| Links no rodapé das telas de acesso | 🔄 | `app/auth/layout.tsx` |
+| Revisão jurídica | ⏳ | obrigatória antes de publicar |
+| Verificação do app pelo Google | ⏳ | credenciais OAuth em produção; falta login real, publicar o app e verificar |
+
+## Agenda: correções da integração (2026-11-23)
+
+| Item | Status | Evidência / observação |
+|------|--------|------------------------|
+| Renovação do token do Google | ✅ local | renova antes de vencer e após 401, uma vez por conexão; autorização revogada → `reauth_required` + 409 `CALENDAR_REAUTH_REQUIRED` |
+| Agente consulta a agenda conectada | ✅ local | free/busy em `get_availability`, `create_meeting` e `reschedule_meeting`; agenda sem resposta nunca conta como livre |
+| Confirmação só com `external_event_id` | ✅ local | agente: falha ou agenda ausente → nada salvo; painel sem agenda → `pending`; evento desfeito se o banco falhar |
+| Desconectar apaga e revoga tokens | ✅ local | tokens apagados sempre; revogação no Google (mantida se a conta estiver em outra conexão ativa); a Microsoft não oferece revogação por app |
+| Reagendar/cancelar | ✅ local | provedor primeiro, linha travada na transação, volta ao horário antigo se o banco falhar; exclusão recusada mantém a reunião ativa |
+| Eventos de dia inteiro | ✅ local | Google via free/busy; Microsoft no fuso do agente. Eventos marcados como "Disponível" não bloqueiam |
+| Horário de Brasília | ✅ local | expediente, datas sem fuso, textos e instruções do agente; testes passam com o servidor em UTC e em Brasília e o navegador em Nova York |
+| Tela Agendas | ✅ local | dados de exemplo e botões sem ação removidos; criar, reagendar, cancelar, semana, verificar conexão e desconectar são reais |
+| Agenda ligada ao agente pela tela | ✅ local | aba "Agentes e expediente" em Agendas e aba "Agenda" no agente; API valida agente e agenda da organização e audita |
+| Agente só alcança reuniões do próprio contato | ✅ local | ver, reagendar e cancelar limitados ao contato/conversa do canal, checados na trava da linha; Laboratório só vê as próprias reuniões de teste; o modelo não recebe IDs internos |
+| Convite por e-mail | ✅ local | Google com `sendUpdates=all` ao criar, mover e excluir; o agente só afirma o envio se a ferramenta confirmar |
+| `CALENDAR_ENCRYPTION_KEY` | ✅ | no `.env.example` e no `.env.local` |
+| Testes | ✅ | unit 157; integração 44 (40 de agenda); navegador 41/41 (Google e modelo de IA simulados; login do Google real alcançado) |
+| Conta Google real | 🔄 | local: login, reunião criada pelo painel e pelo agente (com evento no Google); falta confirmar renovação após 1 h, mover, excluir e o e-mail do convite |
+| Microsoft 365 real | ⏳ | sem credenciais; coberto só por testes unitários |
+| Pendências | 🔴 | limite diário, expediente e antecedência não são exigidos ao criar; suíte `test:isolation` não inicia; menu lateral fixo deixa o painel ruim no celular; tela "Ferramentas" do agente lista ferramentas que não existem no runtime (a conferir) |
+
+
 ## Chave do Google Gemini: cota gratuita e modelos novos (2026-11-18)
 
 Problema: uma chave Gemini gratuita válida era recusada como "indisponível por faturamento".

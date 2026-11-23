@@ -1,5 +1,9 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { CalendarProviderError, calendarFetch } from './calendar-provider.error';
+import type { TimeSlot } from './availability.service';
+
+const CALENDAR_API = 'https://www.googleapis.com/calendar/v3';
 
 export interface GoogleTokens {
   accessToken: string;
@@ -105,24 +109,55 @@ export class GoogleCalendarService {
     };
   }
 
-  async refreshAccessToken(refreshToken: string): Promise<Omit<GoogleTokens, 'email' | 'displayName' | 'scopes'>> {
+  /**
+   * Renova o token de acesso. `invalid_grant` (revogado ou expirado) vira erro
+   * "reauth": só volta a funcionar com nova autorização do usuário.
+   */
+  async refreshAccessToken(refreshToken: string): Promise<{ accessToken: string; refreshToken?: string; expiresAt: Date }> {
     this.assertCredentials();
-    const res = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        client_id: this.clientId!,
-        client_secret: this.clientSecret!,
-        refresh_token: refreshToken,
-        grant_type: 'refresh_token',
-      }).toString(),
-    });
-    if (!res.ok) throw new Error('Failed to refresh Google token');
-    const data = (await res.json()) as { access_token: string; expires_in: number };
-    return {
-      accessToken: data.access_token,
-      expiresAt: new Date(Date.now() + data.expires_in * 1000),
-    };
+    try {
+      const res = await calendarFetch('google.refresh', 'https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          client_id: this.clientId!,
+          client_secret: this.clientSecret!,
+          refresh_token: refreshToken,
+          grant_type: 'refresh_token',
+        }).toString(),
+      });
+      const data = (await res.json()) as { access_token: string; refresh_token?: string; expires_in: number };
+      return {
+        accessToken: data.access_token,
+        refreshToken: data.refresh_token,
+        expiresAt: new Date(Date.now() + data.expires_in * 1000),
+      };
+    } catch (err) {
+      if (err instanceof CalendarProviderError) {
+        if (err.reason === 'invalid_grant') throw new CalendarProviderError('reauth', err.operation, err.status, err.reason);
+        // invalid_client etc.: problema da plataforma, não da conta do usuário.
+        throw new CalendarProviderError('unavailable', err.operation, err.status, err.reason);
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Revoga a autorização no Google. Vale para a conta inteira neste app: quem
+   * chama confere antes se outra conexão ativa usa a mesma conta.
+   */
+  async revokeToken(token: string): Promise<void> {
+    try {
+      await calendarFetch('google.revoke', 'https://oauth2.googleapis.com/revoke', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ token }).toString(),
+      });
+    } catch (err) {
+      // Token já revogado ou expirado: o objetivo já foi alcançado.
+      if (err instanceof CalendarProviderError && err.reason === 'invalid_token') return;
+      throw err;
+    }
   }
 
   private async getUserInfo(accessToken: string): Promise<{ email: string; name?: string }> {
@@ -133,31 +168,38 @@ export class GoogleCalendarService {
     return res.json() as Promise<{ email: string; name?: string }>;
   }
 
-  async listEvents(
-    accessToken: string,
-    timeMin: Date,
-    timeMax: Date,
-    calendarId = 'primary',
-  ): Promise<GoogleEvent[]> {
-    const params = new URLSearchParams({
-      timeMin: timeMin.toISOString(),
-      timeMax: timeMax.toISOString(),
-      singleEvents: 'true',
-      orderBy: 'startTime',
-      maxResults: '250',
+  /**
+   * Horários ocupados via free/busy: o Google devolve só início e fim (nenhum
+   * conteúdo de evento), já tratando dia inteiro, recorrência, recusados e
+   * eventos marcados como "Disponível".
+   */
+  async listBusy(accessToken: string, timeMin: Date, timeMax: Date, timeZone: string, calendarId = 'primary'): Promise<TimeSlot[]> {
+    const res = await calendarFetch('google.freeBusy', `${CALENDAR_API}/freeBusy`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        timeMin: timeMin.toISOString(),
+        timeMax: timeMax.toISOString(),
+        timeZone,
+        items: [{ id: calendarId }],
+      }),
     });
-    const res = await fetch(
-      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?${params}`,
-      { headers: { Authorization: `Bearer ${accessToken}` } },
-    );
-    if (!res.ok) throw new Error('Failed to fetch Google Calendar events');
-    const data = (await res.json()) as { items?: GoogleEvent[] };
-    return data.items ?? [];
+    const data = (await res.json()) as {
+      calendars?: Record<string, { busy?: Array<{ start: string; end: string }>; errors?: Array<{ reason?: string }> }>;
+    };
+    const calendar = data.calendars?.[calendarId] ?? Object.values(data.calendars ?? {})[0];
+    // Sem resposta confiável não dá para afirmar que o horário está livre.
+    if (!calendar || calendar.errors?.length) {
+      throw new CalendarProviderError('unavailable', 'google.freeBusy', undefined, calendar?.errors?.[0]?.reason);
+    }
+    return (calendar.busy ?? []).map((b) => ({ start: new Date(b.start), end: new Date(b.end) }));
   }
 
   async createEvent(
     accessToken: string,
     event: {
+      /** ID gerado por nós (hex): permite apagar o evento se a resposta se perder. */
+      id?: string;
       summary: string;
       description?: string;
       start: string;
@@ -169,6 +211,7 @@ export class GoogleCalendarService {
     calendarId = 'primary',
   ): Promise<GoogleEvent> {
     const body: Record<string, unknown> = {
+      ...(event.id ? { id: event.id } : {}),
       summary: event.summary,
       description: event.description,
       start: { dateTime: event.start, timeZone: event.timeZone ?? 'America/Sao_Paulo' },
@@ -178,26 +221,59 @@ export class GoogleCalendarService {
     if (event.addMeet) {
       body.conferenceData = { createRequest: { requestId: crypto.randomUUID(), conferenceSolutionKey: { type: 'hangoutsMeet' } } };
     }
-    const params = new URLSearchParams(event.addMeet ? { conferenceDataVersion: '1' } : {});
-    const res = await fetch(
-      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?${params}`,
+    const params = new URLSearchParams({
+      ...(event.addMeet ? { conferenceDataVersion: '1' } : {}),
+      // Sem isto o Google adiciona o convidado mas não envia o convite.
+      ...(event.attendeeEmails?.length ? { sendUpdates: 'all' } : {}),
+    });
+    const res = await calendarFetch(
+      'google.createEvent',
+      `${CALENDAR_API}/calendars/${encodeURIComponent(calendarId)}/events?${params}`,
       {
         method: 'POST',
         headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       },
     );
-    if (!res.ok) {
-      const err = await res.text();
-      throw new Error(`Failed to create Google Calendar event: ${err}`);
-    }
     return res.json() as Promise<GoogleEvent>;
   }
 
-  async deleteEvent(accessToken: string, eventId: string, calendarId = 'primary'): Promise<void> {
-    await fetch(
-      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${eventId}`,
-      { method: 'DELETE', headers: { Authorization: `Bearer ${accessToken}` } },
+  /** Muda só o horário; título, convidados e link do Meet são preservados. */
+  async updateEventTime(
+    accessToken: string,
+    eventId: string,
+    time: { start: string; end: string; timeZone: string },
+    calendarId = 'primary',
+  ): Promise<GoogleEvent> {
+    const res = await calendarFetch(
+      'google.updateEvent',
+      `${CALENDAR_API}/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}?sendUpdates=all`,
+      {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          start: { dateTime: time.start, timeZone: time.timeZone },
+          end: { dateTime: time.end, timeZone: time.timeZone },
+        }),
+      },
     );
+    const event = (await res.json()) as GoogleEvent & { status?: string };
+    // Evento apagado na agenda continua acessível por ID com status "cancelled".
+    if (event.status === 'cancelled') throw new CalendarProviderError('not_found', 'google.updateEvent');
+    return event;
+  }
+
+  /** Exclui o evento; se ele já não existe no Google, considera excluído. */
+  async deleteEvent(accessToken: string, eventId: string, calendarId = 'primary'): Promise<void> {
+    try {
+      await calendarFetch(
+        'google.deleteEvent',
+        `${CALENDAR_API}/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}?sendUpdates=all`,
+        { method: 'DELETE', headers: { Authorization: `Bearer ${accessToken}` } },
+      );
+    } catch (err) {
+      if (err instanceof CalendarProviderError && err.kind === 'not_found') return;
+      throw err;
+    }
   }
 }

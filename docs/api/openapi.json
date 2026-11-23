@@ -2498,7 +2498,7 @@
     "/api/v1/tenants/{tenantId}/calendars/connections/{connectionId}": {
       "delete": {
         "operationId": "CalendarsController_disconnect",
-        "summary": "Desconectar calendário",
+        "summary": "Desconectar calendário: apaga os tokens e revoga a autorização no provedor",
         "parameters": [
           {
             "name": "x-tenant-slug",
@@ -2526,8 +2526,25 @@
           }
         ],
         "responses": {
-          "204": {
-            "description": ""
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "revocation": {
+                      "type": "string",
+                      "enum": [
+                        "revoked",
+                        "failed",
+                        "shared_account",
+                        "not_supported"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         "tags": [
@@ -2543,7 +2560,7 @@
     "/api/v1/tenants/{tenantId}/calendars/sync": {
       "post": {
         "operationId": "CalendarsController_triggerSync",
-        "summary": "Disparar sincronização manual",
+        "summary": "Verificar agora se as agendas conectadas respondem",
         "parameters": [
           {
             "name": "x-tenant-slug",
@@ -4187,6 +4204,80 @@
         ]
       }
     },
+    "/api/v1/tenants/{tenantId}/whatsapp/accounts/{accountId}/waba-subscribe": {
+      "post": {
+        "operationId": "WhatsappController_resubscribeWaba",
+        "summary": "Reinscreveu o app na WABA (subscribed_apps) e retorna diagnóstico detalhado da Meta",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "accountId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "whatsapp"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/tenants/{tenantId}/whatsapp/accounts/{accountId}/waba-subscriptions": {
+      "get": {
+        "operationId": "WhatsappController_getWabaSubscriptions",
+        "summary": "Lista apps inscritos na WABA para diagnóstico",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "accountId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "whatsapp"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/tenants/{tenantId}/whatsapp/accounts/{accountId}/sync-templates": {
       "post": {
         "operationId": "WhatsappController_syncTemplates",
@@ -4265,6 +4356,88 @@
       "get": {
         "operationId": "WhatsappController_getStats",
         "summary": "Get message statistics for account",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "accountId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "whatsapp"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/tenants/{tenantId}/whatsapp/accounts/{accountId}/message-logs": {
+      "get": {
+        "operationId": "WhatsappController_getMessageLogs",
+        "summary": "Logs de mensagens recentes com erros de envio (diagnóstico)",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "accountId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "whatsapp"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/tenants/{tenantId}/whatsapp/accounts/{accountId}/pipeline-check": {
+      "get": {
+        "operationId": "WhatsappController_checkPipeline",
+        "summary": "Diagnóstico completo do pipeline WhatsApp → IA: agente, provedor de IA, webhook subscription",
         "parameters": [
           {
             "name": "tenantId",
@@ -6639,11 +6812,13 @@
           },
           "conversationId": {
             "type": "string",
-            "description": "ID da conversa origem (para rastreabilidade)"
+            "deprecated": true,
+            "description": "Ignorado: o teste não age em nome de uma conversa"
           },
           "contactId": {
             "type": "string",
-            "description": "ID do contato/lead (para atualizar status após agendar)"
+            "deprecated": true,
+            "description": "Ignorado: o teste não age em nome de um contato"
           }
         },
         "required": [
@@ -6688,7 +6863,9 @@
             "type": "string"
           },
           "timeZone": {
-            "type": "string"
+            "type": "string",
+            "deprecated": true,
+            "description": "Ignorado: o agendamento usa sempre o horário de Brasília"
           }
         },
         "required": [
@@ -6742,16 +6919,23 @@
             "type": "number"
           },
           "defaultPlatform": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "google_meet",
+              "teams",
+              "presencial",
+              "phone"
+            ]
           },
           "availableHours": {
-            "type": "object"
+            "type": "object",
+            "description": "Por dia (mon…sun): { enabled, start: \"HH:mm\", end: \"HH:mm\" }, horário de Brasília",
+            "additionalProperties": true
           },
           "connectionId": {
-            "type": "string"
-          },
-          "timeZone": {
-            "type": "string"
+            "type": "string",
+            "nullable": true,
+            "description": "Agenda conectada; null desvincula"
           }
         }
       },

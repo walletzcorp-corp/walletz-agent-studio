@@ -2,7 +2,7 @@
 
 > Arquivo gerado por `pnpm --filter @walletz/api docs:openapi`. Não edite à mão.
 
-Versão 1.0 · 160 rotas · prefixo `/api/v1` · autenticação Bearer (JWT), exceto onde indicado "sem JWT" (login, webhooks, callback OAuth, conector local — protegidos por outros meios).
+Versão 1.0 · 164 rotas · prefixo `/api/v1` · autenticação Bearer (JWT), exceto onde indicado "sem JWT" (login, webhooks, callback OAuth, conector local — protegidos por outros meios).
 
 ## Módulos
 
@@ -19,7 +19,7 @@ Versão 1.0 · 160 rotas · prefixo `/api/v1` · autenticação Bearer (JWT), ex
 | [contacts](#contacts) | Contatos e leads | 5 |
 | [campaigns](#campaigns) | Campanhas e cadências | 8 |
 | [calendars](#calendars) | Agendas Google e Microsoft | 12 |
-| [whatsapp](#whatsapp) | WhatsApp Business | 17 |
+| [whatsapp](#whatsapp) | WhatsApp Business | 21 |
 | [privacy](#privacy) | LGPD: exportação e exclusão de dados | 4 |
 | [pc-connector](#pc-connector) | Conector local (agente no computador do cliente) | 8 |
 | [admin](#admin) | Administração da plataforma | 16 |
@@ -182,8 +182,8 @@ Agendas Google e Microsoft
 | Método | Rota | Descrição | Auth |
 |---|---|---|---|
 | `GET` | `/api/v1/tenants/{tenantId}/calendars/connections` | Listar conexões de calendário do tenant | Bearer |
-| `DELETE` | `/api/v1/tenants/{tenantId}/calendars/connections/{connectionId}` | Desconectar calendário | Bearer |
-| `POST` | `/api/v1/tenants/{tenantId}/calendars/sync` | Disparar sincronização manual | Bearer |
+| `DELETE` | `/api/v1/tenants/{tenantId}/calendars/connections/{connectionId}` | Desconectar calendário: apaga os tokens e revoga a autorização no provedor | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/calendars/sync` | Verificar agora se as agendas conectadas respondem | Bearer |
 | `GET` | `/api/v1/tenants/{tenantId}/calendars/{provider}/authorize` | Gerar URL de autorização OAuth (Google ou Microsoft) | Bearer |
 | `GET` | `/api/v1/tenants/callback/{provider}` | Callback OAuth (Google/Microsoft) | sem JWT |
 | `GET` | `/api/v1/tenants/{tenantId}/calendars/availability` | Obter slots disponíveis para agendamento | Bearer |
@@ -214,9 +214,13 @@ WhatsApp Business
 | `PATCH` | `/api/v1/tenants/{tenantId}/whatsapp/accounts/{accountId}/agent` | Definir o agente que responde neste número | Bearer |
 | `POST` | `/api/v1/tenants/{tenantId}/whatsapp/accounts/{accountId}/reconnect` | Reconnect WhatsApp account (renew token via Embedded Signup) | Bearer |
 | `POST` | `/api/v1/tenants/{tenantId}/whatsapp/accounts/{accountId}/send` | Send a text message via WhatsApp | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/whatsapp/accounts/{accountId}/waba-subscribe` | Reinscreveu o app na WABA (subscribed_apps) e retorna diagnóstico detalhado da Meta | Bearer |
+| `GET` | `/api/v1/tenants/{tenantId}/whatsapp/accounts/{accountId}/waba-subscriptions` | Lista apps inscritos na WABA para diagnóstico | Bearer |
 | `POST` | `/api/v1/tenants/{tenantId}/whatsapp/accounts/{accountId}/sync-templates` | Sync templates from Meta | Bearer |
 | `GET` | `/api/v1/tenants/{tenantId}/whatsapp/accounts/{accountId}/templates` | List approved templates | Bearer |
 | `GET` | `/api/v1/tenants/{tenantId}/whatsapp/accounts/{accountId}/stats` | Get message statistics for account | Bearer |
+| `GET` | `/api/v1/tenants/{tenantId}/whatsapp/accounts/{accountId}/message-logs` | Logs de mensagens recentes com erros de envio (diagnóstico) | Bearer |
+| `GET` | `/api/v1/tenants/{tenantId}/whatsapp/accounts/{accountId}/pipeline-check` | Diagnóstico completo do pipeline WhatsApp → IA: agente, provedor de IA, webhook subscription | Bearer |
 
 ## privacy
 
