@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { brasiliaDate, dayKeyOf, nextDate, zonedToUtc } from './time-zone.util';
 
 export interface TimeSlot {
   start: Date;
@@ -21,7 +22,9 @@ export interface AvailabilityHours {
   sun?: AvailabilityWindow;
 }
 
-const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
+/** Horários oferecidos começam em múltiplos de 15 minutos. */
+const SLOT_STEP_MS = 15 * 60_000;
+const alignToStep = (ms: number): number => Math.ceil(ms / SLOT_STEP_MS) * SLOT_STEP_MS;
 
 @Injectable()
 export class AvailabilityService {
@@ -31,6 +34,7 @@ export class AvailabilityService {
    * - Existing busy blocks (from one or more calendar sources)
    * - Slot duration + buffer
    * - Date range to search within
+   * Expediente em horário de Brasília, independente do fuso do servidor.
    */
   computeFreeSlots(
     busyBlocks: TimeSlot[],
@@ -39,41 +43,26 @@ export class AvailabilityService {
     bufferMinutes: number,
     rangeStart: Date,
     rangeEnd: Date,
-    timeZoneOffset = -3, /* UTC-3 default for BRT */
   ): TimeSlot[] {
     const slotMs = durationMinutes * 60_000;
     const bufferMs = bufferMinutes * 60_000;
     const results: TimeSlot[] = [];
 
-    /* Iterate day by day */
-    const current = new Date(rangeStart);
-    current.setHours(0, 0, 0, 0);
-
-    while (current <= rangeEnd) {
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      const dayKey = DAY_KEYS[current.getDay() as 0|1|2|3|4|5|6]!;
-      const window = availableHours[dayKey];
+    /* Dia a dia no calendário de Brasília */
+    const lastDate = brasiliaDate(rangeEnd);
+    for (let date = brasiliaDate(rangeStart); date <= lastDate; date = nextDate(date)) {
+      const window = availableHours[dayKeyOf(date)];
 
       if (window?.enabled && window.start && window.end) {
-        const startParts = window.start.split(':');
-        const endParts = window.end.split(':');
-        const sh = Number(startParts[0] ?? 0);
-        const sm = Number(startParts[1] ?? 0);
-        const eh = Number(endParts[0] ?? 18);
-        const em = Number(endParts[1] ?? 0);
-
-        const windowStart = new Date(current);
-        windowStart.setHours(sh, sm, 0, 0);
-
-        const windowEnd = new Date(current);
-        windowEnd.setHours(eh, em, 0, 0);
+        const windowStart = zonedToUtc(date, window.start);
+        const windowEnd = zonedToUtc(date, window.end);
 
         /* Clamp to range */
         const effectiveStart = windowStart < rangeStart ? rangeStart : windowStart;
         const effectiveEnd = windowEnd > rangeEnd ? rangeEnd : windowEnd;
 
         /* Generate slots within window, skipping busy blocks */
-        let cursor = effectiveStart.getTime();
+        let cursor = alignToStep(effectiveStart.getTime());
         while (cursor + slotMs <= effectiveEnd.getTime()) {
           const slotStart = new Date(cursor);
           const slotEnd = new Date(cursor + slotMs);
@@ -84,18 +73,16 @@ export class AvailabilityService {
 
           if (!isBusy) {
             results.push({ start: slotStart, end: slotEnd });
-            cursor += slotMs + bufferMs;
+            cursor = alignToStep(cursor + slotMs + bufferMs);
           } else {
             /* Jump past the conflicting block */
             const conflict = busyBlocks.find(
               (b) => slotStart < b.end && slotEnd > b.start,
             );
-            cursor = conflict ? conflict.end.getTime() + bufferMs : cursor + 60_000;
+            cursor = conflict ? alignToStep(conflict.end.getTime() + bufferMs) : cursor + SLOT_STEP_MS;
           }
         }
       }
-
-      current.setDate(current.getDate() + 1);
     }
 
     return results;
@@ -107,6 +94,20 @@ export class AvailabilityService {
    */
   isSlotFree(start: Date, end: Date, busyBlocks: TimeSlot[]): boolean {
     return !busyBlocks.some((b) => start < b.end && end > b.start);
+  }
+
+  /**
+   * Remove um intervalo dos blocos ocupados. Usado ao reagendar: o evento da
+   * própria reunião não pode bloquear o novo horário dela.
+   */
+  subtractBlock(blocks: TimeSlot[], hole: TimeSlot): TimeSlot[] {
+    return blocks.flatMap((b) => {
+      if (b.end <= hole.start || b.start >= hole.end) return [b];
+      const rest: TimeSlot[] = [];
+      if (b.start < hole.start) rest.push({ start: b.start, end: hole.start });
+      if (b.end > hole.end) rest.push({ start: hole.end, end: b.end });
+      return rest;
+    });
   }
 
   /**

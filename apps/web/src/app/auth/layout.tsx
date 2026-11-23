@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { WalletzLogo } from '../../components/walletz-logo';
 
 export const metadata: Metadata = {
@@ -39,6 +40,11 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         </div>
 
         {children}
+
+        <nav aria-label="Páginas legais" className="mt-6 flex justify-center gap-4 text-xs text-muted-foreground">
+          <Link href="/privacidade" className="hover:text-foreground">Política de Privacidade</Link>
+          <Link href="/termos" className="hover:text-foreground">Termos de Uso</Link>
+        </nav>
       </div>
     </div>
   );

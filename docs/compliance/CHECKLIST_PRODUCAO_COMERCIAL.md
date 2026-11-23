@@ -61,8 +61,8 @@
 | Auditoria de acesso a dados | ✅ | `AuditService` em todos os módulos |
 | Política de retenção documentada | ✅ | `COMPLIANCE_LGPD.md` |
 | DPA com clientes B2B | 🔶 | Requer revisão jurídica |
-| Política de Privacidade pública | ⏳ | Página em `apps/web` |
-| Termos de Uso públicos | ⏳ | Página em `apps/web` |
+| Política de Privacidade pública | 🔶 | `/privacidade` em `apps/web`; falta revisão jurídica |
+| Termos de Uso públicos | 🔶 | `/termos` em `apps/web`; falta revisão jurídica |
 | Cookies banner (LGPD) | ⏳ | Landing page |
 | DPO designado | 🔶 | Decisão de governança da Walletz |
 

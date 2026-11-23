@@ -6,13 +6,15 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useAuth } from '../../../../hooks/use-auth';
+import { calendarsApi, type CalendarConnection } from '../../../../lib/calendars-api';
+import { AgentScheduleForm } from '../../../../components/agent-schedule-form';
 import { agentsApi, type Agent, type AgentRelease, type ToolPermission } from '../../../../lib/agents-api';
 import {
   Button, Card, CardContent, CardHeader, CardTitle, Badge, Skeleton,
 } from '@walletz/ui';
 import {
   ChevronLeft, Bot, Play, Pause, RotateCcw, Save, Tag,
-  Clock, Wrench, AlertTriangle,
+  CalendarDays, Clock, Wrench, AlertTriangle,
 } from 'lucide-react';
 
 const STATUS_BADGE = {
@@ -56,11 +58,11 @@ const editSchema = z.object({
 });
 type EditForm = z.infer<typeof editSchema>;
 
-type Tab = 'overview' | 'releases' | 'tools';
+type Tab = 'overview' | 'releases' | 'tools' | 'schedule';
 
 export default function AgentDetailPage() {
   const { agentId } = useParams<{ agentId: string }>();
-  const { tenantId } = useAuth();
+  const { tenantId, role } = useAuth();
   const router = useRouter();
 
   const [agent, setAgent] = useState<Agent | null>(null);
@@ -72,6 +74,7 @@ export default function AgentDetailPage() {
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [connections, setConnections] = useState<CalendarConnection[] | null>(null);
 
   const form = useForm<EditForm>({ resolver: zodResolver(editSchema) });
 
@@ -104,6 +107,14 @@ export default function AgentDetailPage() {
   };
 
   useEffect(() => { load(); }, [tenantId, agentId]);
+
+  // Agendas só quando a aba é aberta.
+  useEffect(() => {
+    if (tab !== 'schedule' || !tenantId) return;
+    calendarsApi.connections(tenantId)
+      .then(({ data }) => setConnections(data))
+      .catch(() => setActionError('Não foi possível carregar as agendas conectadas.'));
+  }, [tab, tenantId]);
 
   const handleSave = async (values: EditForm) => {
     if (!tenantId || !agentId) return;
@@ -283,6 +294,7 @@ export default function AgentDetailPage() {
           { id: 'overview', label: 'Visão Geral', icon: Bot },
           { id: 'releases', label: `Releases (${releases.length})`, icon: Tag },
           { id: 'tools', label: 'Ferramentas', icon: Wrench },
+          { id: 'schedule', label: 'Agenda', icon: CalendarDays },
         ] as { id: Tab; label: string; icon: React.FC<{ className?: string }> }[]).map(({ id, label, icon: Icon }) => (
           <button
             key={id}
@@ -484,6 +496,16 @@ export default function AgentDetailPage() {
             )}
           </CardContent>
         </Card>
+      )}
+
+      {/* Tab: Agenda */}
+      {tab === 'schedule' && tenantId && connections && (
+        <AgentScheduleForm
+          tenantId={tenantId}
+          agentId={agentId}
+          connections={connections}
+          canManage={role === 'owner' || role === 'admin'}
+        />
       )}
 
       {/* Tab: Tools */}

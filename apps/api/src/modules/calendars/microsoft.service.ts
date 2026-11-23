@@ -1,5 +1,13 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { CalendarProviderError, calendarFetch } from './calendar-provider.error';
+import type { TimeSlot } from './availability.service';
+import { zonedMidnight } from './time-zone.util';
+
+const GRAPH_API = 'https://graph.microsoft.com/v1.0';
+/** Situações em que o evento não ocupa o horário. */
+const NOT_BUSY = new Set(['free', 'workingElsewhere']);
+const DAY_MS = 86_400_000;
 
 export interface MicrosoftTokens {
   accessToken: string;
@@ -29,6 +37,11 @@ export interface GraphOnlineMeeting {
   startDateTime: string;
   endDateTime: string;
   videoTeleconferenceId?: string;
+}
+
+/** Com Prefer UTC o Graph manda a data sem "Z"; sem isso o JS leria no fuso do servidor. */
+function parseGraphUtc(dateTime: string): Date {
+  return new Date(/(?:Z|[+-]\d{2}:\d{2})$/.test(dateTime) ? dateTime : `${dateTime}Z`);
 }
 
 @Injectable()
@@ -153,8 +166,45 @@ export class MicrosoftCalendarService {
 
   /* ── Delegated: /me/... endpoints ── */
 
-  async listEvents(accessToken: string, startDateTime: Date, endDateTime: Date): Promise<GraphEvent[]> {
-    return this.listEventsForUser('me', accessToken, startDateTime, endDateTime);
+  /** Horários ocupados em [start, end). `timeZone` situa os eventos de dia inteiro. */
+  async listBusy(accessToken: string, start: Date, end: Date, timeZone: string): Promise<TimeSlot[]> {
+    // Um dia de folga nas pontas: evento de dia inteiro vem como meia-noite UTC.
+    const params = new URLSearchParams({
+      startDateTime: new Date(start.getTime() - DAY_MS).toISOString(),
+      endDateTime: new Date(end.getTime() + DAY_MS).toISOString(),
+      $select: 'start,end,isAllDay,showAs,isCancelled',
+      $orderby: 'start/dateTime',
+      $top: '250',
+    });
+    const busy: TimeSlot[] = [];
+    let url: string | undefined = `${GRAPH_API}/me/calendarView?${params}`;
+    while (url) {
+      const res: Response = await calendarFetch('microsoft.calendarView', url, {
+        headers: { Authorization: `Bearer ${accessToken}`, Prefer: 'outlook.timezone="UTC"' },
+      });
+      const data = (await res.json()) as {
+        value?: Array<{
+          start: { dateTime: string };
+          end: { dateTime: string };
+          isAllDay?: boolean;
+          showAs?: string;
+          isCancelled?: boolean;
+        }>;
+        '@odata.nextLink'?: string;
+      };
+      for (const ev of data.value ?? []) {
+        if (ev.isCancelled || (ev.showAs && NOT_BUSY.has(ev.showAs))) continue;
+        const slot = ev.isAllDay
+          ? { start: zonedMidnight(ev.start.dateTime, timeZone), end: zonedMidnight(ev.end.dateTime, timeZone) }
+          : { start: parseGraphUtc(ev.start.dateTime), end: parseGraphUtc(ev.end.dateTime) };
+        if (slot.start < end && slot.end > start) busy.push(slot);
+      }
+      const next: string | undefined = data['@odata.nextLink'];
+      // O token só vai para o próprio Graph.
+      url = next?.startsWith(`${GRAPH_API}/`) ? next : undefined;
+      if (next && !url) throw new CalendarProviderError('unavailable', 'microsoft.calendarView', undefined, 'nextLink');
+    }
+    return busy;
   }
 
   async createEvent(
@@ -178,31 +228,6 @@ export class MicrosoftCalendarService {
 
   /* ── Shared: works for both /me and /users/{userId} ── */
 
-  async listEventsForUser(
-    userId: string,
-    accessToken: string,
-    startDateTime: Date,
-    endDateTime: Date,
-  ): Promise<GraphEvent[]> {
-    const params = new URLSearchParams({
-      startDateTime: startDateTime.toISOString(),
-      endDateTime: endDateTime.toISOString(),
-      $orderby: 'start/dateTime',
-      $top: '250',
-    });
-    const base = userId === 'me' ? 'me' : `users/${encodeURIComponent(userId)}`;
-    const res = await fetch(
-      `https://graph.microsoft.com/v1.0/${base}/calendarView?${params}`,
-      { headers: { Authorization: `Bearer ${accessToken}`, Prefer: 'outlook.timezone="UTC"' } },
-    );
-    if (!res.ok) {
-      const err = await res.text();
-      throw new Error(`Failed to fetch Microsoft Graph events: ${err}`);
-    }
-    const data = (await res.json()) as { value?: GraphEvent[] };
-    return data.value ?? [];
-  }
-
   async createEventForUser(
     userId: string,
     accessToken: string,
@@ -216,12 +241,12 @@ export class MicrosoftCalendarService {
       addTeams?: boolean;
     },
   ): Promise<GraphEvent> {
-    const tz = event.timeZone ?? 'E. South America Standard Time';
     const body: Record<string, unknown> = {
       subject: event.subject,
       body: { contentType: 'text', content: event.body ?? '' },
-      start: { dateTime: event.start, timeZone: tz },
-      end: { dateTime: event.end, timeZone: tz },
+      // Em UTC explícito: data com "Z" junto de outro fuso é ambígua no Graph.
+      start: { dateTime: new Date(event.start).toISOString().slice(0, 19), timeZone: 'UTC' },
+      end: { dateTime: new Date(event.end).toISOString().slice(0, 19), timeZone: 'UTC' },
       attendees: (event.attendeeEmails ?? []).map((email) => ({
         emailAddress: { address: email },
         type: 'required',
@@ -232,27 +257,36 @@ export class MicrosoftCalendarService {
       body.onlineMeetingProvider = 'teamsForBusiness';
     }
     const base = userId === 'me' ? 'me' : `users/${encodeURIComponent(userId)}`;
-    const res = await fetch(`https://graph.microsoft.com/v1.0/${base}/events`, {
+    const res = await calendarFetch('microsoft.createEvent', `${GRAPH_API}/${base}/events`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    if (!res.ok) {
-      const err = await res.text();
-      throw new Error(`Failed to create Microsoft Graph event: ${err}`);
-    }
     return res.json() as Promise<GraphEvent>;
   }
 
+  /** Muda só o horário (em UTC); título, convidados e link do Teams são preservados. */
+  async updateEventTime(accessToken: string, eventId: string, time: { start: Date; end: Date }): Promise<GraphEvent> {
+    const utc = (d: Date): { dateTime: string; timeZone: string } => ({ dateTime: d.toISOString().slice(0, 19), timeZone: 'UTC' });
+    const res = await calendarFetch('microsoft.updateEvent', `${GRAPH_API}/me/events/${encodeURIComponent(eventId)}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ start: utc(time.start), end: utc(time.end) }),
+    });
+    return res.json() as Promise<GraphEvent>;
+  }
+
+  /** Exclui o evento; se ele já não existe no provedor, considera excluído. */
   async deleteEventForUser(userId: string, accessToken: string, eventId: string): Promise<void> {
     const base = userId === 'me' ? 'me' : `users/${encodeURIComponent(userId)}`;
-    const res = await fetch(`https://graph.microsoft.com/v1.0/${base}/events/${eventId}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    if (!res.ok && res.status !== 404) {
-      const err = await res.text();
-      this.logger.warn(`Failed to delete Graph event ${eventId}: ${err}`);
+    try {
+      await calendarFetch('microsoft.deleteEvent', `${GRAPH_API}/${base}/events/${encodeURIComponent(eventId)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+    } catch (err) {
+      if (err instanceof CalendarProviderError && err.kind === 'not_found') return;
+      throw err;
     }
   }
 

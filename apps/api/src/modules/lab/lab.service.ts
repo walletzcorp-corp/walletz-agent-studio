@@ -5,6 +5,7 @@ import { agents } from '../../database/schema/agents';
 import { knowledgeItems } from '../../database/schema/knowledge';
 import { KnowledgeRetrievalService } from '../knowledge/knowledge-retrieval.service';
 import { createId } from '../../database/utils/id';
+import { BRASILIA_TIME_ZONE, toBrasiliaIso } from '../calendars/time-zone.util';
 import { SchedulingToolsService, type ToolContext } from '../calendars/scheduling-tools.service';
 import { PlanLimitsService } from '../../shared/plans/plan-limits.service';
 import { PcConnectorService } from '../pc-connector/pc-connector.service';
@@ -61,11 +62,11 @@ const SCHEDULING_TOOLS: ToolDef[] = [
       properties: {
         start_at: {
           type: 'string',
-          description: 'Data/hora de início em ISO 8601 (ex: 2026-10-07T14:00:00-03:00)',
+          description: 'Data/hora de início em ISO 8601, horário de Brasília (ex: 2026-10-07T14:00:00-03:00)',
         },
         end_at: {
           type: 'string',
-          description: 'Data/hora de término em ISO 8601',
+          description: 'Data/hora de término em ISO 8601, horário de Brasília',
         },
         title: {
           type: 'string',
@@ -78,10 +79,6 @@ const SCHEDULING_TOOLS: ToolDef[] = [
           type: 'string',
           enum: ['google_meet', 'teams', 'presencial', 'phone'],
           description: 'Plataforma da reunião',
-        },
-        timezone: {
-          type: 'string',
-          description: 'Fuso horário (ex: America/Sao_Paulo)',
         },
       },
       required: ['start_at', 'end_at', 'title'],
@@ -321,7 +318,7 @@ export class LabService {
     agent: { name: string; objective: string | null; tone: string | null; language: string | null; persona: unknown },
     knowledgeItemsList: Array<{ type: string; content: string; context: string | null }>,
     chunks: Array<{ content: string; sourceName: string }>,
-    schedulingSettings: { defaultDurationMinutes: number; defaultPlatform: string; timeZone: string } | null,
+    schedulingSettings: { defaultDurationMinutes: number; defaultPlatform: string } | null,
     pcDevice: { deviceName: string; authorizedPaths: unknown; authorizedApps: unknown } | null = null,
   ): string {
     const persona = typeof agent.persona === 'object' && agent.persona !== null
@@ -353,7 +350,8 @@ Você pode agendar reuniões reais usando as ferramentas disponíveis. Siga SEMP
 6. **Configurações do agendamento**:
    - Duração padrão: ${schedulingSettings.defaultDurationMinutes} minutos
    - Plataforma padrão: ${schedulingSettings.defaultPlatform}
-   - Fuso horário: ${schedulingSettings.timeZone}
+   - Fuso horário: horário de Brasília. Informe todos os horários nesse fuso.
+   - Agora em Brasília: ${toBrasiliaIso(new Date())} (${new Date().toLocaleDateString('pt-BR', { weekday: 'long', timeZone: BRASILIA_TIME_ZONE })})
 
 7. **Reagendamento**: Use \`find_meetings\` para localizar a reunião, depois \`reschedule_meeting\`.
 
@@ -361,7 +359,7 @@ Você pode agendar reuniões reais usando as ferramentas disponíveis. Siga SEMP
 
 9. **Transparência**: Se a criação do evento externo falhar, informe o cliente honestamente. Nunca confirme uma reunião que não foi criada.
 
-10. **Formato da resposta**: Após criar a reunião, informe: data/hora, link da videoconferência (se gerado), e que o convite será enviado ao e-mail fornecido.`);
+10. **Formato da resposta**: Após criar a reunião, informe: data/hora, link da videoconferência (se gerado). Só diga que o convite foi enviado se a ferramenta retornar \`inviteSent: true\`.`);
     }
 
     if (knowledgeItemsList.length > 0) {

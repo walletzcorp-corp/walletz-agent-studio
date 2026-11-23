@@ -31,12 +31,12 @@ export class LabChatDto {
   @Type(() => ChatMessageDto)
   history?: ChatMessageDto[];
 
-  @ApiProperty({ required: false, description: 'ID da conversa origem (para rastreabilidade)' })
+  @ApiProperty({ required: false, deprecated: true, description: 'Ignorado: o teste não age em nome de uma conversa' })
   @IsOptional()
   @IsString()
   conversationId?: string;
 
-  @ApiProperty({ required: false, description: 'ID do contato/lead (para atualizar status após agendar)' })
+  @ApiProperty({ required: false, deprecated: true, description: 'Ignorado: o teste não age em nome de um contato' })
   @IsOptional()
   @IsString()
   contactId?: string;

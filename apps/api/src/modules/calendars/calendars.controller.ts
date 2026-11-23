@@ -3,7 +3,7 @@ import {
   Param, Body, Query, Res, UseGuards,
   HttpCode, HttpStatus, BadRequestException, Logger,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiHeader, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiHeader, ApiOkResponse, ApiQuery } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { CalendarsService } from './calendars.service';
 import { CreateMeetingDto, RescheduleMeetingDto, CancelMeetingDto } from './dto/create-meeting.dto';
@@ -36,20 +36,22 @@ export class CalendarsController {
 
   @Delete('connections/:connectionId')
   @Roles('admin')
-  @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Desconectar calendário' })
+  @ApiOperation({ summary: 'Desconectar calendário: apaga os tokens e revoga a autorização no provedor' })
+  @ApiOkResponse({
+    schema: { properties: { revocation: { type: 'string', enum: ['revoked', 'failed', 'shared_account', 'not_supported'] } } },
+  })
   @PlanExempt()
-  async disconnect(
+  disconnect(
     @Param('tenantId') tenantId: string,
     @Param('connectionId') connectionId: string,
     @CurrentUser() user: JwtPayload,
   ) {
-    await this.svc.disconnect(tenantId, connectionId, user.sub);
+    return this.svc.disconnect(tenantId, connectionId, user.sub);
   }
 
   @Post('sync')
   @Roles('agent_operator')
-  @ApiOperation({ summary: 'Disparar sincronização manual' })
+  @ApiOperation({ summary: 'Verificar agora se as agendas conectadas respondem' })
   triggerSync(@Param('tenantId') tenantId: string) {
     return this.svc.triggerSync(tenantId);
   }
