@@ -22,7 +22,8 @@ export class LoggingInterceptor implements NestInterceptor {
         const res = context.switchToHttp().getResponse<Response>();
         logger.info({
           method: req.method,
-          path: req.url,
+          // Sem a query: o retorno do OAuth traz o código de autorização e o state nela.
+          path: req.url.split('?')[0],
           status: res.statusCode,
           duration: Date.now() - start,
         }, 'HTTP request');

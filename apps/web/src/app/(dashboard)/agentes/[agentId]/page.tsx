@@ -34,9 +34,6 @@ const TONES = [
 ];
 
 const AVAILABLE_TOOLS = [
-  { name: 'schedule_appointment', label: 'Agendar compromissos', category: 'Calendário' },
-  { name: 'cancel_appointment', label: 'Cancelar compromissos', category: 'Calendário' },
-  { name: 'check_availability', label: 'Verificar disponibilidade', category: 'Calendário' },
   { name: 'send_message', label: 'Enviar mensagem proativa', category: 'Mensagens' },
   { name: 'lookup_contact', label: 'Consultar dados do contato', category: 'CRM' },
   { name: 'update_contact', label: 'Atualizar dados do contato', category: 'CRM' },
@@ -516,7 +513,8 @@ export default function AgentDetailPage() {
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground mb-4">
-              Controle quais ferramentas este agente pode executar.
+              Controle quais ferramentas este agente pode executar. O agendamento de reuniões é ligado na aba{' '}
+              <button type="button" onClick={() => setTab('schedule')} className="text-primary hover:underline">Agenda</button>.
             </p>
             <div className="space-y-2">
               {Object.entries(

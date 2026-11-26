@@ -173,7 +173,9 @@ Ver detalhes em [EXTERNAL_BLOCKERS.md](EXTERNAL_BLOCKERS.md).
 | Testes | ✅ | unit 157; integração 44 (40 de agenda); navegador 41/41 (Google e modelo de IA simulados; login do Google real alcançado) |
 | Conta Google real | 🔄 | local: login, reunião criada pelo painel e pelo agente (com evento no Google); falta confirmar renovação após 1 h, mover, excluir e o e-mail do convite |
 | Microsoft 365 real | ⏳ | sem credenciais; coberto só por testes unitários |
-| Pendências | 🔴 | limite diário, expediente e antecedência não são exigidos ao criar; suíte `test:isolation` não inicia; menu lateral fixo deixa o painel ruim no celular; tela "Ferramentas" do agente lista ferramentas que não existem no runtime (a conferir) |
+| Agente só diz que marcou se marcou | ✅ local | sem "Agente pode agendar" o modelo é instruído a não confirmar horários nem convites; escolher a agenda liga a chave e salvar com ela desligada avisa; "Ferramentas" não oferece mais permissões de agenda sem efeito; testes: unit 159, integração 44, navegador 47/47 (Google simulado) |
+| Logs sem query string | ✅ local | o retorno do OAuth gravava `code` e `state` no log da API |
+| Pendências | 🔴 | o WhatsApp chama o agente sem o histórico da conversa, então ele não lembra o horário combinado na mensagem anterior; limite diário, expediente e antecedência não são exigidos ao criar; suíte `test:isolation` não inicia; menu lateral fixo deixa o painel ruim no celular; as demais "Ferramentas" do agente não têm efeito no runtime |
 
 
 ## Chave do Google Gemini: cota gratuita e modelos novos (2026-11-18)

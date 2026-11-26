@@ -34,7 +34,8 @@ export class HttpExceptionFilter implements ExceptionFilter {
     if (status >= 500) {
       logger.error({
         errorId,
-        path: request.url,
+        // Sem a query: o retorno do OAuth traz o código de autorização e o state nela.
+        path: request.url.split('?')[0],
         method: request.method,
         status,
         error: exception instanceof Error ? exception.message : String(exception),

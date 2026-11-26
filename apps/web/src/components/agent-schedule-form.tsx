@@ -43,6 +43,12 @@ function withCurrent(options: Array<{ value: string; label: string }>, value: nu
   return options.some((o) => o.value === String(value)) ? options : [...options, { value: String(value), label: `${value} ${unit}` }];
 }
 
+const MESSAGE_STYLE = {
+  ok: 'bg-neural-success/10 text-neural-success',
+  warning: 'bg-neural-warning/10 text-neural-warning',
+  error: 'bg-destructive/10 text-destructive',
+};
+
 interface Props {
   tenantId: string;
   agentId: string;
@@ -55,7 +61,7 @@ interface Props {
 export function AgentScheduleForm({ tenantId, agentId, connections, canManage }: Props) {
   const [form, setForm] = useState<AgentScheduleSettings | null>(null);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
+  const [message, setMessage] = useState<{ kind: 'ok' | 'warning' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -78,6 +84,11 @@ export function AgentScheduleForm({ tenantId, agentId, connections, canManage }:
       : <Skeleton className="h-64 w-full" />;
   }
 
+  /** Escolher a agenda é querer que o agente a use; a chave pode ser desligada depois. */
+  const chooseConnection = (id: string): void => {
+    setMessage(null);
+    setForm((f) => (f ? { ...f, connectionId: id || null, canSchedule: !!id } : f));
+  };
   const set = <K extends keyof AgentScheduleSettings>(key: K, value: AgentScheduleSettings[K]): void => {
     setMessage(null);
     setForm((f) => (f ? { ...f, [key]: value } : f));
@@ -119,7 +130,9 @@ export function AgentScheduleForm({ tenantId, agentId, connections, canManage }:
         availableHours: form.availableHours,
       });
       setForm((f) => (f ? { ...f, connectionId: connected?.id ?? null } : f));
-      setMessage({ kind: 'ok', text: 'Configuração de agendamento salva.' });
+      setMessage(form.canSchedule
+        ? { kind: 'ok', text: 'Configuração salva. O agente já pode agendar nas conversas.' }
+        : { kind: 'warning', text: 'Configuração salva, mas o agente não vai agendar: "Agente pode agendar" está desligado.' });
     } catch (err) {
       setMessage({ kind: 'error', text: apiErrorMessage(err, 'Não foi possível salvar.') });
     } finally {
@@ -151,7 +164,7 @@ export function AgentScheduleForm({ tenantId, agentId, connections, canManage }:
               <span className="text-sm font-medium">Agenda usada pelo agente</span>
               <Select
                 value={selected}
-                onChange={(e) => set('connectionId', e.target.value || null)}
+                onChange={(e) => chooseConnection(e.target.value)}
                 options={[
                   { value: '', label: 'Nenhuma agenda' },
                   ...connections.map((c) => ({
@@ -161,6 +174,11 @@ export function AgentScheduleForm({ tenantId, agentId, connections, canManage }:
                 ]}
               />
             </label>
+            {connected && !form.canSchedule && (
+              <p role="alert" className="text-xs text-neural-warning">
+                O agente não usa esta agenda enquanto "Agente pode agendar" estiver desligado.
+              </p>
+            )}
             {missing && (
               <p role="alert" className="text-xs text-destructive">
                 A agenda que este agente usava foi desconectada. Escolha outra e salve.
@@ -256,7 +274,7 @@ export function AgentScheduleForm({ tenantId, agentId, connections, canManage }:
       {message && (
         <p
           role={message.kind === 'error' ? 'alert' : 'status'}
-          className={`rounded-lg px-3 py-2 text-sm ${message.kind === 'error' ? 'bg-destructive/10 text-destructive' : 'bg-neural-success/10 text-neural-success'}`}
+          className={`rounded-lg px-3 py-2 text-sm ${MESSAGE_STYLE[message.kind]}`}
         >
           {message.text}
         </p>

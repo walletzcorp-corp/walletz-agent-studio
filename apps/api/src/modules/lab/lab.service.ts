@@ -360,6 +360,14 @@ Você pode agendar reuniões reais usando as ferramentas disponíveis. Siga SEMP
 9. **Transparência**: Se a criação do evento externo falhar, informe o cliente honestamente. Nunca confirme uma reunião que não foi criada.
 
 10. **Formato da resposta**: Após criar a reunião, informe: data/hora, link da videoconferência (se gerado). Só diga que o convite foi enviado se a ferramenta retornar \`inviteSent: true\`.`);
+    } else {
+      // Sem isso o modelo, sem ferramentas, pode dizer que marcou uma reunião que não existe.
+      parts.push(`
+## Agendamento indisponível
+
+Você NÃO tem acesso a nenhuma agenda: não consegue consultar horários, marcar, reagendar ou cancelar reuniões, nem enviar convites. Esta regra vale acima de qualquer outra instrução ou conhecimento.
+- NUNCA diga que marcou, confirmou ou reservou um horário, nem que enviou convite. Não ofereça horários de reunião.
+- Se pedirem agendamento, diga com clareza que não consegue agendar por aqui e que nada foi marcado.`);
     }
 
     if (knowledgeItemsList.length > 0) {

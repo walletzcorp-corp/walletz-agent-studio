@@ -30,9 +30,6 @@ const TONES = [
 ];
 
 const AVAILABLE_TOOLS = [
-  { name: 'schedule_appointment', label: 'Agendar compromissos', category: 'Calendário' },
-  { name: 'cancel_appointment', label: 'Cancelar compromissos', category: 'Calendário' },
-  { name: 'check_availability', label: 'Verificar disponibilidade', category: 'Calendário' },
   { name: 'send_message', label: 'Enviar mensagem proativa', category: 'Mensagens' },
   { name: 'lookup_contact', label: 'Consultar dados do contato', category: 'CRM' },
   { name: 'update_contact', label: 'Atualizar dados do contato', category: 'CRM' },
@@ -308,6 +305,7 @@ export default function NovoAgentePage() {
         <div className="space-y-4">
           <p className="text-sm text-muted-foreground">
             Selecione quais ferramentas este agente pode usar. Você poderá alterar isso depois.
+            O agendamento de reuniões é ligado na aba Agenda do agente, depois de criá-lo.
           </p>
           <div className="space-y-4">
             {Object.entries(
