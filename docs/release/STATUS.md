@@ -234,6 +234,14 @@ Base: *Walletz Studio IA — Planos Sugeridos*, proposta comercial v4.2 (16/11/2
 | Subcontas e White Label (Agency) | ⏳ Oferta condicionada | depende de validar isolamento, permissões, faturamento por subconta e vazamento de chaves (seção 06 do documento) |
 | Cobrança da assinatura (checkout) | ⏳ | contratação via Walletz (WhatsApp/contrato); módulo billing sem gateway |
 
+## Confirmações na própria tela e ajustes do WhatsApp (2026-11-26)
+
+| Item | Status | Evidência |
+|---|---|---|
+| Confirmação própria (`useConfirm`) no lugar de `window.confirm` em 10 botões (Desconectar WhatsApp, remover widget, webhook, contato, item do Ensinar IA, arquivo, membro, conexão de IA, dispositivo) | ✅ | o navegador podia silenciar a caixa e o botão "não fazia nada"; teste no navegador: abre a janela, Cancelar/Esc não desconecta, confirmar desconecta e audita |
+| Tela WhatsApp explica o limite do plano ("desconecte o atual para conectar outro") | ✅ | teste no navegador |
+| Sincronização de modelos de mensagem (`ON CONFLICT` usava só `account_id`, sem índice único) | ✅ | agora `(account_id, template_id)`; teste grava 2 modelos e atualiza o status |
+
 ## WhatsApp: histórico, situação de envio e atendente (2026-11-26)
 
 | Item | Status | Evidência |

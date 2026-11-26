@@ -11,6 +11,7 @@ import {
   knowledgeApi, type KnowledgeFormats, type KnowledgeSource, type KnowledgeSourceDetails, type KnowledgeSourceStatus,
 } from '../../../lib/knowledge-api';
 import { apiErrorMessage } from '../../../lib/studio-api';
+import { useConfirm } from '../../../components/confirm-dialog';
 
 const SHARED = '__shared__';
 const input = 'w-full rounded-lg border border-border bg-surface-1 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50';
@@ -131,6 +132,7 @@ function DetailsPanel({
 
 export default function ConhecimentoPage() {
   const { tenantId } = useAuth();
+  const confirm = useConfirm();
   const [sources, setSources] = useState<KnowledgeSource[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [formats, setFormats] = useState<KnowledgeFormats | null>(null);
@@ -381,7 +383,7 @@ export default function ConhecimentoPage() {
                         <button
                           title="Excluir"
                           aria-label="Excluir"
-                          onClick={() => { if (tenantId && confirm(`Excluir “${s.name}”? O arquivo, o texto e os índices serão removidos.`)) void act(() => knowledgeApi.remove(tenantId, s.id)); }}
+                          onClick={async () => { if (tenantId && await confirm({ title: `Excluir “${s.name}”?`, description: 'O arquivo, o texto e os índices serão removidos.', action: 'Excluir' })) void act(() => knowledgeApi.remove(tenantId, s.id)); }}
                           className="rounded p-1.5 text-muted-foreground hover:text-neural-danger"
                         ><Trash2 className="h-4 w-4" /></button>
                       </div>

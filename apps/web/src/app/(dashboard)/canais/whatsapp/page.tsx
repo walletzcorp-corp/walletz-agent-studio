@@ -10,6 +10,7 @@ import { agentsApi, type Agent } from '../../../../lib/agents-api';
 import { whatsappApi, type WebhookSetup, type WhatsappAccount } from '../../../../lib/whatsapp-api';
 import { apiErrorMessage, plansApi, type TenantPlanSummary } from '../../../../lib/studio-api';
 import { WhatsappSendStatus } from '../../../../components/whatsapp-health';
+import { useConfirm } from '../../../../components/confirm-dialog';
 
 const input = 'w-full rounded-lg border border-border bg-surface-1 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50';
 
@@ -167,6 +168,7 @@ function AccountCard({
   agents: Agent[];
   onChanged: () => void;
 }) {
+  const confirm = useConfirm();
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [setup, setSetup] = useState<WebhookSetup | null>(null);
@@ -275,8 +277,8 @@ function AccountCard({
         </button>
         <button
           disabled={busy}
-          onClick={() => {
-            if (!window.confirm('Desconectar este número? O agente deixa de responder por ele.')) return;
+          onClick={async () => {
+            if (!(await confirm({ title: 'Desconectar este número?', description: 'O agente deixa de responder por ele. Você pode conectar de novo depois.', action: 'Desconectar' }))) return;
             void run(async () => { await whatsappApi.disconnectAccount(tenantId, account.id); });
           }}
           className="btn-ghost rounded-lg px-3 py-2 text-xs border border-neural-danger/40 text-neural-danger inline-flex items-center gap-1.5"
@@ -329,6 +331,11 @@ export default function WhatsappPage() {
           <button onClick={() => { setConnecting(true); setJustConnected(null); }} className="btn-primary rounded-lg px-4 py-2.5 text-sm inline-flex items-center gap-2">
             <Plus className="h-4 w-4" /> Conectar número
           </button>
+        )}
+        {enabled && !connecting && limit > 0 && accounts.length >= limit && (
+          <p className="max-w-xs text-xs text-muted-foreground">
+            Limite do plano {plan?.plan.name}: {limit === 1 ? '1 número' : `${limit} números`}. Para conectar outro telefone, desconecte o atual.
+          </p>
         )}
       </div>
 

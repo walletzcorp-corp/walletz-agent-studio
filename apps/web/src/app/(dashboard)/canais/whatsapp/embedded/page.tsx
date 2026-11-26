@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../../../../hooks/use-auth';
 import { whatsappApi, type WhatsappAccount } from '../../../../../lib/whatsapp-api';
+import { useConfirm } from '../../../../../components/confirm-dialog';
 
 /* ─── Meta FB SDK types ─── */
 declare global {
@@ -92,6 +93,7 @@ function loadFBSDK(appId: string): Promise<void> {
 ══════════════════════════════════════════════════════ */
 export default function WhatsAppPage() {
   const { tenantId, isLoading: authLoading } = useAuth();
+  const confirm = useConfirm();
   const [accounts, setAccounts] = useState<WhatsappAccount[]>([]);
   const [loadingAccounts, setLoadingAccounts] = useState(true);
 
@@ -275,7 +277,7 @@ export default function WhatsAppPage() {
   };
 
   const handleDisconnect = async (accountId: string) => {
-    if (!tenantId || !confirm('Desconectar este WhatsApp? O histórico de conversas será mantido.')) return;
+    if (!tenantId || !(await confirm({ title: 'Desconectar este WhatsApp?', description: 'O histórico de conversas será mantido.', action: 'Desconectar' }))) return;
     try {
       await whatsappApi.disconnectAccount(tenantId, accountId);
       setAccounts(prev => prev.filter(a => a.id !== accountId));

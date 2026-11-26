@@ -11,6 +11,7 @@ import {
   aiConnectionsApi, apiErrorMessage, plansApi,
   type AiConnection, type AiProvider, type AiProviderInfo, type TenantPlanSummary,
 } from '../../../../lib/studio-api';
+import { useConfirm } from '../../../../components/confirm-dialog';
 
 const STATUS = {
   active: { label: 'Ativa', className: 'badge-success', icon: CheckCircle2 },
@@ -33,6 +34,7 @@ function ConnectionCard({
   onChanged: () => void;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
+  const confirm = useConfirm();
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [rotating, setRotating] = useState(false);
   const [newKey, setNewKey] = useState('');
@@ -197,8 +199,8 @@ function ConnectionCard({
         </button>
         <button
           disabled={busy !== null}
-          onClick={() => {
-            if (!window.confirm('Revogar esta conexão? A chave será apagada da Walletz e os agentes que a usam param de responder até haver outra conexão.')) return;
+          onClick={async () => {
+            if (!(await confirm({ title: 'Revogar esta conexão?', description: 'A chave será apagada da Walletz e os agentes que a usam param de responder até haver outra conexão.', action: 'Revogar' }))) return;
             void run('remove', async () => {
               await aiConnectionsApi.remove(tenantId, connection.id);
               return 'Conexão revogada.';

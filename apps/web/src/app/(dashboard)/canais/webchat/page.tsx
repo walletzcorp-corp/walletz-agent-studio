@@ -9,6 +9,7 @@ import {
   apiErrorMessage, plansApi, webchatApi, widgetScriptUrl,
   type TenantPlanSummary, type WebchatWidget,
 } from '../../../../lib/studio-api';
+import { useConfirm } from '../../../../components/confirm-dialog';
 
 function parseOrigins(text: string): string[] {
   return text.split(/[\s,]+/).map((o) => o.trim()).filter(Boolean);
@@ -96,6 +97,7 @@ function WidgetForm({
 
 export default function WebchatPage() {
   const { tenantId } = useAuth();
+  const confirm = useConfirm();
   const [widgets, setWidgets] = useState<WebchatWidget[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [plan, setPlan] = useState<TenantPlanSummary | null>(null);
@@ -217,7 +219,7 @@ export default function WebchatPage() {
                     </button>
                     <button
                       disabled={busy}
-                      onClick={() => { if (tenantId && window.confirm('Remover este widget? O código deixa de funcionar no site.')) void act(() => webchatApi.remove(tenantId, w.id)); }}
+                      onClick={async () => { if (tenantId && await confirm({ title: 'Remover este widget?', description: 'O código deixa de funcionar no site.', action: 'Remover' })) void act(() => webchatApi.remove(tenantId, w.id)); }}
                       className="btn-ghost rounded-lg px-3 py-2 text-xs border border-neural-danger/40 text-neural-danger inline-flex items-center gap-1.5"
                     >
                       <Trash2 className="h-3.5 w-3.5" /> Remover

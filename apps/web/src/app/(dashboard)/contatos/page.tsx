@@ -8,6 +8,7 @@ import {
   Users, Upload, Search, Trash2, Phone, Mail, Building2, Tag,
   CheckCircle2, AlertCircle, X, Plus,
 } from 'lucide-react';
+import { useConfirm } from '../../../components/confirm-dialog';
 
 interface Contact {
   id: string;
@@ -28,6 +29,7 @@ interface ImportResult {
 
 export default function ContatosPage() {
   const { tenantId } = useAuth();
+  const confirm = useConfirm();
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -99,7 +101,7 @@ export default function ContatosPage() {
   };
 
   const handleDelete = async (contactId: string) => {
-    if (!tenantId || !confirm('Remover este contato?')) return;
+    if (!tenantId || !(await confirm({ title: 'Remover este contato?', action: 'Remover' }))) return;
     try {
       await api.delete(`/tenants/${tenantId}/contacts/${contactId}`);
       setContacts((prev) => prev.filter((c) => c.id !== contactId));

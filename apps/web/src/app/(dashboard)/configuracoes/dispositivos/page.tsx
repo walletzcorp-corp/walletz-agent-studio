@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@walletz/ui';
 import { useAuth } from '../../../../hooks/use-auth';
+import { useConfirm } from '../../../../components/confirm-dialog';
 
 interface PcDevice {
   id: string;
@@ -35,6 +36,7 @@ async function apiCall(path: string, opts: RequestInit = {}) {
 
 export default function DispositivosPage() {
   const { tenantId } = useAuth();
+  const confirm = useConfirm();
   const [devices, setDevices] = useState<PcDevice[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<PcDevice | null>(null);
@@ -54,7 +56,7 @@ export default function DispositivosPage() {
 
   const disconnect = async (deviceId: string) => {
     if (!tenantId) return;
-    if (!confirm('Desconectar este dispositivo? O agente perderá acesso ao computador.')) return;
+    if (!(await confirm({ title: 'Desconectar este dispositivo?', description: 'O agente perderá acesso ao computador.', action: 'Desconectar' }))) return;
     setDisconnecting(deviceId);
     try {
       await apiCall(`/tenants/${tenantId}/pc-connector/devices/${deviceId}`, { method: 'DELETE' });

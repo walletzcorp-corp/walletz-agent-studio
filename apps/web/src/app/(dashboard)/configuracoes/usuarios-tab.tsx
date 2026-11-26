@@ -6,6 +6,7 @@ import { useAuth } from '../../../hooks/use-auth';
 import { tenantsApi, type TenantMember } from '../../../lib/api';
 import { apiErrorMessage, plansApi, type TenantPlanSummary } from '../../../lib/studio-api';
 import { withBasePath } from '../../../lib/paths';
+import { useConfirm } from '../../../components/confirm-dialog';
 
 const ROLE_LABELS: Record<string, string> = {
   owner: 'Dono', admin: 'Admin', manager: 'Gestor', agent_operator: 'Operador', analyst: 'Analista', viewer: 'Leitor',
@@ -23,6 +24,7 @@ const input = 'w-full rounded-lg border border-border bg-surface-1 px-3 py-2 tex
 /** Usuários reais da organização atual (cada organização tem os próprios usuários). */
 export function TabUsuarios() {
   const { tenantId, userId } = useAuth();
+  const confirm = useConfirm();
   const [members, setMembers] = useState<TenantMember[]>([]);
   const [plan, setPlan] = useState<TenantPlanSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -190,7 +192,7 @@ export function TabUsuarios() {
                         <button
                           disabled={busy}
                           aria-label="Remover usuário"
-                          onClick={() => { if (tenantId && window.confirm(`Remover o acesso de ${m.email} a esta organização?`)) void act(() => tenantsApi.removeMember(tenantId, m.id)); }}
+                          onClick={async () => { if (tenantId && await confirm({ title: `Remover o acesso de ${m.email}?`, description: 'A pessoa deixa de entrar nesta organização.', action: 'Remover' })) void act(() => tenantsApi.removeMember(tenantId, m.id)); }}
                           className="p-1.5 text-muted-foreground hover:text-neural-danger rounded"
                         >
                           <Trash2 className="h-3.5 w-3.5" />

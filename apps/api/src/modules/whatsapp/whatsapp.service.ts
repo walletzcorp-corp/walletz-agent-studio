@@ -2035,7 +2035,7 @@ export class WhatsappService {
             components: tpl.components ?? [],
           })
           .onConflictDoUpdate({
-            target: whatsappTemplates.accountId,
+            target: [whatsappTemplates.accountId, whatsappTemplates.templateId],
             set: { status: tpl.status, components: tpl.components ?? [], updatedAt: new Date() },
           });
       }

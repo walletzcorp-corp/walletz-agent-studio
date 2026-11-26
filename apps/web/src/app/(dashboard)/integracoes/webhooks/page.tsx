@@ -8,6 +8,7 @@ import {
   apiErrorMessage, plansApi, webhooksApi,
   type OutboundWebhook, type TenantPlanSummary,
 } from '../../../../lib/studio-api';
+import { useConfirm } from '../../../../components/confirm-dialog';
 
 function SecretBox({ secret, onClose }: { secret: string; onClose: () => void }) {
   const [copied, setCopied] = useState(false);
@@ -28,6 +29,7 @@ function SecretBox({ secret, onClose }: { secret: string; onClose: () => void })
 
 export default function WebhooksPage() {
   const { tenantId } = useAuth();
+  const confirm = useConfirm();
   const [hooks, setHooks] = useState<OutboundWebhook[]>([]);
   const [events, setEvents] = useState<Array<{ name: string; description: string }>>([]);
   const [plan, setPlan] = useState<TenantPlanSummary | null>(null);
@@ -150,7 +152,7 @@ export default function WebhooksPage() {
                   })} className="btn-ghost rounded-lg px-3 py-2 text-xs border border-border inline-flex items-center gap-1.5"><Send className="h-3.5 w-3.5" /> Enviar teste</button>
                   <button disabled={busy} onClick={() => tenantId && act(() => webhooksApi.update(tenantId, h.id, { isActive: !h.isActive }))} className="btn-ghost rounded-lg px-3 py-2 text-xs border border-border inline-flex items-center gap-1.5"><Power className="h-3.5 w-3.5" /> {h.isActive ? 'Pausar' : 'Reativar'}</button>
                   <button disabled={busy} onClick={() => tenantId && act(async () => { setSecret((await webhooksApi.rotateSecret(tenantId, h.id)).data.secret); })} className="btn-ghost rounded-lg px-3 py-2 text-xs border border-border inline-flex items-center gap-1.5"><KeyRound className="h-3.5 w-3.5" /> Novo segredo</button>
-                  <button disabled={busy} onClick={() => { if (tenantId && window.confirm('Remover este webhook?')) void act(() => webhooksApi.remove(tenantId, h.id)); }} className="btn-ghost rounded-lg px-3 py-2 text-xs border border-neural-danger/40 text-neural-danger inline-flex items-center gap-1.5"><Trash2 className="h-3.5 w-3.5" /> Remover</button>
+                  <button disabled={busy} onClick={async () => { if (tenantId && await confirm({ title: 'Remover este webhook?', action: 'Remover' })) void act(() => webhooksApi.remove(tenantId, h.id)); }} className="btn-ghost rounded-lg px-3 py-2 text-xs border border-neural-danger/40 text-neural-danger inline-flex items-center gap-1.5"><Trash2 className="h-3.5 w-3.5" /> Remover</button>
                 </div>
               </div>
             ))}

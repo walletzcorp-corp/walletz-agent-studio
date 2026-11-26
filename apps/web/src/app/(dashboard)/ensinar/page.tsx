@@ -9,6 +9,7 @@ import {
 import {
   Plus, CheckCircle2, Clock, Pencil, Trash2, ShieldCheck, ShieldX, ChevronDown, ChevronUp,
 } from 'lucide-react';
+import { useConfirm } from '../../../components/confirm-dialog';
 
 const TYPE_CONFIG: Record<KnowledgeItemType, { label: string; color: string; description: string }> = {
   fact: { label: 'Fato', color: 'bg-blue-100 text-blue-700', description: 'Informação objetiva sobre a empresa/produto' },
@@ -24,6 +25,7 @@ type FilterType = KnowledgeItemType | 'all';
 
 export default function TeachPage() {
   const { tenantId, role } = useAuth();
+  const confirm = useConfirm();
   const [items, setItems] = useState<KnowledgeItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -116,7 +118,7 @@ export default function TeachPage() {
   };
 
   const handleDelete = async (itemId: string) => {
-    if (!tenantId || !confirm('Remover este item?')) return;
+    if (!tenantId || !(await confirm({ title: 'Remover este item?', action: 'Remover' }))) return;
     try {
       await teachApi.remove(tenantId, itemId);
       setItems((prev) => prev.filter((i) => i.id !== itemId));
