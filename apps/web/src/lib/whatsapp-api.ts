@@ -55,7 +55,22 @@ export interface EmbeddedSignupPayload {
   phoneNumberId?: string;
 }
 
+/** Situação de envio do número (recebimento e envio são independentes na Meta). */
+export interface WhatsappSendHealth {
+  send: 'available' | 'limited' | 'blocked' | 'unknown';
+  reasons: Array<{ message: string; action?: string; code?: number }>;
+  lastInboundAt: string | null;
+  lastSuccessAt: string | null;
+  lastFailure: { at: string; message: string } | null;
+  failedSinceLastSuccess: number;
+  checkedAt: string;
+  metaUnavailable?: boolean;
+}
+
 export const whatsappApi = {
+  health: (tenantId: string, accountId: string, refresh = false) =>
+    api.get<WhatsappSendHealth>(`/tenants/${tenantId}/whatsapp/accounts/${accountId}/health`, { params: refresh ? { refresh: 'true' } : {} }),
+
   listAccounts: (tenantId: string) =>
     api.get<WhatsappAccount[]>(`/tenants/${tenantId}/whatsapp/accounts`),
 

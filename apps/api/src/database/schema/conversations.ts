@@ -93,7 +93,8 @@ export const messages = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
-    conversationIdx: index('messages_conversation_idx').on(table.conversationId),
+    // Histórico da conversa em ordem (também atende buscas só por conversa).
+    conversationCreatedIdx: index('messages_conversation_created_idx').on(table.conversationId, table.createdAt),
     tenantIdx: index('messages_tenant_idx').on(table.tenantId),
     providerMsgIdx: index('messages_provider_msg_idx').on(table.providerMessageId),
   }),

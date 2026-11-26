@@ -2,7 +2,7 @@
 
 > Arquivo gerado por `pnpm --filter @walletz/api docs:openapi`. Não edite à mão.
 
-Versão 1.0 · 164 rotas · prefixo `/api/v1` · autenticação Bearer (JWT), exceto onde indicado "sem JWT" (login, webhooks, callback OAuth, conector local — protegidos por outros meios).
+Versão 1.0 · 166 rotas · prefixo `/api/v1` · autenticação Bearer (JWT), exceto onde indicado "sem JWT" (login, webhooks, callback OAuth, conector local — protegidos por outros meios).
 
 ## Módulos
 
@@ -15,11 +15,11 @@ Versão 1.0 · 164 rotas · prefixo `/api/v1` · autenticação Bearer (JWT), ex
 | [knowledge](#knowledge) | Base de conhecimento | 10 |
 | [teach](#teach) | Ensinar a IA (fatos, diretrizes, exemplos) | 7 |
 | [lab](#lab) | Laboratório de testes | 1 |
-| [conversations](#conversations) | Conversas e inbox | 7 |
+| [conversations](#conversations) | Conversas e inbox | 8 |
 | [contacts](#contacts) | Contatos e leads | 5 |
 | [campaigns](#campaigns) | Campanhas e cadências | 8 |
 | [calendars](#calendars) | Agendas Google e Microsoft | 12 |
-| [whatsapp](#whatsapp) | WhatsApp Business | 21 |
+| [whatsapp](#whatsapp) | WhatsApp Business | 22 |
 | [privacy](#privacy) | LGPD: exportação e exclusão de dados | 4 |
 | [pc-connector](#pc-connector) | Conector local (agente no computador do cliente) | 8 |
 | [admin](#admin) | Administração da plataforma | 16 |
@@ -141,9 +141,10 @@ Conversas e inbox
 | Método | Rota | Descrição | Auth |
 |---|---|---|---|
 | `GET` | `/api/v1/tenants/{tenantId}/conversations` | Listar conversas (inbox) | Bearer |
-| `GET` | `/api/v1/tenants/{tenantId}/conversations/{conversationId}` | Detalhar conversa | Bearer |
+| `GET` | `/api/v1/tenants/{tenantId}/conversations/{conversationId}` | Detalhar conversa (com o motivo da passagem para atendimento humano, se houver) | Bearer |
 | `GET` | `/api/v1/tenants/{tenantId}/conversations/{conversationId}/messages` | Listar mensagens da conversa | Bearer |
-| `POST` | `/api/v1/tenants/{tenantId}/conversations/{conversationId}/messages` | Enviar mensagem como atendente humano | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/conversations/{conversationId}/messages` | Enviar mensagem como atendente humano (no WhatsApp, entregue pela Meta; pausa a IA) | Bearer |
+| `POST` | `/api/v1/tenants/{tenantId}/conversations/{conversationId}/messages/{messageId}/resend` | Reenviar uma resposta que não foi entregue ao cliente (WhatsApp) | Bearer |
 | `POST` | `/api/v1/tenants/{tenantId}/conversations/{conversationId}/assume` | Assumir a conversa (pausa a IA) | Bearer |
 | `POST` | `/api/v1/tenants/{tenantId}/conversations/{conversationId}/return-to-ai` | Devolver a conversa para a IA | Bearer |
 | `POST` | `/api/v1/tenants/{tenantId}/conversations/{conversationId}/resolve` | Marcar conversa como resolvida | Bearer |
@@ -221,6 +222,7 @@ WhatsApp Business
 | `GET` | `/api/v1/tenants/{tenantId}/whatsapp/accounts/{accountId}/stats` | Get message statistics for account | Bearer |
 | `GET` | `/api/v1/tenants/{tenantId}/whatsapp/accounts/{accountId}/message-logs` | Logs de mensagens recentes com erros de envio (diagnóstico) | Bearer |
 | `GET` | `/api/v1/tenants/{tenantId}/whatsapp/accounts/{accountId}/pipeline-check` | Diagnóstico completo do pipeline WhatsApp → IA: agente, provedor de IA, webhook subscription | Bearer |
+| `GET` | `/api/v1/tenants/{tenantId}/whatsapp/accounts/{accountId}/health` | Situação de envio do número: liberado, limitado ou bloqueado pela Meta, com motivo e última falha | Bearer |
 
 ## privacy
 

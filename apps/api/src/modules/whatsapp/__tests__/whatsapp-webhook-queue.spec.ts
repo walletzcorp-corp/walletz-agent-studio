@@ -43,7 +43,7 @@ describe('WhatsApp inbound webhook -> fila durável', () => {
     const service = new WhatsappService(
       {} as never, {} as never, {} as never,
       { hmacSha256: (secret: string, body: Buffer) => crypto.createHmac('sha256', secret).update(body).digest('hex') } as never,
-      {} as never, {} as never, {} as never, {} as never, queue as never,
+      {} as never, {} as never, {} as never, {} as never, queue as never, {} as never,
     );
     const body = Buffer.from(JSON.stringify(webhook));
     const signature = `sha256=${crypto.createHmac('sha256', 'test-app-secret').update(body).digest('hex')}`;
@@ -81,9 +81,21 @@ describe('WhatsApp inbound webhook -> fila durável', () => {
   it('worker chama processamento e propaga erros para ativar retry', async () => {
     const processQueuedInbound = jest.fn().mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('LLM indisponível'));
     const processor = new WhatsappInboundProcessor({ processQueuedInbound } as never);
-    const job = { data: { phoneNumberId: 'phone-id', message }, id: 'wa-01', attemptsMade: 0 } as never;
+    const job = { data: { phoneNumberId: 'phone-id', message }, id: 'wa-01', attemptsMade: 0, opts: { attempts: 3 } } as never;
     await expect(processor.process(job)).resolves.toBeUndefined();
     await expect(processor.process(job)).rejects.toThrow('LLM indisponível');
     expect(processQueuedInbound).toHaveBeenCalledTimes(2);
+  });
+
+  it('na última tentativa a conversa vai para um atendente, e o erro continua registrado', async () => {
+    const processQueuedInbound = jest.fn().mockRejectedValue(new Error('Meta fora do ar'));
+    const handOffUnanswered = jest.fn().mockResolvedValue(undefined);
+    const processor = new WhatsappInboundProcessor({ processQueuedInbound, handOffUnanswered } as never);
+    const job = (attemptsMade: number) => ({ data: { phoneNumberId: 'phone-id', message }, id: 'wa-02', attemptsMade, opts: { attempts: 3 } }) as never;
+    await expect(processor.process(job(0))).rejects.toThrow('Meta fora do ar');
+    await expect(processor.process(job(1))).rejects.toThrow('Meta fora do ar');
+    expect(handOffUnanswered).not.toHaveBeenCalled();
+    await expect(processor.process(job(2))).rejects.toThrow('Meta fora do ar');
+    expect(handOffUnanswered).toHaveBeenCalledTimes(1);
   });
 });

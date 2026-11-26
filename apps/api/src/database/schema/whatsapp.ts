@@ -127,6 +127,8 @@ export const whatsappMessageLogs = pgTable(
     tenantIdx: index('whatsapp_message_logs_tenant_idx').on(table.tenantId),
     providerMsgIdx: index('whatsapp_message_logs_provider_msg_idx').on(table.providerMessageId),
     conversationIdx: index('whatsapp_message_logs_conversation_idx').on(table.conversationId),
+    // Situação de envio do número: última falha/sucesso por número.
+    accountCreatedIdx: index('whatsapp_message_logs_account_created_idx').on(table.accountId, table.createdAt),
     idempotencyIdx: uniqueIndex('whatsapp_message_logs_idempotency_idx').on(
       table.tenantId,
       table.idempotencyKey,

@@ -1,6 +1,6 @@
 # Status da Release — Walletz Agent Studio
 
-**Última atualização**: 2026-11-18  
+**Última atualização**: 2026-11-26  
 **Sprint atual**: 7 — Microsoft Graph Integration + Token Auto-Refresh + Teams Meeting
 
 ---
@@ -175,7 +175,7 @@ Ver detalhes em [EXTERNAL_BLOCKERS.md](EXTERNAL_BLOCKERS.md).
 | Microsoft 365 real | ⏳ | sem credenciais; coberto só por testes unitários |
 | Agente só diz que marcou se marcou | ✅ local | sem "Agente pode agendar" o modelo é instruído a não confirmar horários nem convites; escolher a agenda liga a chave e salvar com ela desligada avisa; "Ferramentas" não oferece mais permissões de agenda sem efeito; testes: unit 159, integração 44, navegador 47/47 (Google simulado) |
 | Logs sem query string | ✅ local | o retorno do OAuth gravava `code` e `state` no log da API |
-| Pendências | 🔴 | o WhatsApp chama o agente sem o histórico da conversa, então ele não lembra o horário combinado na mensagem anterior; limite diário, expediente e antecedência não são exigidos ao criar; suíte `test:isolation` não inicia; menu lateral fixo deixa o painel ruim no celular; as demais "Ferramentas" do agente não têm efeito no runtime |
+| Pendências | 🔴 | limite diário, expediente e antecedência não são exigidos ao criar; suíte `test:isolation` não inicia; menu lateral fixo deixa o painel ruim no celular; as demais "Ferramentas" do agente não têm efeito no runtime |
 
 
 ## Chave do Google Gemini: cota gratuita e modelos novos (2026-11-18)
@@ -233,6 +233,19 @@ Base: *Walletz Studio IA — Planos Sugeridos*, proposta comercial v4.2 (16/11/2
 | Notificações por e-mail, caixa de e-mail, Trello/CRM, API pública | ⏳ Em desenvolvimento | aparecem como roadmap; o servidor bloqueia com `FEATURE_IN_DEVELOPMENT` |
 | Subcontas e White Label (Agency) | ⏳ Oferta condicionada | depende de validar isolamento, permissões, faturamento por subconta e vazamento de chaves (seção 06 do documento) |
 | Cobrança da assinatura (checkout) | ⏳ | contratação via Walletz (WhatsApp/contrato); módulo billing sem gateway |
+
+## WhatsApp: histórico, situação de envio e atendente (2026-11-26)
+
+| Item | Status | Evidência |
+|------|--------|-----------|
+| Agente recebe o histórico da conversa | ✅ local | últimas 20 mensagens (até 8 mil caracteres) da conversa; respostas que não chegaram ao cliente ficam de fora; mensagens seguidas do mesmo lado são juntadas para todos os provedores |
+| Situação de envio do número | ✅ local | `GET …/whatsapp/accounts/:id/health`: recebimento e envio separados, `health_status` da Meta (cache de 10 min, "Verificar agora"), motivo e ação em português (pagamento, token, permissão, nome de exibição, janela de 24h); erros de chamada de voz ignorados; aviso no Início |
+| Falha não fica em silêncio | ✅ local | recusa permanente da Meta ou 3ª tentativa sem sucesso → conversa "Aguardando atendente" com o motivo (`human_handoffs`, auditoria `conversation.handoff_automatic`, webhook `conversation.handoff`); falha temporária volta para a fila |
+| IA não é chamada com envio bloqueado | ✅ local | depois de uma recusa permanente, por 10 min as novas mensagens vão direto ao atendente (antes cada resposta gerada e recusada gastava a chave de IA do cliente) |
+| Resposta do atendente chega ao cliente | ✅ local | antes a tela Conversas só gravava no banco; agora envia pela Meta, respeita a janela de 24h (422 sem enviar) e mostra o erro; "Reenviar" para respostas não entregues (auditoria `conversation.message_resent`) |
+| Índices | ✅ local | migração 0009: `messages (conversation_id, created_at)` substitui o índice só por conversa; `whatsapp_message_logs (account_id, created_at)` |
+| Testes | ✅ | unit 184; integração 50 (6 de WhatsApp com Postgres real e Meta/IA simuladas; conferido que falham sem o histórico e sem o bloqueio); navegador 25/25 (webhook assinado e fila real) |
+| Produção | ⏳ | número da Walletz Corp com envio bloqueado pela Meta (forma de pagamento, erro 141006) e nome de exibição não enviado; correção no WhatsApp Manager pelo cliente |
 
 ## WhatsApp com o app Meta do próprio cliente (2026-11-16)
 

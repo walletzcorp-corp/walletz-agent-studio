@@ -1,6 +1,7 @@
 import {
   Injectable, Inject, Logger, NotFoundException,
   BadRequestException, ConflictException, UnauthorizedException,
+  UnprocessableEntityException, BadGatewayException,
 } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
@@ -8,14 +9,15 @@ import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import { WHATSAPP_INBOUND_QUEUE, type WhatsappInboundJobData } from './whatsapp.queue';
 import * as crypto from 'crypto';
-import { eq, and, isNull, ne, desc } from 'drizzle-orm';
+import { eq, and, isNull, ne, desc, or, inArray, gt } from 'drizzle-orm';
+import type Redis from 'ioredis';
 import { DRIZZLE_TOKEN, type DrizzleDB } from '../../database/database.module';
 import {
   whatsappAccounts, whatsappMessageLogs, whatsappTemplates,
   type WhatsappAccount,
 } from '../../database/schema/whatsapp';
 import {
-  conversations, messages,
+  conversations, messages, humanHandoffs,
 } from '../../database/schema/conversations';
 import {
   contacts, contactIdentities, consents, suppressions,
@@ -29,8 +31,58 @@ import { createId } from '../../database/utils/id';
 import { LabService } from '../lab/lab.service';
 import { AiProvidersService } from '../ai-providers/ai-providers.service';
 import type { ConnectWhatsappDto, EmbeddedSignupDto, SendMessageDto } from './dto/connect-account.dto';
+import { REDIS_TOKEN } from '../../shared/redis/redis.module';
+import type { ChatMessageDto } from '../lab/dto/chat.dto';
+import { classifyMetaSendError, describeFailure, isCallingOnlyError, type SendFailure } from './meta-errors';
 
-const META_GRAPH_URL = 'https://graph.facebook.com/v22.0';
+/** Configurável só para testes locais com uma Meta simulada. */
+const META_GRAPH_URL = process.env.META_GRAPH_URL || 'https://graph.facebook.com/v22.0';
+
+/** Mensagens anteriores da conversa enviadas ao agente (e o teto de texto, por custo). */
+const HISTORY_MESSAGES = 20;
+const HISTORY_MAX_CHARS = 8000;
+/** A Meta só aceita texto livre até 24h depois da última mensagem do cliente. */
+const SERVICE_WINDOW_MS = 24 * 3600_000;
+/** Depois de uma recusa permanente da Meta, outras conversas não chamam a IA por este tempo. */
+const SEND_BLOCK_TTL_SECONDS = 600;
+const HEALTH_TTL_SECONDS = 600;
+const DELIVERED_STATUSES = ['sent', 'delivered', 'read'] as const;
+
+const sendBlockKey = (accountId: string): string => `wa:send-blocked:${accountId}`;
+const healthKey = (accountId: string): string => `wa:health:${accountId}`;
+
+/** Recusa permanente da Meta: tentar de novo não resolve. */
+export class WhatsappSendError extends Error {
+  constructor(readonly failure: SendFailure) {
+    super(describeFailure(failure));
+  }
+}
+
+export interface WhatsappSendHealth {
+  send: 'available' | 'limited' | 'blocked' | 'unknown';
+  reasons: Array<{ message: string; action?: string; code?: number }>;
+  lastInboundAt: Date | null;
+  lastSuccessAt: Date | null;
+  lastFailure: { at: Date; message: string } | null;
+  failedSinceLastSuccess: number;
+  checkedAt: Date;
+  /** A consulta à Meta falhou; o resto vem só do que a plataforma registrou. */
+  metaUnavailable?: boolean;
+}
+
+type MetaHealth = { can: string | undefined; reasons: WhatsappSendHealth['reasons'] };
+
+/** Texto de uma mensagem para o histórico do agente (mídia vira um marcador). */
+function historyText(content: unknown): string {
+  if (!content || typeof content !== 'object') return '';
+  const c = content as Record<string, unknown>;
+  if (typeof c['text'] === 'string') return c['text'];
+  if (c['image']) return '[imagem]';
+  if (c['audio']) return '[áudio]';
+  if (c['video']) return '[vídeo]';
+  if (c['document']) return '[documento]';
+  return '[mensagem não suportada]';
+}
 
 export interface WhatsappAccountView {
   id: string;
@@ -86,6 +138,7 @@ export class WhatsappService {
     private readonly webhooks: WebhooksService,
     private readonly aiProviders: AiProvidersService,
     @InjectQueue(WHATSAPP_INBOUND_QUEUE) private readonly inboundQueue: Queue<WhatsappInboundJobData>,
+    @Inject(REDIS_TOKEN) private readonly redis: Redis,
   ) {}
 
   /** WhatsApp oficial só nos planos que o incluem, até o limite de números. */
@@ -922,6 +975,7 @@ export class WhatsappService {
     const storedText = previous && previous.content && typeof previous.content === 'object'
       ? String((previous.content as Record<string, unknown>)['text'] ?? text)
       : text;
+    // A mensagem da conversa usa o mesmo ID do registro técnico: as duas mudam juntas.
     const logId = previous?.id ?? createId();
     if (!previous) {
       await this.db.insert(whatsappMessageLogs).values({
@@ -938,6 +992,7 @@ export class WhatsappService {
         idempotencyKey,
       }).onConflictDoNothing();
       await this.db.insert(messages).values({
+        id: logId,
         conversationId,
         tenantId: account.tenantId,
         direction: 'outbound',
@@ -946,48 +1001,430 @@ export class WhatsappService {
         sentByAgentId: agentId,
         isAiGenerated: true,
         traceId,
-      });
+      }).onConflictDoNothing();
     }
+    // Registros anteriores a esta versão ligavam a mensagem pelo trace.
+    const thisMessage = and(
+      eq(messages.tenantId, account.tenantId),
+      eq(messages.conversationId, conversationId),
+      or(eq(messages.id, logId), eq(messages.traceId, traceId)),
+    );
 
-    const bearerToken = this.decryptToken(account);
     try {
-      const resp = await firstValueFrom(
-        this.httpService.post(
-          `${META_GRAPH_URL}/${account.phoneNumberId}/messages`,
-          {
-            messaging_product: 'whatsapp',
-            recipient_type: 'individual',
-            to: to.replace(/^\+/, ''),
-            type: 'text',
-            text: { preview_url: false, body: storedText },
-          },
-          { headers: { Authorization: `Bearer ${bearerToken}` } },
-        ),
-      );
-      const data = resp.data as { messages?: Array<{ id: string }> };
-      const providerMsgId = data.messages?.[0]?.id;
-      if (!providerMsgId) throw new Error('Meta retornou HTTP sucesso sem messages[0].id');
+      const providerMsgId = await this.postText(account, to, storedText);
       await this.db.update(whatsappMessageLogs)
         .set({ status: 'sent', providerMessageId: providerMsgId, errorCode: null, errorMessage: null, sentAt: new Date() })
         .where(and(eq(whatsappMessageLogs.tenantId, account.tenantId), eq(whatsappMessageLogs.idempotencyKey, idempotencyKey)));
       await this.db.update(messages)
-        .set({ status: 'sent', sentAt: new Date() })
-        .where(and(eq(messages.traceId, traceId), eq(messages.conversationId, conversationId)));
+        .set({ status: 'sent', providerMessageId: providerMsgId, sentAt: new Date(), failedAt: null, failureReason: null })
+        .where(thisMessage);
+      await this.clearSendBlock(account.id);
     } catch (err) {
-      const safe = this.extractMetaError(err);
-      const metaMessage = (err as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message;
-      const errorMessage = safe.code
-        ? `Meta HTTP=${safe.httpStatus ?? '?'} code=${safe.code} subcode=${safe.subcode ?? '?'} type=${safe.type ?? '?'} fbtrace=${safe.fbtrace ?? '?'}${metaMessage ? ` msg="${metaMessage.slice(0, 200)}"` : ''}`
-        : (err instanceof Error ? err.message : String(err)).slice(0, 500);
+      const { errorMessage, failure } = this.describeSendError(err);
       this.logger.error(`AI reply send failed account=${account.id} inbound=${inboundMessageId}: ${errorMessage}`);
       await this.db.update(whatsappMessageLogs)
-        .set({ status: 'failed', errorMessage, errorCode: safe.code?.toString() ?? null, failedAt: new Date() })
+        .set({ status: 'failed', errorMessage, errorCode: failure.code?.toString() ?? null, failedAt: new Date() })
         .where(and(eq(whatsappMessageLogs.tenantId, account.tenantId), eq(whatsappMessageLogs.idempotencyKey, idempotencyKey)));
       await this.db.update(messages)
-        .set({ status: 'failed' })
-        .where(and(eq(messages.traceId, traceId), eq(messages.conversationId, conversationId)));
+        .set({ status: 'failed', failedAt: new Date(), failureReason: describeFailure(failure) })
+        .where(thisMessage);
       await this.handleApiError(err, account.id, account.tenantId);
+      if (failure.kind === 'permanent') {
+        await this.setSendBlock(account.id, failure);
+        throw new WhatsappSendError(failure);
+      }
       throw err;
+    }
+  }
+
+  /** Envia texto pela Cloud API e devolve o ID da mensagem na Meta. */
+  private async postText(account: WhatsappAccount, to: string, body: string): Promise<string> {
+    const resp = await firstValueFrom(
+      this.httpService.post(
+        `${META_GRAPH_URL}/${account.phoneNumberId}/messages`,
+        {
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: to.replace(/^\+/, ''),
+          type: 'text',
+          text: { preview_url: false, body },
+        },
+        { headers: { Authorization: `Bearer ${this.decryptToken(account)}` } },
+      ),
+    );
+    const providerMsgId = (resp.data as { messages?: Array<{ id: string }> }).messages?.[0]?.id;
+    if (!providerMsgId) throw new Error('Meta retornou HTTP sucesso sem messages[0].id');
+    return providerMsgId;
+  }
+
+  /** Erro de envio para log (sem token) e a classificação para o painel. */
+  private describeSendError(err: unknown): { errorMessage: string; failure: SendFailure } {
+    const safe = this.extractMetaError(err);
+    const metaMessage = (err as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message;
+    const errorMessage = safe.code
+      ? `Meta HTTP=${safe.httpStatus ?? '?'} code=${safe.code} subcode=${safe.subcode ?? '?'} type=${safe.type ?? '?'} fbtrace=${safe.fbtrace ?? '?'}${metaMessage ? ` msg="${metaMessage.slice(0, 200)}"` : ''}`
+      : (err instanceof Error ? err.message : String(err)).slice(0, 500);
+    const failure = classifyMetaSendError({ httpStatus: safe.httpStatus, code: safe.code, subcode: safe.subcode, message: metaMessage });
+    return { errorMessage, failure };
+  }
+
+  /* ── Bloqueio de envio (Redis): evita gastar a chave de IA do cliente com respostas que a Meta vai recusar ── */
+
+  private async setSendBlock(accountId: string, failure: SendFailure): Promise<void> {
+    try {
+      await this.redis.set(sendBlockKey(accountId), describeFailure(failure), 'EX', SEND_BLOCK_TTL_SECONDS);
+      await this.redis.del(healthKey(accountId));
+    } catch (err) {
+      this.logger.warn(`Não foi possível registrar o bloqueio de envio do número ${accountId}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  private async clearSendBlock(accountId: string): Promise<void> {
+    try {
+      await this.redis.del(sendBlockKey(accountId), healthKey(accountId));
+    } catch { /* sem Redis o bloqueio simplesmente expira */ }
+  }
+
+  private async sendBlockReason(accountId: string): Promise<string | null> {
+    try {
+      return await this.redis.get(sendBlockKey(accountId));
+    } catch {
+      return null;
+    }
+  }
+
+  /* ── Histórico enviado ao agente ── */
+
+  /**
+   * Mensagens anteriores desta conversa, em ordem. Respostas que não chegaram ao cliente
+   * ficam de fora: o agente não pode achar que disse algo que o cliente nunca viu.
+   */
+  private async conversationHistory(tenantId: string, conversationId: string, currentProviderMessageId: string): Promise<ChatMessageDto[]> {
+    const rows = await this.db
+      .select({ direction: messages.direction, status: messages.status, content: messages.content, providerMessageId: messages.providerMessageId })
+      .from(messages)
+      .where(and(eq(messages.tenantId, tenantId), eq(messages.conversationId, conversationId)))
+      .orderBy(desc(messages.createdAt), desc(messages.id))
+      .limit(HISTORY_MESSAGES + 1);
+
+    const turns: ChatMessageDto[] = [];
+    let chars = 0;
+    for (const m of rows) {
+      if (m.providerMessageId === currentProviderMessageId) continue;
+      if (m.direction === 'outbound' && !(DELIVERED_STATUSES as readonly string[]).includes(m.status)) continue;
+      const content = historyText(m.content).trim();
+      if (!content) continue;
+      if (turns.length >= HISTORY_MESSAGES || chars + content.length > HISTORY_MAX_CHARS) break;
+      chars += content.length;
+      turns.push({ role: m.direction === 'inbound' ? 'user' : 'assistant', content });
+    }
+    return turns.reverse();
+  }
+
+  /* ── Atendimento humano ── */
+
+  /**
+   * A IA não conseguiu responder: a conversa para de chamar a IA e fica aguardando um atendente,
+   * com o motivo. Registra a passagem (auditoria, webhook) só na primeira vez.
+   */
+  async handOffToHuman(tenantId: string, conversationId: string, reason: string): Promise<void> {
+    const now = new Date();
+    const paused = await this.db
+      .update(conversations)
+      .set({ status: 'waiting_human', aiPausedAt: now, updatedAt: now })
+      .where(and(
+        eq(conversations.id, conversationId),
+        eq(conversations.tenantId, tenantId),
+        isNull(conversations.aiPausedAt),
+        ne(conversations.status, 'resolved'),
+      ))
+      .returning({ id: conversations.id });
+    if (paused.length === 0) return; // já estava com um atendente (ou encerrada)
+
+    await this.db.insert(humanHandoffs).values({ conversationId, tenantId, status: 'active', reason });
+    await this.auditService.log({
+      tenantId,
+      action: 'conversation.handoff_automatic',
+      resourceType: 'conversation',
+      resourceId: conversationId,
+      metadata: { channel: 'whatsapp', reason },
+    });
+    void this.webhooks.emit(tenantId, 'conversation.handoff', { conversationId, automatic: true, reason });
+    this.logger.warn(`Conversa ${conversationId} passada para atendimento humano: ${reason}`);
+  }
+
+  /** Última tentativa da fila falhou: a mensagem do cliente não pode ficar sem ninguém ver. */
+  async handOffUnanswered(data: WhatsappInboundJobData): Promise<void> {
+    const [log] = await this.db
+      .select({ tenantId: whatsappMessageLogs.tenantId, conversationId: whatsappMessageLogs.conversationId })
+      .from(whatsappMessageLogs)
+      .where(and(eq(whatsappMessageLogs.idempotencyKey, data.message.id), eq(whatsappMessageLogs.direction, 'inbound')))
+      .limit(1);
+    if (!log?.conversationId) return;
+    await this.handOffToHuman(log.tenantId, log.conversationId, 'O agente não conseguiu responder depois de 3 tentativas. Responda o cliente por aqui.');
+  }
+
+  /**
+   * Resposta de um atendente (tela Conversas) enviada ao cliente pelo WhatsApp.
+   * Pausa a IA da conversa. A mensagem fica registrada mesmo se a Meta recusar.
+   */
+  async sendHumanReply(
+    tenantId: string,
+    conversationId: string,
+    text: string,
+    userId: string,
+    options: { retriedFrom?: string } = {},
+  ): Promise<typeof messages.$inferSelect> {
+    const [conv] = await this.db
+      .select()
+      .from(conversations)
+      .where(and(eq(conversations.id, conversationId), eq(conversations.tenantId, tenantId)))
+      .limit(1);
+    if (!conv) throw new NotFoundException('Conversa não encontrada.');
+    if (conv.channel !== 'whatsapp') throw new BadRequestException('Esta conversa não é do WhatsApp.');
+
+    // Número que recebeu o cliente nesta conversa.
+    const [lastInbound] = await this.db
+      .select({ accountId: whatsappMessageLogs.accountId, from: whatsappMessageLogs.from, createdAt: whatsappMessageLogs.createdAt })
+      .from(whatsappMessageLogs)
+      .where(and(
+        eq(whatsappMessageLogs.tenantId, tenantId),
+        eq(whatsappMessageLogs.conversationId, conversationId),
+        eq(whatsappMessageLogs.direction, 'inbound'),
+      ))
+      .orderBy(desc(whatsappMessageLogs.createdAt))
+      .limit(1);
+    if (!lastInbound?.accountId || !lastInbound.from) {
+      throw new ConflictException({ error: 'WHATSAPP_NUMBER_UNKNOWN', message: 'Não foi possível identificar o número desta conversa.' });
+    }
+    const account = await this.getAccount(tenantId, lastInbound.accountId);
+    await this.assertAccountUsable(tenantId, account.id);
+    if (account.status !== 'connected') {
+      throw new ConflictException({ error: 'WHATSAPP_NOT_CONNECTED', message: 'O número do WhatsApp não está conectado. Reconecte na tela WhatsApp.' });
+    }
+    if (Date.now() - lastInbound.createdAt.getTime() > SERVICE_WINDOW_MS) {
+      throw new UnprocessableEntityException({
+        error: 'WHATSAPP_WINDOW_CLOSED',
+        message: 'Passaram mais de 24 horas desde a última mensagem do cliente. A Meta só permite enviar um modelo de mensagem aprovado; nada foi enviado.',
+      });
+    }
+
+    const now = new Date();
+    await this.db
+      .update(conversations)
+      .set({
+        aiPausedAt: conv.aiPausedAt ?? now,
+        assignedToUserId: conv.assignedToUserId ?? userId,
+        status: conv.status === 'resolved' ? 'resolved' : 'in_progress',
+        lastMessageAt: now,
+        updatedAt: now,
+      })
+      .where(and(eq(conversations.id, conversationId), eq(conversations.tenantId, tenantId)));
+
+    const id = createId();
+    await this.db.insert(whatsappMessageLogs).values({
+      id,
+      tenantId,
+      accountId: account.id,
+      direction: 'outbound',
+      status: 'pending',
+      to: lastInbound.from,
+      messageType: 'text',
+      content: { text },
+      conversationId,
+      contactId: conv.contactId,
+      idempotencyKey: `human-${id}`,
+    });
+    await this.db.insert(messages).values({
+      id,
+      conversationId,
+      tenantId,
+      direction: 'outbound',
+      status: 'pending',
+      content: { text },
+      sentByUserId: userId,
+      isAiGenerated: false,
+      retriedFrom: options.retriedFrom ?? null,
+    });
+
+    try {
+      const providerMsgId = await this.postText(account, lastInbound.from, text);
+      await this.db.update(whatsappMessageLogs)
+        .set({ status: 'sent', providerMessageId: providerMsgId, sentAt: new Date() })
+        .where(eq(whatsappMessageLogs.id, id));
+      const [sent] = await this.db.update(messages)
+        .set({ status: 'sent', providerMessageId: providerMsgId, sentAt: new Date() })
+        .where(eq(messages.id, id))
+        .returning();
+      await this.clearSendBlock(account.id);
+      return sent!;
+    } catch (err) {
+      const { errorMessage, failure } = this.describeSendError(err);
+      this.logger.error(`Human reply send failed account=${account.id} conversation=${conversationId}: ${errorMessage}`);
+      await this.db.update(whatsappMessageLogs)
+        .set({ status: 'failed', errorMessage, errorCode: failure.code?.toString() ?? null, failedAt: new Date() })
+        .where(eq(whatsappMessageLogs.id, id));
+      await this.db.update(messages)
+        .set({ status: 'failed', failedAt: new Date(), failureReason: describeFailure(failure) })
+        .where(eq(messages.id, id));
+      await this.handleApiError(err, account.id, tenantId);
+      if (failure.kind === 'permanent') await this.setSendBlock(account.id, failure);
+      throw new BadGatewayException({ error: 'WHATSAPP_SEND_FAILED', message: `A mensagem não foi entregue. ${describeFailure(failure)}` });
+    }
+  }
+
+  /** Reenvia uma resposta que não chegou ao cliente (nova mensagem ligada à original). */
+  async resendMessage(tenantId: string, conversationId: string, messageId: string, userId: string): Promise<typeof messages.$inferSelect> {
+    const [original] = await this.db
+      .select()
+      .from(messages)
+      .where(and(eq(messages.id, messageId), eq(messages.tenantId, tenantId), eq(messages.conversationId, conversationId)))
+      .limit(1);
+    if (!original) throw new NotFoundException('Mensagem não encontrada.');
+    if (original.direction !== 'outbound' || original.status !== 'failed') {
+      throw new BadRequestException('Só é possível reenviar mensagens que não foram entregues.');
+    }
+    const [again] = await this.db
+      .select({ id: messages.id })
+      .from(messages)
+      .where(and(eq(messages.tenantId, tenantId), eq(messages.retriedFrom, messageId), inArray(messages.status, ['pending', ...DELIVERED_STATUSES])))
+      .limit(1);
+    if (again) throw new ConflictException({ error: 'ALREADY_RESENT', message: 'Esta mensagem já foi reenviada.' });
+
+    const sent = await this.sendHumanReply(tenantId, conversationId, historyText(original.content), userId, { retriedFrom: messageId });
+    await this.auditService.log({
+      tenantId,
+      userId,
+      action: 'conversation.message_resent',
+      resourceType: 'message',
+      resourceId: sent.id,
+      metadata: { conversationId, retriedFrom: messageId },
+    });
+    return sent;
+  }
+
+  /* ── Situação de envio do número ── */
+
+  /**
+   * Recebimento e envio separados: o número pode receber normalmente e a Meta recusar o envio
+   * (pagamento, nome de exibição, token...). Consulta a Meta no máximo a cada 10 minutos.
+   */
+  async getSendHealth(tenantId: string, accountId: string, refresh = false): Promise<WhatsappSendHealth> {
+    const account = await this.getAccount(tenantId, accountId);
+
+    let meta: MetaHealth | null = null;
+    let cached: string | null = null;
+    if (!refresh) {
+      try { cached = await this.redis.get(healthKey(account.id)); } catch { cached = null; }
+    }
+    if (cached) {
+      meta = JSON.parse(cached) as MetaHealth;
+    } else {
+      meta = await this.fetchMetaHealth(account);
+      if (meta) {
+        try { await this.redis.set(healthKey(account.id), JSON.stringify(meta), 'EX', HEALTH_TTL_SECONDS); } catch { /* só cache */ }
+        // A Meta liberou o envio: a próxima mensagem volta a chamar a IA.
+        if (refresh && meta.can === 'AVAILABLE') {
+          try { await this.redis.del(sendBlockKey(account.id)); } catch { /* expira sozinho */ }
+        }
+      }
+    }
+
+    const outbound = and(
+      eq(whatsappMessageLogs.tenantId, tenantId),
+      eq(whatsappMessageLogs.accountId, account.id),
+      eq(whatsappMessageLogs.direction, 'outbound'),
+    );
+    const [lastSuccess] = await this.db
+      .select({ at: whatsappMessageLogs.createdAt })
+      .from(whatsappMessageLogs)
+      .where(and(outbound, inArray(whatsappMessageLogs.status, [...DELIVERED_STATUSES])))
+      .orderBy(desc(whatsappMessageLogs.createdAt))
+      .limit(1);
+    const failedRows = await this.db
+      .select({ at: whatsappMessageLogs.createdAt, code: whatsappMessageLogs.errorCode, message: whatsappMessageLogs.errorMessage })
+      .from(whatsappMessageLogs)
+      .where(and(outbound, eq(whatsappMessageLogs.status, 'failed'), lastSuccess ? gt(whatsappMessageLogs.createdAt, lastSuccess.at) : undefined))
+      .orderBy(desc(whatsappMessageLogs.createdAt))
+      .limit(500);
+    const [lastInbound] = await this.db
+      .select({ at: whatsappMessageLogs.createdAt })
+      .from(whatsappMessageLogs)
+      .where(and(eq(whatsappMessageLogs.tenantId, tenantId), eq(whatsappMessageLogs.accountId, account.id), eq(whatsappMessageLogs.direction, 'inbound')))
+      .orderBy(desc(whatsappMessageLogs.createdAt))
+      .limit(1);
+
+    const last = failedRows[0];
+    let lastFailure: { at: Date; failure: SendFailure } | null = null;
+    if (last) {
+      const metaMsg = /msg="([^"]*)"/.exec(last.message ?? '')?.[1];
+      const code = last.code ? Number(last.code) : undefined;
+      lastFailure = {
+        at: last.at,
+        failure: classifyMetaSendError({ code, message: metaMsg ?? last.message ?? undefined, httpStatus: code ? 400 : undefined }),
+      };
+    }
+
+    const reasons = [...(meta?.reasons ?? [])];
+    if (lastFailure?.failure.kind === 'permanent' && !reasons.some((r) => r.message === lastFailure!.failure.reason)) {
+      reasons.unshift({ message: lastFailure.failure.reason, action: lastFailure.failure.action, code: lastFailure.failure.code });
+    }
+    const blockedBy = await this.sendBlockReason(account.id);
+
+    let send: WhatsappSendHealth['send'] = 'unknown';
+    if (meta?.can === 'BLOCKED' || blockedBy || lastFailure?.failure.kind === 'permanent') send = 'blocked';
+    else if (meta?.can === 'LIMITED') send = 'limited';
+    else if (meta?.can === 'AVAILABLE') send = 'available';
+
+    return {
+      send,
+      reasons,
+      lastInboundAt: lastInbound?.at ?? null,
+      lastSuccessAt: lastSuccess?.at ?? null,
+      lastFailure: lastFailure ? { at: lastFailure.at, message: describeFailure(lastFailure.failure) } : null,
+      failedSinceLastSuccess: failedRows.length,
+      checkedAt: new Date(),
+      ...(meta ? {} : { metaUnavailable: true }),
+    };
+  }
+
+  /** health_status do número na Meta (só leitura), traduzido. Erros de chamada de voz são ignorados. */
+  private async fetchMetaHealth(account: WhatsappAccount): Promise<MetaHealth | null> {
+    type Entity = { can_send_message?: string; errors?: Array<{ error_code?: number; error_description?: string; possible_solution?: string }> };
+    try {
+      const resp = await firstValueFrom(
+        this.httpService.get(`${META_GRAPH_URL}/${account.phoneNumberId}`, {
+          params: { access_token: this.decryptToken(account), fields: 'health_status,name_status' },
+        }),
+      );
+      const data = resp.data as { health_status?: { can_send_message?: string; entities?: Entity[] }; name_status?: string };
+      const reasons: WhatsappSendHealth['reasons'] = [];
+      for (const entity of data.health_status?.entities ?? []) {
+        if (entity.can_send_message === 'AVAILABLE') continue;
+        for (const e of entity.errors ?? []) {
+          if (!e.error_code || isCallingOnlyError(e.error_code)) continue;
+          const known = classifyMetaSendError({ code: e.error_code, httpStatus: 400 });
+          const translated = !known.reason.startsWith('A Meta recusou o envio (código');
+          reasons.push({
+            code: e.error_code,
+            message: translated ? known.reason : (e.error_description ?? `Código ${e.error_code}`),
+            ...(translated ? (known.action ? { action: known.action } : {}) : (e.possible_solution ? { action: e.possible_solution } : {})),
+          });
+        }
+      }
+      if (data.name_status && !['APPROVED', 'AVAILABLE_WITHOUT_REVIEW'].includes(data.name_status)) {
+        reasons.push({
+          message: data.name_status === 'DECLINED'
+            ? 'A Meta recusou o nome de exibição do número.'
+            : 'O nome de exibição ainda não foi aprovado pela Meta; até lá o número envia poucas mensagens por dia.',
+          action: 'Envie ou corrija o nome em WhatsApp Manager → Números de telefone → Nome de exibição.',
+        });
+      }
+      return { can: data.health_status?.can_send_message, reasons };
+    } catch (err) {
+      const e = this.extractMetaError(err);
+      this.logger.warn(`Consulta de saúde do número ${account.id} falhou: code=${e.code ?? '?'} http=${e.httpStatus ?? '?'}`);
+      return null;
     }
   }
 
@@ -1166,7 +1603,8 @@ export class WhatsappService {
       conversationId = existingConv.id;
       await this.db
         .update(conversations)
-        .set({ lastMessageAt: new Date(), status: 'open', updatedAt: new Date() })
+        // Com um atendente (IA pausada), a conversa continua "aguardando atendente"/"em atendimento".
+        .set({ lastMessageAt: new Date(), status: existingConv.aiPausedAt ? existingConv.status : 'open', updatedAt: new Date() })
         .where(eq(conversations.id, conversationId));
     } else {
       const [newConv] = await this.db
@@ -1380,6 +1818,13 @@ export class WhatsappService {
       throw new Error(`Agente ${agent.id} não publicado (status=${agent.status})`);
     }
 
+    // A Meta acabou de recusar envios deste número: não gasta a chave de IA do cliente.
+    const blockedReason = await this.sendBlockReason(account.id);
+    if (blockedReason) {
+      await this.handOffToHuman(tenantId, conversationId, `A resposta automática não foi gerada porque a Meta está recusando o envio. ${blockedReason}`);
+      return;
+    }
+
     // Se a Meta falhou após a IA gerar a resposta, reenvie o texto persistido.
     const [savedReply] = await this.db.select().from(whatsappMessageLogs)
       .where(and(
@@ -1391,17 +1836,25 @@ export class WhatsappService {
       ? (savedReply.content as Record<string, unknown>)['text']
       : null;
     if (typeof cachedText === 'string' && cachedText.trim()) {
-      await this.sendAiReply(
-        account, to, cachedText, conversationId, contactId, agent.id,
-        `retry-${inboundMessageId}`, inboundMessageId,
-      );
+      try {
+        await this.sendAiReply(
+          account, to, cachedText, conversationId, contactId, agent.id,
+          `retry-${inboundMessageId}`, inboundMessageId,
+        );
+      } catch (err) {
+        if (!(err instanceof WhatsappSendError)) throw err;
+        await this.handOffToHuman(tenantId, conversationId, `A resposta do agente não foi entregue. ${err.message}`);
+        return;
+      }
       this.logger.log(`WhatsApp response restored from previous attempt inbound=${inboundMessageId}`);
       return;
     }
 
     try {
+      // O agente precisa do que já foi dito para continuar a conversa (pedido, horário combinado...).
+      const history = await this.conversationHistory(tenantId, conversationId, inboundMessageId);
       const result = await this.labService.chat(
-        { agentId: agent.id, message: userMessage },
+        { agentId: agent.id, message: userMessage, history },
         tenantId,
         { conversationId, contactId },
       );
@@ -1427,6 +1880,11 @@ export class WhatsappService {
       });
       this.logger.log(`AI reply sent for conversation ${conversationId} (trace: ${result.traceId})`);
     } catch (err) {
+      // Recusa permanente da Meta: novas tentativas não resolvem; um atendente precisa ver.
+      if (err instanceof WhatsappSendError) {
+        await this.handOffToHuman(tenantId, conversationId, `A resposta do agente não foi entregue. ${err.message}`);
+        return;
+      }
       const response = typeof (err as { getResponse?: () => unknown }).getResponse === 'function'
         ? (err as { getResponse: () => unknown }).getResponse()
         : null;

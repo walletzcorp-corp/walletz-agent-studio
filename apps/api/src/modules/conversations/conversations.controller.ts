@@ -38,13 +38,13 @@ export class ConversationsController {
   }
 
   @Get(':conversationId')
-  @ApiOperation({ summary: 'Detalhar conversa' })
+  @ApiOperation({ summary: 'Detalhar conversa (com o motivo da passagem para atendimento humano, se houver)' })
   @Roles('viewer')
   get(
     @Param('tenantId') tenantId: string,
     @Param('conversationId') conversationId: string,
   ) {
-    return this.conversationsService.getConversation(tenantId, conversationId);
+    return this.conversationsService.getConversationDetail(tenantId, conversationId);
   }
 
   @Get(':conversationId/messages')
@@ -58,7 +58,7 @@ export class ConversationsController {
   }
 
   @Post(':conversationId/messages')
-  @ApiOperation({ summary: 'Enviar mensagem como atendente humano' })
+  @ApiOperation({ summary: 'Enviar mensagem como atendente humano (no WhatsApp, entregue pela Meta; pausa a IA)' })
   @Roles('agent_operator')
   sendMessage(
     @Param('tenantId') tenantId: string,
@@ -67,6 +67,18 @@ export class ConversationsController {
     @CurrentUser('userId') userId: string,
   ) {
     return this.conversationsService.sendHumanMessage(tenantId, conversationId, body.text, userId);
+  }
+
+  @Post(':conversationId/messages/:messageId/resend')
+  @ApiOperation({ summary: 'Reenviar uma resposta que não foi entregue ao cliente (WhatsApp)' })
+  @Roles('agent_operator')
+  resend(
+    @Param('tenantId') tenantId: string,
+    @Param('conversationId') conversationId: string,
+    @Param('messageId') messageId: string,
+    @CurrentUser('userId') userId: string,
+  ) {
+    return this.conversationsService.resendMessage(tenantId, conversationId, messageId, userId);
   }
 
   @Post(':conversationId/assume')

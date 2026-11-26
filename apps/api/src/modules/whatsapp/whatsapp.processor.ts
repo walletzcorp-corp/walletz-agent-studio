@@ -17,7 +17,16 @@ export class WhatsappInboundProcessor extends WorkerHost {
       this.logger.log(`Concluído job WhatsApp=${job.id} tentativa=${job.attemptsMade + 1}`);
     } catch (err) {
       const safeMessage = err instanceof Error ? err.message : String(err);
-      this.logger.error(`Falha job WhatsApp=${job.id} tentativa=${job.attemptsMade + 1}: ${safeMessage}`);
+      const attempt = job.attemptsMade + 1;
+      this.logger.error(`Falha job WhatsApp=${job.id} tentativa=${attempt}: ${safeMessage}`);
+      // Sem mais tentativas, a mensagem do cliente vai para um atendente em vez de se perder.
+      if (attempt >= (job.opts?.attempts ?? 1)) {
+        try {
+          await this.whatsapp.handOffUnanswered(job.data);
+        } catch (handoffErr) {
+          this.logger.error(`Não foi possível passar a conversa do job ${job.id} para atendimento humano: ${handoffErr instanceof Error ? handoffErr.message : String(handoffErr)}`);
+        }
+      }
       throw err;
     }
   }

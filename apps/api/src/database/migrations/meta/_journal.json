@@ -64,6 +64,13 @@
       "when": 1794864652987,
       "tag": "0008_conhecimento-rag",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1795705531820,
+      "tag": "0009_historico-whatsapp",
+      "breakpoints": true
     }
   ]
 }

@@ -11,6 +11,7 @@ import { PlanLimitsService } from '../../shared/plans/plan-limits.service';
 import { PcConnectorService } from '../pc-connector/pc-connector.service';
 import { LlmUsageService } from '../../shared/llm-usage/llm-usage.service';
 import type { LabChatDto, ChatMessageDto } from './dto/chat.dto';
+import { normalizeTurns } from './conversation-turns';
 import { AiProvidersService } from '../ai-providers/ai-providers.service';
 import { LlmProviderError } from '../ai-providers/llm/llm.types';
 
@@ -221,13 +222,13 @@ export class LabService {
       apiKey: llm.apiKey,
       model: llm.model,
       system: systemPrompt,
-      history: [
+      history: normalizeTurns([
         ...(dto.history ?? []).map((m: ChatMessageDto) => ({
           role: m.role as 'user' | 'assistant',
           content: m.content,
         })),
         { role: 'user' as const, content: dto.message },
-      ],
+      ]),
       tools: toolDefs.map((t) => ({
         name: t.name,
         description: t.description,

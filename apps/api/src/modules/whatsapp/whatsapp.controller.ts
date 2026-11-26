@@ -287,4 +287,18 @@ export class WhatsappController {
   ) {
     return this.whatsappService.checkPipeline(tenantId, accountId);
   }
+
+  @Get('tenants/:tenantId/whatsapp/accounts/:accountId/health')
+  @UseGuards(JwtAuthGuard, RbacGuard)
+  @ApiBearerAuth()
+  @Roles('viewer')
+  @ApiQuery({ name: 'refresh', required: false, description: 'true consulta a Meta agora, sem usar os dados guardados (até 10 min)' })
+  @ApiOperation({ summary: 'Situação de envio do número: liberado, limitado ou bloqueado pela Meta, com motivo e última falha' })
+  health(
+    @Param('tenantId') tenantId: string,
+    @Param('accountId') accountId: string,
+    @Query('refresh') refresh?: string,
+  ) {
+    return this.whatsappService.getSendHealth(tenantId, accountId, refresh === 'true');
+  }
 }

@@ -6,7 +6,7 @@ import { api } from '../../../lib/api';
 import { Button, Badge } from '@walletz/ui';
 import {
   MessageSquare, Bot, User, PhoneCall, CheckCheck,
-  Send, ArrowLeft, Pause, Play, XCircle, RefreshCw,
+  Send, ArrowLeft, Pause, Play, XCircle, RefreshCw, AlertTriangle, Clock, RotateCcw,
 } from 'lucide-react';
 
 interface Conversation {
@@ -20,6 +20,8 @@ interface Conversation {
   lastMessageAt: string | null;
   tags: string[];
   createdAt: string;
+  /** Só no detalhe: motivo da passagem para atendimento humano ainda ativa. */
+  handoff?: { reason: string | null; createdAt: string } | null;
 }
 
 interface Message {
@@ -30,6 +32,8 @@ interface Message {
   isAiGenerated: boolean;
   sentByUserId: string | null;
   sentByAgentId: string | null;
+  failureReason: string | null;
+  retriedFrom: string | null;
   createdAt: string;
 }
 
@@ -39,6 +43,22 @@ const STATUS_COLORS: Record<string, string> = {
   waiting_human: 'bg-yellow-100 text-yellow-700',
   resolved: 'bg-gray-100 text-gray-600',
 };
+
+const STATUS_LABELS: Record<string, string> = {
+  open: 'Aberta',
+  in_progress: 'Em atendimento',
+  waiting_human: 'Aguardando atendente',
+  resolved: 'Encerrada',
+  opted_out: 'Descadastrado',
+};
+
+const CHANNEL_LABELS: Record<string, string> = { whatsapp: 'WhatsApp', webchat: 'Webchat' };
+
+function errorText(err: unknown, fallback: string): string {
+  const message = (err as { response?: { data?: { message?: unknown } } })?.response?.data?.message;
+  if (Array.isArray(message)) return message.join(' ');
+  return typeof message === 'string' ? message : fallback;
+}
 
 const POLL_CONVERSATIONS_MS = 5000;
 const POLL_MESSAGES_MS = 3000;
@@ -51,6 +71,8 @@ export default function ConversasPage() {
   const [loading, setLoading] = useState(true);
   const [reply, setReply] = useState('');
   const [sending, setSending] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [resending, setResending] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const selectedRef = useRef<Conversation | null>(null);
   selectedRef.current = selected;
@@ -60,10 +82,10 @@ export default function ConversasPage() {
     try {
       const { data } = await api.get<Conversation[]>(`/tenants/${tenantId}/conversations`);
       setConversations(data);
-      // Update selected if it changed server-side
+      // Update selected if it changed server-side (mantém o motivo vindo do detalhe)
       if (selectedRef.current) {
         const updated = data.find((c) => c.id === selectedRef.current!.id);
-        if (updated) setSelected(updated);
+        if (updated) setSelected((prev) => ({ ...updated, handoff: prev?.id === updated.id ? prev.handoff ?? null : null }));
       }
     } catch { /* silent */ }
     finally { if (!silent) setLoading(false); }
@@ -72,9 +94,13 @@ export default function ConversasPage() {
   const loadMessages = useCallback(async (convId: string) => {
     if (!tenantId) return;
     try {
-      const { data } = await api.get<Message[]>(`/tenants/${tenantId}/conversations/${convId}/messages`);
-      setMessages(data.slice().reverse());
-    } catch { /* silent */ }
+      const [msgs, detail] = await Promise.all([
+        api.get<Message[]>(`/tenants/${tenantId}/conversations/${convId}/messages`),
+        api.get<Conversation>(`/tenants/${tenantId}/conversations/${convId}`),
+      ]);
+      setMessages(msgs.data.slice().reverse());
+      if (selectedRef.current?.id === convId) setSelected(detail.data);
+    } catch { /* silent: a próxima atualização tenta de novo */ }
   }, [tenantId]);
 
   // Initial load
@@ -101,54 +127,63 @@ export default function ConversasPage() {
 
   const handleSelect = (conv: Conversation) => {
     setSelected(conv);
+    setActionError(null);
     void loadMessages(conv.id);
   };
 
   const handleSend = async () => {
     if (!tenantId || !selected || !reply.trim() || sending) return;
     setSending(true);
+    setActionError(null);
     try {
       await api.post(`/tenants/${tenantId}/conversations/${selected.id}/messages`, {
         text: reply.trim(),
       });
       setReply('');
+    } catch (err) {
+      setActionError(errorText(err, 'Não foi possível enviar a mensagem.'));
+    } finally {
+      setSending(false);
       await loadMessages(selected.id);
-    } catch { /* silent */ }
-    finally { setSending(false); }
+    }
   };
 
-  const handleAssume = async () => {
-    if (!tenantId || !selected) return;
+  const handleResend = async (messageId: string) => {
+    if (!tenantId || !selected || resending) return;
+    setResending(messageId);
+    setActionError(null);
     try {
-      const { data } = await api.post<Conversation>(
-        `/tenants/${tenantId}/conversations/${selected.id}/assume`,
-      );
-      setSelected(data);
-      setConversations((prev) => prev.map((c) => (c.id === data.id ? data : c)));
-    } catch { /* silent */ }
+      await api.post(`/tenants/${tenantId}/conversations/${selected.id}/messages/${messageId}/resend`);
+    } catch (err) {
+      setActionError(errorText(err, 'Não foi possível reenviar a mensagem.'));
+    } finally {
+      setResending(null);
+      await loadMessages(selected.id);
+    }
   };
 
-  const handleReturnToAi = async () => {
+  const runAction = async (action: 'assume' | 'return-to-ai' | 'resolve') => {
     if (!tenantId || !selected) return;
+    setActionError(null);
     try {
-      const { data } = await api.post<Conversation>(
-        `/tenants/${tenantId}/conversations/${selected.id}/return-to-ai`,
-      );
+      const { data } = await api.post<Conversation>(`/tenants/${tenantId}/conversations/${selected.id}/${action}`);
       setSelected(data);
-      setConversations((prev) => prev.map((c) => (c.id === data.id ? data : c)));
-    } catch { /* silent */ }
+      setConversations((prev) => prev.map((c) => (c.id === data.id ? { ...c, ...data } : c)));
+    } catch (err) {
+      setActionError(errorText(err, 'A ação falhou. Tente de novo.'));
+    }
   };
+  const handleAssume = () => runAction('assume');
+  const handleReturnToAi = () => runAction('return-to-ai');
+  const handleResolve = () => runAction('resolve');
 
-  const handleResolve = async () => {
-    if (!tenantId || !selected) return;
-    try {
-      const { data } = await api.post<Conversation>(
-        `/tenants/${tenantId}/conversations/${selected.id}/resolve`,
-      );
-      setSelected(data);
-      setConversations((prev) => prev.map((c) => (c.id === data.id ? data : c)));
-    } catch { /* silent */ }
-  };
+  /** Situação do reenvio de cada mensagem que falhou: entregue, ou a nova tentativa também falhou. */
+  const retryOf = new Map<string, 'delivered' | 'failed'>();
+  for (const m of messages) {
+    if (!m.retriedFrom) continue;
+    if (m.status !== 'failed') retryOf.set(m.retriedFrom, 'delivered');
+    else if (!retryOf.has(m.retriedFrom)) retryOf.set(m.retriedFrom, 'failed');
+  }
 
   const isAiPaused = !!selected?.aiPausedAt;
   const isHumanAssigned = !!selected?.assignedToUserId;
@@ -164,6 +199,11 @@ export default function ConversasPage() {
           </h1>
           <div className="flex items-center gap-2">
             <RefreshCw className="h-3 w-3 text-muted-foreground animate-spin opacity-40" aria-label="Atualizando automaticamente" />
+            {conversations.some((c) => c.status === 'waiting_human') && (
+              <Badge variant="outline" className="text-xs border-yellow-500/50 text-yellow-600">
+                {conversations.filter((c) => c.status === 'waiting_human').length} aguardando
+              </Badge>
+            )}
             <Badge variant="outline" className="text-xs">
               {conversations.filter((c) => c.status === 'open').length} abertas
             </Badge>
@@ -201,11 +241,11 @@ export default function ConversasPage() {
                         </span>
                       </div>
                       <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${STATUS_COLORS[conv.status] ?? 'bg-gray-100 text-gray-600'}`}>
-                        {conv.status.replace('_', ' ')}
+                        {STATUS_LABELS[conv.status] ?? conv.status}
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-muted-foreground">{conv.channel}</span>
+                      <span className="text-xs text-muted-foreground">{CHANNEL_LABELS[conv.channel] ?? conv.channel}</span>
                       {conv.lastMessageAt && (
                         <span className="text-[10px] text-muted-foreground">
                           {new Date(conv.lastMessageAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
@@ -242,7 +282,9 @@ export default function ConversasPage() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium">{selected.contactId.slice(0, 12)}…</p>
-              <p className="text-xs text-muted-foreground">{selected.channel}</p>
+              <p className="text-xs text-muted-foreground">
+                {CHANNEL_LABELS[selected.channel] ?? selected.channel} · {STATUS_LABELS[selected.status] ?? selected.status}
+              </p>
             </div>
             <div className="flex items-center gap-2">
               {isAiPaused ? (
@@ -265,10 +307,22 @@ export default function ConversasPage() {
             </div>
           </div>
 
+          {selected.status === 'waiting_human' && (
+            <div role="status" className="flex items-start gap-2 border-b border-yellow-500/30 bg-yellow-500/10 px-4 py-2.5 text-xs text-foreground">
+              <AlertTriangle className="h-4 w-4 shrink-0 text-yellow-600" />
+              <span>
+                <strong>Aguardando atendente.</strong>{' '}
+                {selected.handoff?.reason ?? 'A IA parou de responder nesta conversa.'}{' '}
+                Responda abaixo ou devolva para a IA.
+              </span>
+            </div>
+          )}
+
           {/* Messages */}
           <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-muted/20">
             {messages.map((msg) => {
               const isOut = msg.direction === 'outbound';
+              const failed = isOut && msg.status === 'failed';
               const text =
                 typeof msg.content === 'object' && msg.content !== null
                   ? (msg.content as { text?: string }).text ?? JSON.stringify(msg.content)
@@ -277,24 +331,47 @@ export default function ConversasPage() {
                 <div key={msg.id} className={`flex ${isOut ? 'justify-end' : 'justify-start'}`}>
                   <div
                     className={`max-w-[70%] rounded-2xl px-4 py-2.5 text-sm ${
-                      isOut
-                        ? 'bg-primary text-primary-foreground rounded-tr-sm'
-                        : 'bg-card border border-border rounded-tl-sm'
+                      failed
+                        ? 'border border-destructive/50 bg-destructive/10 text-foreground rounded-tr-sm'
+                        : isOut
+                          ? 'bg-primary text-primary-foreground rounded-tr-sm'
+                          : 'bg-card border border-border rounded-tl-sm'
                     }`}
                   >
                     <p className="whitespace-pre-line">{text}</p>
-                    <div className={`flex items-center gap-1 mt-1 text-[10px] ${isOut ? 'text-primary-foreground/70 justify-end' : 'text-muted-foreground'}`}>
+                    <div className={`flex items-center gap-1 mt-1 text-[10px] ${failed ? 'text-destructive justify-end' : isOut ? 'text-primary-foreground/70 justify-end' : 'text-muted-foreground'}`}>
                       {msg.isAiGenerated && <Bot className="h-2.5 w-2.5" />}
                       {!msg.isAiGenerated && msg.sentByUserId && <User className="h-2.5 w-2.5" />}
                       {new Date(msg.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                      {isOut && <CheckCheck className="h-2.5 w-2.5" />}
+                      {isOut && !failed && msg.status === 'pending' && <Clock className="h-2.5 w-2.5" aria-label="Enviando" />}
+                      {isOut && !failed && msg.status !== 'pending' && <CheckCheck className="h-2.5 w-2.5" aria-label="Enviada" />}
+                      {failed && <span className="font-medium">Não entregue</span>}
                     </div>
+                    {failed && (
+                      <div className="mt-2 space-y-1.5 border-t border-destructive/30 pt-2 text-xs">
+                        <p className="text-muted-foreground">{msg.failureReason ?? 'A mensagem não chegou ao cliente.'}</p>
+                        {retryOf.get(msg.id) === 'delivered' ? (
+                          <p className="text-muted-foreground">Reenviada.</p>
+                        ) : retryOf.get(msg.id) === 'failed' ? (
+                          <p className="text-muted-foreground">O reenvio também não foi entregue; tente de novo pela mensagem abaixo.</p>
+                        ) : (
+                          <Button size="sm" variant="outline" disabled={resending === msg.id} onClick={() => void handleResend(msg.id)}>
+                            <RotateCcw className="h-3.5 w-3.5 mr-1" />
+                            {resending === msg.id ? 'Reenviando…' : 'Reenviar'}
+                          </Button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               );
             })}
             <div ref={bottomRef} />
           </div>
+
+          {actionError && (
+            <p role="alert" className="shrink-0 border-t border-destructive/30 bg-destructive/10 px-4 py-2 text-xs text-destructive">{actionError}</p>
+          )}
 
           {/* Reply input */}
           <div className="shrink-0 flex gap-2 p-4 border-t border-border bg-card">

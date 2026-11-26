@@ -9,6 +9,7 @@ import { useAuth } from '../../../../hooks/use-auth';
 import { agentsApi, type Agent } from '../../../../lib/agents-api';
 import { whatsappApi, type WebhookSetup, type WhatsappAccount } from '../../../../lib/whatsapp-api';
 import { apiErrorMessage, plansApi, type TenantPlanSummary } from '../../../../lib/studio-api';
+import { WhatsappSendStatus } from '../../../../components/whatsapp-health';
 
 const input = 'w-full rounded-lg border border-border bg-surface-1 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50';
 
@@ -220,6 +221,8 @@ function AccountCard({
           </select>
         </div>
       </div>
+
+      {account.status === 'connected' && <WhatsappSendStatus tenantId={tenantId} account={account} />}
 
       {setup && <WebhookInstructions setup={setup} />}
 

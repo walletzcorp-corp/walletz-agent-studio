@@ -6,6 +6,7 @@ import { Badge } from '@walletz/ui';
 import { Skeleton } from '@walletz/ui';
 import Link from 'next/link';
 import { Bot, BookOpen, MessageSquare, Users, ArrowRight } from 'lucide-react';
+import { WhatsappHealthBanner } from '../../../components/whatsapp-health';
 
 const QUICK_ACTIONS = [
   { href: '/agentes', label: 'Criar Agente', desc: 'Configure um novo agente de IA', icon: Bot },
@@ -15,7 +16,7 @@ const QUICK_ACTIONS = [
 ];
 
 export default function DashboardPage() {
-  const { email, tenantName, role, isLoading } = useAuth();
+  const { email, tenantId, tenantName, role, isLoading } = useAuth();
 
   if (isLoading) {
     return (
@@ -46,6 +47,8 @@ export default function DashboardPage() {
           </p>
         )}
       </div>
+
+      {tenantId && <WhatsappHealthBanner tenantId={tenantId} />}
 
       {/* Quick actions */}
       <div>
